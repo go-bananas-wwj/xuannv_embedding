@@ -179,6 +179,7 @@ class RegionBatchStream:
         seed: int,
         max_steps: int | None,
         masking_config: dict[str, Any],
+        start_epoch: int = 0,
     ) -> None:
         if not loaders or len(loaders) != len(weights):
             raise ValueError("loaders 与 weights 必须非空且长度一致")
@@ -187,7 +188,9 @@ class RegionBatchStream:
         self.seed = seed
         self.max_steps = max_steps
         self.masking_config = masking_config
-        self.epoch = 0
+        if start_epoch < 0:
+            raise ValueError("start_epoch 必须是非负整数")
+        self.epoch = start_epoch
 
     def __iter__(self):
         for loader in self.loaders:
@@ -215,6 +218,7 @@ def build_region_batch_stream(
     distributed: bool,
     max_records: int | None,
     max_steps: int | None,
+    start_epoch: int = 0,
 ) -> RegionBatchStream:
     loaders: list[DataLoader] = []
     weights: list[float] = []
@@ -240,6 +244,7 @@ def build_region_batch_stream(
         seed=config.experiment.seed,
         max_steps=max_steps,
         masking_config=asdict(config.training.input_masking),
+        start_epoch=start_epoch,
     )
 
 
@@ -366,6 +371,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             distributed=distributed,
             max_records=args.max_records,
             max_steps=args.steps or None,
+            start_epoch=start_epoch,
         )
     try:
         epoch_count = _epoch_count(config.training.epochs, args.epochs, start_epoch)

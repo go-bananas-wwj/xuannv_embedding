@@ -13,7 +13,12 @@ from xuannv_embedding.training.checkpoint import (
     load_training_checkpoint,
     save_training_checkpoint,
 )
-from xuannv_embedding.training.cli import _epoch_count, _git_sha, synthetic_batch
+from xuannv_embedding.training.cli import (
+    RegionBatchStream,
+    _epoch_count,
+    _git_sha,
+    synthetic_batch,
+)
 from xuannv_embedding.training.losses import TotalLoss
 from xuannv_embedding.training.runtime import TrainingSystem, train_steps
 
@@ -146,6 +151,40 @@ def test_runtime_preserves_absolute_epoch_for_resume_warmups() -> None:
     assert summary["start_epoch"] == 4
     assert summary["end_epoch"] == 5
     assert system.criterion.current_epoch == 5
+
+
+def test_region_batch_stream_resumes_sampler_at_absolute_epoch() -> None:
+    class RecordingSampler:
+        def __init__(self) -> None:
+            self.epochs: list[int] = []
+
+        def set_epoch(self, epoch: int) -> None:
+            self.epochs.append(epoch)
+
+    class FakeLoader:
+        def __init__(self) -> None:
+            self.sampler = RecordingSampler()
+
+        def __len__(self) -> int:
+            return 1
+
+        def __iter__(self):
+            yield {"epoch_marker": len(self.sampler.epochs)}
+
+    loader = FakeLoader()
+    stream = RegionBatchStream(
+        [loader],
+        [1.0],
+        seed=7,
+        max_steps=1,
+        masking_config={"enabled": False},
+        start_epoch=4,
+    )
+
+    list(stream)
+    list(stream)
+
+    assert loader.sampler.epochs == [4, 5]
 
 
 def test_configured_epochs_are_a_total_but_cli_override_is_incremental() -> None:
