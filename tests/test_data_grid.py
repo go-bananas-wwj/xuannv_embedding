@@ -567,3 +567,29 @@ def test_wgs84_transformer_is_reused_for_same_grid_zone() -> None:
     assert first.equals_exact(second, tolerance=0.0)
     assert MODULE._transformer_to_wgs84.cache_info().misses == 1
     assert MODULE._transformer_to_wgs84.cache_info().hits == 1
+
+
+def test_vectorized_audit_rows_match_scalar_geometry_checks(tmp_path: Path) -> None:
+    records = synthetic_parent_records(count=2)
+    MODULE.write_zone_records(records, set(), tmp_path, batch_size=2)
+    parquet_path = next((tmp_path / "all" / "utm50n").glob("*.parquet"))
+
+    audited = list(
+        MODULE._iter_audited_parquet_rows(
+            [parquet_path], [*MODULE.CANONICAL_METADATA_FIELDS, "geometry"], batch_size=2
+        )
+    )
+
+    assert len(audited) == 2
+    for item in audited:
+        assert item["actual_footprint_hash"] == MODULE._normalized_footprint_hash(item["geometry"])
+        assert item["canonical_footprint_hash"] == MODULE._normalized_footprint_hash(
+            item["canonical_geometry"]
+        )
+        assert item["coordinate_difference"] == 0.0
+
+
+def test_utm_seam_candidates_are_limited_to_owner_zone_boundaries() -> None:
+    assert MODULE._is_utm_seam_candidate(box(113.99, 30.0, 114.01, 30.01), 32650)
+    assert MODULE._is_utm_seam_candidate(box(119.99, 30.0, 120.01, 30.01), 32650)
+    assert not MODULE._is_utm_seam_candidate(box(116.0, 30.0, 116.01, 30.01), 32650)

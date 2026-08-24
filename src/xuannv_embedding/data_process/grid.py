@@ -222,6 +222,13 @@ def _transformer_to_wgs84(grid_epsg: int) -> Transformer:
     return Transformer.from_crs(grid_epsg, 4326, always_xy=True)
 
 
+@lru_cache(maxsize=len(CHINA_OWNER_EPSGS))
+def _transformer_from_wgs84(grid_epsg: int) -> Transformer:
+    """Reuse the inverse PROJ pipeline used by exact geometry validation."""
+    _validate_china_owner_epsg(grid_epsg)
+    return Transformer.from_crs(4326, grid_epsg, always_xy=True)
+
+
 def _wgs84_geometry(record: Mapping[str, Any]):
     minx, miny, maxx, maxy = record["utm_bounds"]
     to_wgs84 = _transformer_to_wgs84(int(record["grid_epsg"]))
@@ -528,6 +535,71 @@ def _iter_parquet_rows(
             yield from batch.to_pylist()
 
 
+def _iter_audited_parquet_rows(
+    paths: Iterable[Path], columns: list[str], batch_size: int
+) -> Iterator[dict[str, Any]]:
+    """Vectorize geometry normalization while retaining exact per-row audit evidence."""
+    import numpy as np
+    import pyarrow.parquet as pq
+    import shapely
+
+    for path in paths:
+        parquet_file = pq.ParquetFile(path)
+        missing_columns = set(columns) - set(parquet_file.schema_arrow.names)
+        if missing_columns:
+            raise ValueError(f"{path} is missing audit columns: {sorted(missing_columns)}")
+        for batch in parquet_file.iter_batches(columns=columns, batch_size=batch_size):
+            rows = batch.to_pylist()
+
+            def values(name: str):
+                return batch.column(batch.schema.get_field_index(name)).to_numpy(
+                    zero_copy_only=False
+                )
+
+            grid_epsgs = np.asarray(values("grid_epsg"), dtype=np.int32)
+            grid_cols = np.asarray(values("grid_col"), dtype=np.int64)
+            grid_rows = np.asarray(values("grid_row"), dtype=np.int64)
+            canonical_geometries = np.empty(len(rows), dtype=object)
+            for grid_epsg in np.unique(grid_epsgs):
+                mask = grid_epsgs == grid_epsg
+                utm_geometries = shapely.box(
+                    grid_cols[mask] * PARENT_SIDE_METERS,
+                    grid_rows[mask] * PARENT_SIDE_METERS,
+                    (grid_cols[mask] + 1) * PARENT_SIDE_METERS,
+                    (grid_rows[mask] + 1) * PARENT_SIDE_METERS,
+                )
+                canonical_geometries[mask] = shapely.transform(
+                    utm_geometries,
+                    _transformer_to_wgs84(int(grid_epsg)).transform,
+                    interleaved=False,
+                )
+            geometries = shapely.from_wkb(values("geometry"))
+            normalized_canonical = shapely.normalize(
+                shapely.set_precision(canonical_geometries, 1e-9)
+            )
+            normalized_actual = shapely.normalize(shapely.set_precision(geometries, 1e-9))
+            canonical_wkb = shapely.to_wkb(normalized_canonical)
+            actual_wkb = shapely.to_wkb(normalized_actual)
+            for index, row in enumerate(rows):
+                canonical_hash = hashlib.sha256(canonical_wkb[index]).hexdigest()
+                actual_hash = hashlib.sha256(actual_wkb[index]).hexdigest()
+                canonical_geometry = canonical_geometries[index]
+                geometry = geometries[index]
+                coordinate_difference = (
+                    0.0
+                    if canonical_hash == actual_hash
+                    else _maximum_footprint_coordinate_difference(canonical_geometry, geometry)
+                )
+                yield {
+                    "row": row,
+                    "geometry": geometry,
+                    "canonical_geometry": canonical_geometry,
+                    "actual_footprint_hash": actual_hash,
+                    "canonical_footprint_hash": canonical_hash,
+                    "coordinate_difference": coordinate_difference,
+                }
+
+
 def _normalized_footprint_hash(geometry: Any) -> str:
     return hashlib.sha256(normalize_geometry(set_precision(geometry, 1e-9)).wkb).hexdigest()
 
@@ -639,35 +711,38 @@ def _audit_overlap(
     grid_epsg: int,
     parent_key_value: str,
     to_equal_area: Transformer,
+    *,
+    check_overlap: bool = True,
 ) -> tuple[int, int, float]:
     """Compare one footprint with prior streamed footprints retained on disk."""
     minx, miny, maxx, maxy = geometry.bounds
-    candidates = connection.execute(
-        """
-        SELECT geometries.grid_epsg, geometries.geometry_wkb
-        FROM geometry_bounds
-        JOIN geometries USING (geometry_id)
-        WHERE minx <= ? AND maxx >= ? AND miny <= ? AND maxy >= ?
-        """,
-        (maxx, minx, maxy, miny),
-    )
-    projected_geometry = transform_geometry(to_equal_area.transform, geometry)
     same_zone_positive_overlap_count = 0
     cross_zone_overlap_violation_count = 0
     max_cross_zone_overlap_fraction = 0.0
-    for candidate_epsg, candidate_wkb in candidates:
-        candidate_geometry = from_wkb(candidate_wkb)
-        candidate_projected = transform_geometry(to_equal_area.transform, candidate_geometry)
-        overlap_area = projected_geometry.intersection(candidate_projected).area
-        if overlap_area <= 0:
-            continue
-        if int(candidate_epsg) == grid_epsg:
-            same_zone_positive_overlap_count += 1
-            continue
-        overlap_fraction = overlap_area / min(projected_geometry.area, candidate_projected.area)
-        max_cross_zone_overlap_fraction = max(max_cross_zone_overlap_fraction, overlap_fraction)
-        if overlap_fraction > CROSS_ZONE_OVERLAP_FRACTION:
-            cross_zone_overlap_violation_count += 1
+    if check_overlap:
+        candidates = connection.execute(
+            """
+            SELECT geometries.grid_epsg, geometries.geometry_wkb
+            FROM geometry_bounds
+            JOIN geometries USING (geometry_id)
+            WHERE minx <= ? AND maxx >= ? AND miny <= ? AND maxy >= ?
+            """,
+            (maxx, minx, maxy, miny),
+        )
+        projected_geometry = transform_geometry(to_equal_area.transform, geometry)
+        for candidate_epsg, candidate_wkb in candidates:
+            candidate_geometry = from_wkb(candidate_wkb)
+            candidate_projected = transform_geometry(to_equal_area.transform, candidate_geometry)
+            overlap_area = projected_geometry.intersection(candidate_projected).area
+            if overlap_area <= 0:
+                continue
+            if int(candidate_epsg) == grid_epsg:
+                same_zone_positive_overlap_count += 1
+                continue
+            overlap_fraction = overlap_area / min(projected_geometry.area, candidate_projected.area)
+            max_cross_zone_overlap_fraction = max(max_cross_zone_overlap_fraction, overlap_fraction)
+            if overlap_fraction > CROSS_ZONE_OVERLAP_FRACTION:
+                cross_zone_overlap_violation_count += 1
     cursor = connection.execute(
         "INSERT INTO geometries(grid_epsg, parent_key, geometry_wkb) VALUES (?, ?, ?)",
         (grid_epsg, parent_key_value, geometry.wkb),
@@ -682,6 +757,15 @@ def _audit_overlap(
         cross_zone_overlap_violation_count,
         max_cross_zone_overlap_fraction,
     )
+
+
+def _is_utm_seam_candidate(geometry: Any, grid_epsg: int) -> bool:
+    """Return whether a cell can intersect a footprint from an adjacent owner zone."""
+    zone = int(grid_epsg) % 100
+    west = -180.0 + 6.0 * (zone - 1)
+    east = west + 6.0
+    minx, _, maxx, _ = geometry.bounds
+    return minx <= west <= maxx or minx <= east <= maxx
 
 
 def assess_utm_seam_overlap_policy(
@@ -966,14 +1050,16 @@ def audit_grid_package(
                 ((key,) for key in sampled_key_set),
             )
             all_columns = [*CANONICAL_METADATA_FIELDS, "geometry"]
-            transformers: dict[int, Transformer] = {}
-            for row in _iter_parquet_rows(all_paths, all_columns, batch_size):
+            noncanonical_geometry_seen = False
+            for audited in _iter_audited_parquet_rows(all_paths, all_columns, batch_size):
+                row = audited["row"]
                 parent_key_value = str(row["parent_key"])
                 grid_epsg = int(row["grid_epsg"])
-                geometry = from_wkb(row["geometry"])
+                geometry = audited["geometry"]
                 canonical_bounds = _canonical_utm_bounds(int(row["grid_col"]), int(row["grid_row"]))
-                canonical_geometry = _canonical_wgs84_geometry(row)
-                canonical_footprint_hash = _normalized_footprint_hash(canonical_geometry)
+                canonical_geometry = audited["canonical_geometry"]
+                canonical_footprint_hash = audited["canonical_footprint_hash"]
+                actual_footprint_hash = audited["actual_footprint_hash"]
                 _record_partition_key(connection, parent_key_value, "all")
                 counters["all_count"] += 1
                 if bool(row["sampled"]):
@@ -1005,34 +1091,44 @@ def audit_grid_package(
                     registry_footprint_hash = registry_record.get(
                         "canonical_wgs84_footprint_hash", registry_record.get("footprint_hash")
                     )
-                    if registry_footprint_hash is not None and str(
-                        registry_footprint_hash
-                    ) != _normalized_footprint_hash(geometry):
+                    if (
+                        registry_footprint_hash is not None
+                        and str(registry_footprint_hash) != actual_footprint_hash
+                    ):
                         counters["sampled_registry_footprint_hash_mismatch_count"] += 1
 
-                coordinate_difference = _maximum_footprint_coordinate_difference(
-                    canonical_geometry, geometry
-                )
+                coordinate_difference = audited["coordinate_difference"]
                 max_footprint_coordinate_difference = max(
                     max_footprint_coordinate_difference, coordinate_difference
                 )
                 if coordinate_difference > AUDIT_COORDINATE_TOLERANCE:
                     counters["footprint_coordinate_mismatch_count"] += 1
-                transformer = transformers.setdefault(
-                    grid_epsg, Transformer.from_crs(4326, grid_epsg, always_xy=True)
-                )
-                projected_geometry = transform_geometry(transformer.transform, geometry)
-                minx, miny, maxx, maxy = projected_geometry.bounds
-                if (
-                    abs((maxx - minx) - PARENT_SIDE_METERS) > AUDIT_DIMENSION_TOLERANCE_M
-                    or abs((maxy - miny) - PARENT_SIDE_METERS) > AUDIT_DIMENSION_TOLERANCE_M
-                    or abs(projected_geometry.area - PARENT_SIDE_METERS**2)
-                    > AUDIT_AREA_TOLERANCE_M2
-                ):
-                    counters["invalid_geometry_count"] += 1
+                if coordinate_difference != 0.0:
+                    projected_geometry = transform_geometry(
+                        _transformer_from_wgs84(grid_epsg).transform, geometry
+                    )
+                    minx, miny, maxx, maxy = projected_geometry.bounds
+                    if (
+                        abs((maxx - minx) - PARENT_SIDE_METERS) > AUDIT_DIMENSION_TOLERANCE_M
+                        or abs((maxy - miny) - PARENT_SIDE_METERS) > AUDIT_DIMENSION_TOLERANCE_M
+                        or abs(projected_geometry.area - PARENT_SIDE_METERS**2)
+                        > AUDIT_AREA_TOLERANCE_M2
+                    ):
+                        counters["invalid_geometry_count"] += 1
                 same_zone_count, cross_zone_count, overlap_fraction = _audit_overlap(
-                    connection, geometry, grid_epsg, parent_key_value, to_equal_area
+                    connection,
+                    geometry,
+                    grid_epsg,
+                    parent_key_value,
+                    to_equal_area,
+                    check_overlap=(
+                        noncanonical_geometry_seen
+                        or coordinate_difference != 0.0
+                        or _is_utm_seam_candidate(geometry, grid_epsg)
+                    ),
                 )
+                if coordinate_difference != 0.0:
+                    noncanonical_geometry_seen = True
                 counters["same_zone_positive_overlap_count"] += same_zone_count
                 counters["cross_zone_overlap_violation_count"] += cross_zone_count
                 counters["max_cross_zone_overlap_fraction"] = max(
@@ -1043,7 +1139,7 @@ def audit_grid_package(
                     INSERT OR IGNORE INTO canonical_rows(parent_key, metadata_hash, geometry_hash)
                     VALUES (?, ?, ?)
                     """,
-                    (parent_key_value, _metadata_hash(row), _normalized_footprint_hash(geometry)),
+                    (parent_key_value, _metadata_hash(row), actual_footprint_hash),
                 )
             connection.commit()
 
