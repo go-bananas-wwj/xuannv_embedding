@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -83,6 +84,41 @@ def _non_negative_int(value: Any, field_name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ConfigError(f"{field_name} 必须是非负整数")
     return value
+
+
+def _boolean(value: Any, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"{field_name} 必须是布尔值")
+    return value
+
+
+def _string(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ConfigError(f"{field_name} 必须是非空字符串")
+    return value
+
+
+def _finite_float(value: Any, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(f"{field_name} 必须是数值")
+    result = float(value)
+    if not math.isfinite(result):
+        raise ConfigError(f"{field_name} 必须是有限数值")
+    return result
+
+
+def _non_negative_float(value: Any, field_name: str) -> float:
+    result = _finite_float(value, field_name)
+    if result < 0:
+        raise ConfigError(f"{field_name} 必须非负")
+    return result
+
+
+def _positive_float(value: Any, field_name: str) -> float:
+    result = _finite_float(value, field_name)
+    if result <= 0:
+        raise ConfigError(f"{field_name} 必须大于 0")
+    return result
 
 
 @dataclass(frozen=True)
@@ -267,7 +303,7 @@ class Config:
             required={"schema_version", "paths", "experiment", "model", "training", "data"},
         )
         _reject_base(top)
-        schema_version = str(top["schema_version"])
+        schema_version = _string(top["schema_version"], "schema_version")
         if schema_version != "1":
             raise ConfigError(f"不支持的 schema_version: {schema_version!r}")
 
@@ -287,7 +323,12 @@ def _parse_paths(value: Any) -> PathsConfig:
         allowed={"data_root", "output_root", "artifact_root"},
         required={"data_root", "output_root", "artifact_root"},
     )
-    return PathsConfig(*(Path(raw[name]) for name in ("data_root", "output_root", "artifact_root")))
+    return PathsConfig(
+        *(
+            Path(_string(raw[name], f"paths.{name}"))
+            for name in ("data_root", "output_root", "artifact_root")
+        )
+    )
 
 
 def _parse_experiment(value: Any) -> ExperimentConfig:
@@ -302,9 +343,13 @@ def _parse_experiment(value: Any) -> ExperimentConfig:
         required={"name"},
     )
     return ExperimentConfig(
-        name=str(raw["name"]),
-        seed=int(raw.get("seed", 42)),
-        output_dir=Path(raw["output_dir"]) if raw.get("output_dir") else None,
+        name=_string(raw["name"], "experiment.name"),
+        seed=_non_negative_int(raw.get("seed", 42), "experiment.seed"),
+        output_dir=(
+            Path(_string(raw["output_dir"], "experiment.output_dir"))
+            if raw.get("output_dir") is not None
+            else None
+        ),
     )
 
 
@@ -315,7 +360,7 @@ def _parse_input_source(name: str, value: Any) -> InputSourceConfig:
         allowed={"channels", "role"},
         required={"channels", "role"},
     )
-    role = str(raw["role"])
+    role = _string(raw["role"], f"model.input_sources.{name}.role")
     if role not in {"temporal", "highres"}:
         raise ConfigError(f"model.input_sources.{name}.role 非法: {role!r}")
     return InputSourceConfig(
@@ -331,14 +376,12 @@ def _parse_target_head(name: str, value: Any) -> TargetHeadConfig:
         allowed={"source", "loss_type", "channels", "weight"},
         required={"source", "loss_type", "channels", "weight"},
     )
-    loss_type = str(raw["loss_type"])
+    loss_type = _string(raw["loss_type"], f"model.target_heads.{name}.loss_type")
     if loss_type not in {"continuous", "categorical"}:
         raise ConfigError(f"model.target_heads.{name}.loss_type 非法: {loss_type!r}")
-    weight = float(raw["weight"])
-    if weight < 0:
-        raise ConfigError(f"model.target_heads.{name}.weight 必须非负")
+    weight = _non_negative_float(raw["weight"], f"model.target_heads.{name}.weight")
     return TargetHeadConfig(
-        source=str(raw["source"]),
+        source=_string(raw["source"], f"model.target_heads.{name}.source"),
         loss_type=loss_type,  # type: ignore[arg-type]
         channels=_positive_int(raw["channels"], f"model.target_heads.{name}.channels"),
         weight=weight,
@@ -361,8 +404,10 @@ def _parse_stp(value: Any) -> STPConfig:
             "highres_fusion_to_embedding",
         },
     )
-    temporal_fusion = str(raw.get("temporal_fusion", "concat"))
-    time_attention_mode = str(raw.get("time_attention_mode", "full"))
+    temporal_fusion = _string(raw.get("temporal_fusion", "concat"), "model.stp.temporal_fusion")
+    time_attention_mode = _string(
+        raw.get("time_attention_mode", "full"), "model.stp.time_attention_mode"
+    )
     if temporal_fusion not in {"concat", "gated_sum"}:
         raise ConfigError(f"model.stp.temporal_fusion 非法: {temporal_fusion!r}")
     if time_attention_mode not in {"full", "none"}:
@@ -376,7 +421,10 @@ def _parse_stp(value: Any) -> STPConfig:
         num_heads=_positive_int(raw.get("num_heads", 8), "model.stp.num_heads"),
         temporal_fusion=temporal_fusion,  # type: ignore[arg-type]
         time_attention_mode=time_attention_mode,  # type: ignore[arg-type]
-        highres_fusion_to_embedding=bool(raw.get("highres_fusion_to_embedding", True)),
+        highres_fusion_to_embedding=_boolean(
+            raw.get("highres_fusion_to_embedding", True),
+            "model.stp.highres_fusion_to_embedding",
+        ),
     )
 
 
@@ -398,6 +446,10 @@ def _parse_model(value: Any) -> ModelConfig:
     )
     input_raw = _mapping(raw["input_sources"], "model.input_sources")
     target_raw = _mapping(raw["target_heads"], "model.target_heads")
+    if any(not name for name in input_raw):
+        raise ConfigError("model.input_sources 名称必须是非空字符串")
+    if any(not name for name in target_raw):
+        raise ConfigError("model.target_heads 名称必须是非空字符串")
     input_sources = {name: _parse_input_source(name, source) for name, source in input_raw.items()}
     target_heads = {name: _parse_target_head(name, head) for name, head in target_raw.items()}
     if not input_sources or not any(source.role == "temporal" for source in input_sources.values()):
@@ -429,28 +481,41 @@ def _parse_masking(value: Any, model: ModelConfig) -> InputMaskingConfig:
             "spatial_block_ratio",
         },
     )
+    dropout_raw = _mapping(
+        raw.get("modality_dropout_probs", {}),
+        "training.input_masking.modality_dropout_probs",
+    )
     dropout = {
-        str(name): float(probability)
-        for name, probability in _mapping(
-            raw.get("modality_dropout_probs", {}),
-            "training.input_masking.modality_dropout_probs",
-        ).items()
+        _string(name, "training.input_masking.modality_dropout_probs source"): _finite_float(
+            probability,
+            f"training.input_masking.modality_dropout_probs.{name}",
+        )
+        for name, probability in dropout_raw.items()
     }
     unknown = sorted(set(dropout) - set(model.input_sources))
     if unknown:
         raise ConfigError(f"input masking 引用了未知 source: {', '.join(unknown)}")
     ratios = {
-        "month_dropout_prob": float(raw.get("month_dropout_prob", 0.0)),
-        "spatial_block_prob": float(raw.get("spatial_block_prob", 0.0)),
-        "spatial_block_ratio": float(raw.get("spatial_block_ratio", 0.15)),
+        "month_dropout_prob": _finite_float(
+            raw.get("month_dropout_prob", 0.0), "training.input_masking.month_dropout_prob"
+        ),
+        "spatial_block_prob": _finite_float(
+            raw.get("spatial_block_prob", 0.0), "training.input_masking.spatial_block_prob"
+        ),
+        "spatial_block_ratio": _finite_float(
+            raw.get("spatial_block_ratio", 0.15), "training.input_masking.spatial_block_ratio"
+        ),
         **{f"modality_dropout_probs.{name}": probability for name, probability in dropout.items()},
     }
     for name, ratio in ratios.items():
         if not 0.0 <= ratio <= 1.0:
             raise ConfigError(f"training.input_masking.{name} 必须位于 [0, 1]")
     return InputMaskingConfig(
-        enabled=bool(raw.get("enabled", False)),
-        drop_availability_masks=bool(raw.get("drop_availability_masks", True)),
+        enabled=_boolean(raw.get("enabled", False), "training.input_masking.enabled"),
+        drop_availability_masks=_boolean(
+            raw.get("drop_availability_masks", True),
+            "training.input_masking.drop_availability_masks",
+        ),
         modality_dropout_probs=dropout,
         month_dropout_prob=ratios["month_dropout_prob"],
         max_months_per_sample=_positive_int(
@@ -500,16 +565,28 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "save_every",
     }
     raw = _strict(value, "training", allowed=fields, required=required)
-    tasks = [str(task) for task in raw.get("semantic_probe_tasks", [])]
+    tasks_raw = raw.get("semantic_probe_tasks", [])
+    if not isinstance(tasks_raw, list):
+        raise ConfigError("training.semantic_probe_tasks 必须是字符串列表")
+    tasks = [
+        _string(task, f"training.semantic_probe_tasks[{index}]")
+        for index, task in enumerate(tasks_raw)
+    ]
+    if len(set(tasks)) != len(tasks):
+        raise ConfigError("training.semantic_probe_tasks 不得重复")
     task_weights = {
-        str(name): float(weight)
+        _string(name, "training.semantic_probe_task_weights task"): _non_negative_float(
+            weight, f"training.semantic_probe_task_weights.{name}"
+        )
         for name, weight in _mapping(
             raw.get("semantic_probe_task_weights", {}),
             "training.semantic_probe_task_weights",
         ).items()
     }
     pos_weights = {
-        str(name): float(weight)
+        _string(name, "training.semantic_probe_pos_weights task"): _positive_float(
+            weight, f"training.semantic_probe_pos_weights.{name}"
+        )
         for name, weight in _mapping(
             raw.get("semantic_probe_pos_weights", {}),
             "training.semantic_probe_pos_weights",
@@ -517,37 +594,51 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
     }
     return TrainingConfig(
         epochs=_positive_int(raw["epochs"], "training.epochs"),
-        lr=float(raw["lr"]),
-        weight_decay=float(raw["weight_decay"]),
+        lr=_positive_float(raw["lr"], "training.lr"),
+        weight_decay=_non_negative_float(raw["weight_decay"], "training.weight_decay"),
         warmup_epochs=_non_negative_int(raw["warmup_epochs"], "training.warmup_epochs"),
         gradient_accumulation_steps=_positive_int(
             raw["gradient_accumulation_steps"],
             "training.gradient_accumulation_steps",
         ),
         save_every=_positive_int(raw["save_every"], "training.save_every"),
-        amp=bool(raw.get("amp", True)),
-        gradient_checkpointing=bool(raw.get("gradient_checkpointing", True)),
-        uniformity_weight=float(raw.get("uniformity_weight", 0.0)),
+        amp=_boolean(raw.get("amp", True), "training.amp"),
+        gradient_checkpointing=_boolean(
+            raw.get("gradient_checkpointing", True), "training.gradient_checkpointing"
+        ),
+        uniformity_weight=_non_negative_float(
+            raw.get("uniformity_weight", 0.0), "training.uniformity_weight"
+        ),
         uniformity_warmup_epochs=_non_negative_int(
             raw.get("uniformity_warmup_epochs", 0),
             "training.uniformity_warmup_epochs",
         ),
-        uniformity_temperature=float(raw.get("uniformity_temperature", 2.0)),
-        semantic_probe_weight=float(raw.get("semantic_probe_weight", 0.0)),
+        uniformity_temperature=_positive_float(
+            raw.get("uniformity_temperature", 2.0), "training.uniformity_temperature"
+        ),
+        semantic_probe_weight=_non_negative_float(
+            raw.get("semantic_probe_weight", 0.0), "training.semantic_probe_weight"
+        ),
         semantic_probe_warmup_epochs=_non_negative_int(
             raw.get("semantic_probe_warmup_epochs", 0),
             "training.semantic_probe_warmup_epochs",
         ),
         semantic_probe_tasks=tasks,
         semantic_probe_task_weights=task_weights,
-        semantic_probe_pos_weight=float(raw.get("semantic_probe_pos_weight", 1.0)),
-        semantic_probe_pos_weights=pos_weights,
-        semantic_probe_hidden_dim=int(raw.get("semantic_probe_hidden_dim", 64)),
-        semantic_probe_hard_negative_ratio=float(
-            raw.get("semantic_probe_hard_negative_ratio", 0.0)
+        semantic_probe_pos_weight=_positive_float(
+            raw.get("semantic_probe_pos_weight", 1.0), "training.semantic_probe_pos_weight"
         ),
-        semantic_probe_hard_negative_weight=float(
-            raw.get("semantic_probe_hard_negative_weight", 0.0)
+        semantic_probe_pos_weights=pos_weights,
+        semantic_probe_hidden_dim=_non_negative_int(
+            raw.get("semantic_probe_hidden_dim", 64), "training.semantic_probe_hidden_dim"
+        ),
+        semantic_probe_hard_negative_ratio=_finite_float(
+            raw.get("semantic_probe_hard_negative_ratio", 0.0),
+            "training.semantic_probe_hard_negative_ratio",
+        ),
+        semantic_probe_hard_negative_weight=_non_negative_float(
+            raw.get("semantic_probe_hard_negative_weight", 0.0),
+            "training.semantic_probe_hard_negative_weight",
         ),
         semantic_probe_hard_negative_warmup_epochs=_non_negative_int(
             raw.get("semantic_probe_hard_negative_warmup_epochs", 0),
@@ -582,7 +673,9 @@ def _parse_dataset(index: int, value: Any) -> RegionDatasetConfig:
         },
     )
     source_map = {
-        str(physical): str(canonical)
+        _string(physical, f"{section}.source_map physical source"): _string(
+            canonical, f"{section}.source_map.{physical}"
+        )
         for physical, canonical in _mapping(raw["source_map"], f"{section}.source_map").items()
     }
     duplicates = sorted(
@@ -593,20 +686,20 @@ def _parse_dataset(index: int, value: Any) -> RegionDatasetConfig:
     if duplicates:
         raise ConfigError(f"{section}.source_map 包含重复映射: {', '.join(duplicates)}")
     label_roots = {
-        str(name): Path(path)
+        _string(name, f"{section}.supervised_label_roots task"): Path(
+            _string(path, f"{section}.supervised_label_roots.{name}")
+        )
         for name, path in _mapping(
             raw["supervised_label_roots"],
             f"{section}.supervised_label_roots",
         ).items()
     }
-    sampling_weight = float(raw["sampling_weight"])
-    if sampling_weight <= 0:
-        raise ConfigError(f"{section}.sampling_weight 必须大于 0")
+    sampling_weight = _positive_float(raw["sampling_weight"], f"{section}.sampling_weight")
     return RegionDatasetConfig(
-        region=str(raw["region"]),
-        manifest_path=Path(raw["manifest_path"]),
-        statistics_dir=Path(raw["statistics_dir"]),
-        patch_grid_path=Path(raw["patch_grid_path"]),
+        region=_string(raw["region"], f"{section}.region"),
+        manifest_path=Path(_string(raw["manifest_path"], f"{section}.manifest_path")),
+        statistics_dir=Path(_string(raw["statistics_dir"], f"{section}.statistics_dir")),
+        patch_grid_path=Path(_string(raw["patch_grid_path"], f"{section}.patch_grid_path")),
         source_map=source_map,
         supervised_label_roots=label_roots,
         sampling_weight=sampling_weight,
@@ -622,7 +715,7 @@ def _parse_data(value: Any, model: ModelConfig) -> DataConfig:
     )
     if not isinstance(raw["months"], list):
         raise ConfigError("data.months 必须是列表")
-    months = [str(month) for month in raw["months"]]
+    months = [_string(month, f"data.months[{index}]") for index, month in enumerate(raw["months"])]
     if not months or any(not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month) for month in months):
         raise ConfigError("data.months 必须使用 YYYY-MM 且不能为空")
     if len(set(months)) != len(months) or months != sorted(months):
@@ -654,6 +747,28 @@ def _validate_cross_contracts(
     first_year, first_month = (int(part) for part in data.months[0].split("-"))
     if (model.ref_year, model.ref_month) != (first_year, first_month):
         raise ConfigError("月份冲突: model.ref_year/ref_month 必须等于 data.months[0]")
+    if not 1 <= model.ref_month <= 12:
+        raise ConfigError("model.ref_month 必须位于 1..12")
+    if training.warmup_epochs > training.epochs:
+        raise ConfigError("training.warmup_epochs 不得超过 training.epochs")
+    if not 0.0 <= training.semantic_probe_hard_negative_ratio <= 1.0:
+        raise ConfigError("training.semantic_probe_hard_negative_ratio 必须位于 [0, 1]")
+    unknown_task_weights = sorted(
+        set(training.semantic_probe_task_weights) - set(training.semantic_probe_tasks)
+    )
+    unknown_pos_weights = sorted(
+        set(training.semantic_probe_pos_weights) - set(training.semantic_probe_tasks)
+    )
+    if unknown_task_weights:
+        raise ConfigError(
+            "training.semantic_probe_task_weights 引用了未配置任务: "
+            + ", ".join(unknown_task_weights)
+        )
+    if unknown_pos_weights:
+        raise ConfigError(
+            "training.semantic_probe_pos_weights 引用了未配置任务: "
+            + ", ".join(unknown_pos_weights)
+        )
 
     available_slots = set(model.input_sources) | {
         head.source for head in model.target_heads.values()

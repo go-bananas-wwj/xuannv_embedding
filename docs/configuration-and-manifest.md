@@ -3,7 +3,8 @@
 ## 配置 schema v1
 
 运行配置必须包含 `schema_version / paths / experiment / model / training / data`，必须自包含，
-不得使用 `_base_`。解析器拒绝未知字段和 YAML 重复键。
+不得使用 `_base_`。解析器拒绝未知字段和 YAML 重复键，也不把字符串强制转换成布尔值或数值；
+学习率、权重、概率、温度和区域采样权重必须满足各自的有限值及正/非负范围。
 
 `model.input_sources` 的每个规范槽位显式声明：
 

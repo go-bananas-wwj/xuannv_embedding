@@ -175,6 +175,28 @@ def test_rejects_month_count_and_reference_conflicts(tmp_path: Path) -> None:
         Config.from_yaml(_write(tmp_path, ref_conflict))
 
 
+@pytest.mark.parametrize(
+    ("needle", "replacement", "message"),
+    [
+        ("  amp: true", '  amp: "false"', "布尔"),
+        (
+            "    highres_fusion_to_embedding: true",
+            '    highres_fusion_to_embedding: "false"',
+            "布尔",
+        ),
+        ("  lr: 2.0e-6", "  lr: .nan", "有限"),
+        ("  weight_decay: 0.05", "  weight_decay: -0.1", "非负"),
+        ("  semantic_probe_hidden_dim: 0", "  semantic_probe_hidden_dim: 1.5", "非负整数"),
+        ("      sampling_weight: 1.0", "      sampling_weight: .nan", "有限"),
+    ],
+)
+def test_rejects_coerced_booleans_and_invalid_numeric_values(
+    tmp_path: Path, needle: str, replacement: str, message: str
+) -> None:
+    with pytest.raises(ConfigError, match=message):
+        Config.from_yaml(_write(tmp_path, _valid_config().replace(needle, replacement)))
+
+
 def test_rejects_unknown_or_missing_source_slot(tmp_path: Path) -> None:
     text = _valid_config().replace("optical_haidian: highres_optical", "optical_haidian: x")
 
