@@ -53,6 +53,29 @@ def _run_downstream_evaluate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
+    data = subparsers.add_parser("data", help="网格、采样、物化、预处理与审计")
+    actions = data.add_subparsers(dest="data_command", required=True)
+    descriptions = {
+        "grid": "构建全国 1280 m 父网格",
+        "registry": "生成全国采样 registry",
+        "partition": "生成确定性的全国十等分",
+        "materialize": "从冻结 catalog 物化多源栅格",
+        "preprocess": "对齐并切分多源栅格",
+        "manifest": "生成带摘要的 manifest v1",
+        "validate": "审计 manifest 或父网格包",
+    }
+    for command, help_text in descriptions.items():
+        action = actions.add_parser(command, help=help_text, add_help=False)
+        action.set_defaults(handler=_run_data, data_command=command)
+
+
+def _run_data(args: argparse.Namespace) -> int:
+    from xuannv_embedding.data_process.cli import dispatch
+
+    return dispatch(args.data_command, args.forwarded_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建不依赖可选运行组件的顶层命令解析器。"""
     parser = argparse.ArgumentParser(
@@ -61,12 +84,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command")
+    _add_data_commands(subparsers)
     _add_downstream_commands(subparsers)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args, unknown = parser.parse_known_args(argv)
+    if args.command == "data":
+        args.forwarded_args = unknown
+    elif unknown:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
     handler = getattr(args, "handler", None)
     return int(handler(args)) if handler is not None else 0
