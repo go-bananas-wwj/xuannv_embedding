@@ -12,6 +12,7 @@ import subprocess
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Sequence
+from urllib.parse import unquote, urlparse
 
 import torch
 import torch.distributed as dist
@@ -273,6 +274,26 @@ def _setup_device(requested: str | None) -> tuple[torch.device, bool, int]:
     return device, False, local_rank
 
 
+def _git_sha_from_repository(repository: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(repository), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    candidate = result.stdout.strip()
+    if result.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", candidate):
+        return candidate
+    return None
+
+
+def _repository_path_from_direct_url(url: str) -> Path | None:
+    parsed = urlparse(url)
+    if parsed.scheme != "file" or parsed.netloc not in {"", "localhost"}:
+        return None
+    return Path(unquote(parsed.path))
+
+
 def _git_sha() -> str:
     explicit = os.environ.get("XUANNV_GIT_SHA")
     if explicit is not None:
@@ -281,14 +302,8 @@ def _git_sha() -> str:
         return explicit.lower()
 
     project_root = Path(__file__).resolve().parents[3]
-    result = subprocess.run(
-        ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    candidate = result.stdout.strip()
-    if result.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", candidate):
+    candidate = _git_sha_from_repository(project_root)
+    if candidate is not None:
         return candidate
 
     try:
@@ -296,11 +311,16 @@ def _git_sha() -> str:
             "direct_url.json"
         )
         metadata = json.loads(direct_url) if direct_url is not None else {}
-        candidate = str(metadata.get("vcs_info", {}).get("commit_id", ""))
     except (importlib.metadata.PackageNotFoundError, json.JSONDecodeError):
-        candidate = ""
+        metadata = {}
+    candidate = str(metadata.get("vcs_info", {}).get("commit_id", ""))
     if re.fullmatch(r"[0-9a-fA-F]{7,64}", candidate):
         return candidate.lower()
+    source_repository = _repository_path_from_direct_url(str(metadata.get("url", "")))
+    if source_repository is not None:
+        candidate = _git_sha_from_repository(source_repository)
+        if candidate is not None:
+            return candidate
     raise RuntimeError("无法证明训练代码的 Git SHA；请设置 XUANNV_GIT_SHA 后再启动训练")
 
 

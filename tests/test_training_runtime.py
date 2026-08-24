@@ -18,6 +18,7 @@ from xuannv_embedding.training.cli import (
     _epoch_count,
     _git_sha,
     _periodic_checkpoint_path,
+    _repository_path_from_direct_url,
     synthetic_batch,
 )
 from xuannv_embedding.training.losses import TotalLoss
@@ -239,6 +240,13 @@ def test_git_sha_is_independent_of_training_working_directory(
     monkeypatch.chdir(tmp_path)
 
     assert _git_sha() == expected
+
+
+def test_local_install_direct_url_resolves_source_repository() -> None:
+    assert _repository_path_from_direct_url("file:///tmp/source%20repository") == Path(
+        "/tmp/source repository"
+    )
+    assert _repository_path_from_direct_url("https://example.com/source") is None
 
 
 def test_explicit_git_sha_must_be_a_real_hex_commit(monkeypatch: pytest.MonkeyPatch) -> None:
