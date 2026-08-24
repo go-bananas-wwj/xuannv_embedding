@@ -234,6 +234,18 @@ def _serialize_records(path: Path, records: list[ManifestRecord]) -> bytes:
     raise ManifestError("manifest 文件扩展名必须是 .json 或 .jsonl")
 
 
+def _validate_unique_record_identities(records: list[ManifestRecord]) -> None:
+    seen: set[tuple[str, str]] = set()
+    for index, record in enumerate(records):
+        identity = (record.region, record.patch_id)
+        if identity in seen:
+            raise ManifestError(
+                "manifest 包含重复 region/patch_id: "
+                f"region={record.region!r}, patch_id={record.patch_id!r}, record[{index}]"
+            )
+        seen.add(identity)
+
+
 def write_manifest(
     path: str | Path,
     records: list[ManifestRecord],
@@ -244,6 +256,7 @@ def write_manifest(
     manifest_path = Path(path)
     for index, record in enumerate(records):
         record.validate(f"record[{index}]")
+    _validate_unique_record_identities(records)
     payload = _serialize_records(manifest_path, records)
     meta = ManifestMeta(
         schema_version="1",
@@ -307,6 +320,7 @@ def load_manifest(
             f"manifest SHA-256 不匹配: sidecar={meta.sha256}, actual={actual_sha256}"
         )
     records = _parse_records(manifest_path, payload)
+    _validate_unique_record_identities(records)
     if len(records) != meta.record_count:
         raise ManifestError(
             f"manifest 记录数不匹配: sidecar={meta.record_count}, actual={len(records)}"
@@ -377,4 +391,5 @@ def load_legacy_manifest(path: str | Path, *, region: str) -> list[ManifestRecor
             if item.get(key) is not None:
                 record_raw[key] = item[key]
         records.append(ManifestRecord.from_dict(record_raw, f"legacy record[{index}]"))
+    _validate_unique_record_identities(records)
     return records

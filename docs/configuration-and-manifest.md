@@ -35,7 +35,8 @@ input_sources:
 ```
 
 可选字段是 `source_patch_id`、`grid`、`geometry`、`quality`、`provenance`。路径必须是数据根下
-的 POSIX 相对路径，禁止绝对路径、URL 和 `..` 逃逸。
+的 POSIX 相对路径，禁止绝对路径、URL 和 `..` 逃逸；`(region, patch_id)` 在整个 manifest
+内必须唯一，写入、读取和 legacy 适配都会拒绝重复身份。
 
 同名 `<manifest>.meta.json` sidecar 保存 schema、月份、记录数、生成器版本和内容 SHA-256。
 读取时同时核验摘要与记录数。旧海淀/哈尔滨平铺 JSON 仅通过只读 adapter 读取；adapter 不会

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -66,6 +67,37 @@ def test_manifest_detects_tampering(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ManifestError, match="SHA-256"):
+        load_manifest(path)
+
+
+def test_manifest_rejects_duplicate_region_patch_identity_on_write_and_load(
+    tmp_path: Path,
+) -> None:
+    duplicate = [
+        ManifestRecord("p1", "haidian", {"s2": "s2/a.tif"}),
+        ManifestRecord("p1", "haidian", {"s2": "s2/b.tif"}),
+    ]
+    with pytest.raises(ManifestError, match="重复.*region.*patch_id"):
+        write_manifest(tmp_path / "write.jsonl", duplicate, months=["2025-12"])
+
+    path = tmp_path / "load.jsonl"
+    payload = b"{" + b'"patch_id":"p1","region":"haidian","sources":{"s2":"s2/a.tif"}}\n'
+    payload += b"{" + b'"patch_id":"p1","region":"haidian","sources":{"s2":"s2/b.tif"}}\n'
+    path.write_bytes(payload)
+    manifest_meta_path(path).write_text(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "months": ["2025-12"],
+                "record_count": 2,
+                "generator_version": "test",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ManifestError, match="重复.*region.*patch_id"):
         load_manifest(path)
 
 
