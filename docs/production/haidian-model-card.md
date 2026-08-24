@@ -30,3 +30,5 @@
 - 海淀单城证据不能外推为全国性能。
 
 制品位置与摘要见 [artifact manifest](artifacts.json)，评测见 [海淀证据摘要](haidian-evidence.md)。
+兼容门禁除同进程旧/新命名模型比较外，还使用归档生产源码独立生成的真实 2-patch NPU 输出；
+冻结输入、输出、旧源码 commit/tree 与环境摘要均由包内 reference manifest 约束。

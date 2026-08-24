@@ -1,0 +1,114 @@
+{
+  "checkpoint_sha256": "69dfd81c898544413a747f5c7304cc9210ad1cf420ce724864b8bd7deb6ed790",
+  "environment": {
+    "device": "npu:0",
+    "device_name": "Ascend910B4-1",
+    "torch": "2.6.0+cpu",
+    "torch_npu": "2.6.0.post5"
+  },
+  "input": {
+    "bytes": 25271596,
+    "file_sha256": "b90ea68c663fc7c66c0804bcf5786b0d9c966a2e7cb5f5c79e31f2440eee3be9",
+    "patch_ids": [
+      "patch_000000",
+      "patch_000001"
+    ],
+    "path": "haidian_two_patch_model_input.pt",
+    "tensor_evidence": {
+      "patch_ids": [
+        "patch_000000",
+        "patch_000001"
+      ],
+      "schema_version": "xuannv_model_input_digest_v1",
+      "tensors": [
+        {
+          "dtype": "torch.float32",
+          "path": "source_frames/landsat",
+          "sha256": "183b623dc89ec32d2652f68f1ed13c3403a9663c6d24cd0954281fe09006a8b9",
+          "shape": [2, 6, 7, 128, 128]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "source_frames/s1",
+          "sha256": "66c3f2dee0de3c640947f110d32ec573c421b01d364c70c535f387675ada17b4",
+          "shape": [2, 6, 2, 128, 128]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "source_frames/s2",
+          "sha256": "564ab49f028eef5dc6e5ebc7186abd56e21739e352ffa2c0c7dddeb0e04f3de2",
+          "shape": [2, 6, 12, 128, 128]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "source_masks/landsat",
+          "sha256": "6ea78411bee8a810b9a18819c5a4ac7c827e71678cc4d1db9a0ab8c8d8a9b2e2",
+          "shape": [2, 6]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "source_masks/s1",
+          "sha256": "6ea78411bee8a810b9a18819c5a4ac7c827e71678cc4d1db9a0ab8c8d8a9b2e2",
+          "shape": [2, 6]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "source_masks/s2",
+          "sha256": "6ea78411bee8a810b9a18819c5a4ac7c827e71678cc4d1db9a0ab8c8d8a9b2e2",
+          "shape": [2, 6]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "highres_frames/highres_optical",
+          "sha256": "914fbb7aca2414ea8677c7726d45bf8209777fcd9be68810126eb7a20b65dab5",
+          "shape": [2, 3, 427, 427]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "highres_frames/highres_sar",
+          "sha256": "d8e472cedf1fbd8344a23563521ec280cbc759fcfb33940c24a5900a14e8ecf6",
+          "shape": [2, 1, 427, 427]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "highres_masks/highres_optical",
+          "sha256": "eb5736019cc9115f8cb8538d2a38eef61aab45851cce1585b419976a12f1e573",
+          "shape": [2, 1, 427, 427]
+        },
+        {
+          "dtype": "torch.float32",
+          "path": "highres_masks/highres_sar",
+          "sha256": "eb5736019cc9115f8cb8538d2a38eef61aab45851cce1585b419976a12f1e573",
+          "shape": [2, 1, 427, 427]
+        },
+        {
+          "dtype": "torch.int64",
+          "path": "timestamps",
+          "sha256": "7f077db06da2ca92349b2d990000b6368000ec44957e3cd78cb3b78a9763ac5c",
+          "shape": [2, 6]
+        }
+      ]
+    },
+    "tensor_sha256": "a3d38fe347b279e9dc44b54dc5a3ecf64af1ca312f6d0713a3c0dbba1e51e786"
+  },
+  "legacy_runtime": {
+    "archive_tag": "archive/haidian-v1-production-20260710",
+    "models_tree_git_sha1": "2cc6d1ec0d035d01d06f18382a270e5984a6ab9e",
+    "original_git_sha": "149f33bbf6232cc45345b550ec0da0bb0915d898",
+    "sanitized_git_sha": "585210e683b31c58632ff68174c5de754e51a22e"
+  },
+  "output": {
+    "bytes": 50331776,
+    "file_sha256": "88c1f4a82d7d0d9a2cab9b217946c88ebed2334a247a2894c8e69c671b687e6f",
+    "path": "legacy_embedding.npy",
+    "tensor_evidence": {
+      "dtype": "float32",
+      "schema_version": "xuannv_tensor_digest_v1",
+      "sha256": "8bdb54db5fe986b104da60ddf1bf8050fd697eae08ac60f23a64324f6d128557",
+      "shape": [2, 6, 64, 128, 128]
+    },
+    "tensor_sha256": "872b6409409a1681042f5f5bf87d4b56fb91de56f3663c3b30caf2fcd845198b"
+  },
+  "profile": "haidian_p10c_v1",
+  "schema_version": "xuannv_independent_legacy_reference_v1"
+}

@@ -10,6 +10,17 @@
       "compatibility_profile": "haidian_p10c_v1",
       "model_key_count": 431
     },
+    "independent_legacy_reference": {
+      "legacy_original_git_sha": "149f33bbf6232cc45345b550ec0da0bb0915d898",
+      "legacy_sanitized_git_sha": "585210e683b31c58632ff68174c5de754e51a22e",
+      "legacy_models_tree_git_sha1": "2cc6d1ec0d035d01d06f18382a270e5984a6ab9e",
+      "patch_ids": ["patch_000000", "patch_000001"],
+      "input_file_sha256": "b90ea68c663fc7c66c0804bcf5786b0d9c966a2e7cb5f5c79e31f2440eee3be9",
+      "input_tensor_sha256": "a3d38fe347b279e9dc44b54dc5a3ecf64af1ca312f6d0713a3c0dbba1e51e786",
+      "output_file_sha256": "88c1f4a82d7d0d9a2cab9b217946c88ebed2334a247a2894c8e69c671b687e6f",
+      "output_tensor_sha256": "872b6409409a1681042f5f5bf87d4b56fb91de56f3663c3b30caf2fcd845198b",
+      "reference_environment": "Ascend910B4-1 / torch 2.6.0 / torch-npu 2.6.0.post5"
+    },
     "monthly_embeddings": {
       "path": "artifacts/haidian-embedding-v1/embeddings/haidian_202512_202605_p10c_epoch800.tar.gz",
       "bytes": 7309392235,

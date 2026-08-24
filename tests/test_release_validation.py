@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import asdict
+from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
@@ -9,7 +13,10 @@ from xuannv_embedding.config import Config
 from xuannv_embedding.export.validation import (
     ReleaseValidationError,
     build_legacy_haidian_model,
+    model_input_evidence,
+    tensor_evidence,
     validate_embedding_output,
+    validate_independent_legacy_reference,
     validate_missing_source,
 )
 from xuannv_embedding.models.model import AEFOutput
@@ -90,3 +97,82 @@ def test_legacy_model_builder_only_renames_registered_highres_sources() -> None:
     assert "highres_optical_haidian_recon" in legacy.target_heads
     assert "highres_sar_haidian_recon" in legacy.target_heads
     assert legacy.stp_cfg["space_dim"] == asdict(config.model.stp)["space_dim"]
+
+
+def test_independent_legacy_reference_binds_input_checkpoint_and_exact_output(
+    tmp_path: Path,
+) -> None:
+    batch = {
+        "patch_ids": ["p1"],
+        "source_frames": {"s2": torch.ones(1, 1, 2, 2, 2)},
+        "source_masks": {"s2": torch.ones(1, 1)},
+        "timestamps": torch.tensor([[202512]]),
+        "highres_frames": {"highres_optical": torch.ones(1, 1, 2, 2)},
+        "highres_masks": {"highres_optical": torch.ones(1, 1, 2, 2)},
+    }
+    checkpoint = tmp_path / "checkpoint.pt"
+    checkpoint.write_bytes(b"checkpoint")
+    input_path = tmp_path / "input.pt"
+    torch.save(batch, input_path)
+    embedding = torch.tensor([[[[[1.0, 0.0], [0.0, 1.0]]]]])
+    output_path = tmp_path / "output.npy"
+    np.save(output_path, embedding.numpy(), allow_pickle=False)
+
+    def file_sha256(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    input_digest, input_document = model_input_evidence(batch)
+    output_digest, output_document = tensor_evidence(embedding)
+    manifest = {
+        "schema_version": "xuannv_independent_legacy_reference_v1",
+        "profile": "haidian_p10c_v1",
+        "legacy_runtime": {
+            "archive_tag": "archive/test",
+            "original_git_sha": "1" * 40,
+            "sanitized_git_sha": "2" * 40,
+            "models_tree_git_sha1": "3" * 40,
+        },
+        "checkpoint_sha256": file_sha256(checkpoint),
+        "input": {
+            "path": input_path.name,
+            "bytes": input_path.stat().st_size,
+            "file_sha256": file_sha256(input_path),
+            "tensor_sha256": input_digest,
+            "patch_ids": ["p1"],
+            "tensor_evidence": input_document,
+        },
+        "output": {
+            "path": output_path.name,
+            "bytes": output_path.stat().st_size,
+            "file_sha256": file_sha256(output_path),
+            "tensor_sha256": output_digest,
+            "tensor_evidence": output_document,
+        },
+        "environment": {
+            "device": "npu:0",
+            "device_name": "test",
+            "torch": "test",
+            "torch_npu": "test",
+        },
+    }
+    manifest_path = tmp_path / "reference.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = validate_independent_legacy_reference(
+        checkpoint,
+        batch,
+        embedding,
+        reference_root=tmp_path,
+        reference_manifest_path=manifest_path,
+    )
+    assert report["embedding_exact"] is True
+    assert report["input_tensor_sha256"] == input_digest
+
+    with pytest.raises(ReleaseValidationError, match="独立旧运行时.*不一致"):
+        validate_independent_legacy_reference(
+            checkpoint,
+            batch,
+            embedding + 1,
+            reference_root=tmp_path,
+            reference_manifest_path=manifest_path,
+        )
