@@ -17,6 +17,7 @@ from xuannv_embedding.training.cli import (
     RegionBatchStream,
     _epoch_count,
     _git_sha,
+    _periodic_checkpoint_path,
     synthetic_batch,
 )
 from xuannv_embedding.training.losses import TotalLoss
@@ -153,6 +154,36 @@ def test_runtime_preserves_absolute_epoch_for_resume_warmups() -> None:
     assert system.criterion.current_epoch == 5
 
 
+def test_scheduler_and_callback_run_once_per_absolute_epoch() -> None:
+    class RecordingScheduler:
+        def __init__(self) -> None:
+            self.steps = 0
+
+        def step(self) -> None:
+            self.steps += 1
+
+    system = _system()
+    optimizer = torch.optim.AdamW(system.parameters(), lr=1e-3)
+    scheduler = RecordingScheduler()
+    completed: list[int] = []
+
+    train_steps(
+        system,
+        [_batch(), _batch()],
+        optimizer,
+        scheduler=scheduler,
+        device=torch.device("cpu"),
+        epochs=2,
+        start_epoch=4,
+        gradient_accumulation_steps=1,
+        amp=False,
+        epoch_end_callback=lambda epoch: completed.append(epoch),
+    )
+
+    assert scheduler.steps == 2
+    assert completed == [4, 5]
+
+
 def test_region_batch_stream_resumes_sampler_at_absolute_epoch() -> None:
     class RecordingSampler:
         def __init__(self) -> None:
@@ -192,6 +223,10 @@ def test_configured_epochs_are_a_total_but_cli_override_is_incremental() -> None
     assert _epoch_count(800, 1, 400) == 1
     with pytest.raises(ValueError, match="没有待训练"):
         _epoch_count(800, None, 800)
+
+
+def test_periodic_checkpoint_path_never_overwrites_final_output() -> None:
+    assert _periodic_checkpoint_path(Path("checkpoint.pt"), 200) == Path("checkpoint.epoch-0200.pt")
 
 
 def test_git_sha_is_independent_of_training_working_directory(

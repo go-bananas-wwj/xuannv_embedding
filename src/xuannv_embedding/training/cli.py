@@ -27,6 +27,7 @@ from xuannv_embedding.training.checkpoint import (
 )
 from xuannv_embedding.training.losses import TotalLoss
 from xuannv_embedding.training.masking import apply_input_masking
+from xuannv_embedding.training.optimizer import build_optimizer, build_scheduler
 from xuannv_embedding.training.runtime import TrainingSystem, train_steps
 
 
@@ -312,6 +313,12 @@ def _epoch_count(configured_epochs: int, requested_epochs: int | None, start_epo
     return epochs
 
 
+def _periodic_checkpoint_path(final_path: Path, completed_epoch: int) -> Path:
+    suffix = final_path.suffix or ".pt"
+    stem = final_path.name[: -len(suffix)] if final_path.suffix else final_path.name
+    return final_path.with_name(f"{stem}.epoch-{completed_epoch:04d}{suffix}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv train")
     parser.add_argument("--config", type=Path, required=True)
@@ -337,10 +344,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     device, distributed, local_rank = _setup_device(args.device)
     torch.manual_seed(config.experiment.seed + (dist.get_rank() if distributed else 0))
     system = build_training_system(config).to(device)
-    optimizer = torch.optim.AdamW(
-        system.parameters(), lr=config.training.lr, weight_decay=config.training.weight_decay
+    optimizer = build_optimizer(
+        system, lr=config.training.lr, weight_decay=config.training.weight_decay
     )
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+    scheduler = build_scheduler(
+        optimizer,
+        warmup_epochs=config.training.warmup_epochs,
+        total_epochs=config.training.epochs,
+    )
     start_epoch = 0
     if args.resume is not None:
         state = load_training_checkpoint(
@@ -377,6 +388,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         epoch_count = _epoch_count(config.training.epochs, args.epochs, start_epoch)
     except ValueError as exc:
         parser.error(str(exc))
+    rank = dist.get_rank() if distributed else 0
+    config_sha256 = hashlib.sha256(args.config.read_bytes()).hexdigest()
+    source_schema = {name: asdict(value) for name, value in config.model.input_sources.items()}
+    regions = [dataset.region for dataset in config.data.datasets]
+
+    def save_periodic(epoch: int) -> None:
+        completed_epoch = epoch + 1
+        if completed_epoch % config.training.save_every != 0:
+            return
+        if distributed:
+            dist.barrier()
+        if rank == 0:
+            save_training_checkpoint(
+                _periodic_checkpoint_path(args.output, completed_epoch),
+                model=system.model,
+                criterion=system.criterion,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                epoch=epoch,
+                config_sha256=config_sha256,
+                git_sha=git_sha,
+                source_schema=source_schema,
+                regions=regions,
+                metrics={"checkpoint_kind": "periodic", "completed_epoch": completed_epoch},
+            )
+        if distributed:
+            dist.barrier()
+
     summary = train_steps(
         wrapped,
         batches,
@@ -387,6 +426,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         start_epoch=start_epoch,
         gradient_accumulation_steps=config.training.gradient_accumulation_steps,
         amp=config.training.amp and not args.no_amp,
+        epoch_end_callback=save_periodic,
     )
     summary.update(
         {
@@ -395,7 +435,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             "device_type": device.type,
         }
     )
-    rank = dist.get_rank() if distributed else 0
     if rank == 0:
         save_training_checkpoint(
             args.output,
@@ -404,12 +443,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             optimizer=optimizer,
             scheduler=scheduler,
             epoch=int(summary["end_epoch"]),
-            config_sha256=hashlib.sha256(args.config.read_bytes()).hexdigest(),
+            config_sha256=config_sha256,
             git_sha=git_sha,
-            source_schema={
-                name: asdict(value) for name, value in config.model.input_sources.items()
-            },
-            regions=[dataset.region for dataset in config.data.datasets],
+            source_schema=source_schema,
+            regions=regions,
             metrics=summary,
         )
         print(json.dumps(summary, ensure_ascii=False, sort_keys=True))

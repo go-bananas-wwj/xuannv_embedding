@@ -185,10 +185,8 @@ class TrainingConfig:
     warmup_epochs: int
     gradient_accumulation_steps: int
     save_every: int
-    eval_every: int
     amp: bool = True
     gradient_checkpointing: bool = True
-    log_every: int = 50
     uniformity_weight: float = 0.0
     uniformity_warmup_epochs: int = 0
     uniformity_temperature: float = 2.0
@@ -476,10 +474,8 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "warmup_epochs",
         "gradient_accumulation_steps",
         "save_every",
-        "eval_every",
         "amp",
         "gradient_checkpointing",
-        "log_every",
         "uniformity_weight",
         "uniformity_warmup_epochs",
         "uniformity_temperature",
@@ -502,7 +498,6 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "warmup_epochs",
         "gradient_accumulation_steps",
         "save_every",
-        "eval_every",
     }
     raw = _strict(value, "training", allowed=fields, required=required)
     tasks = [str(task) for task in raw.get("semantic_probe_tasks", [])]
@@ -530,10 +525,8 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
             "training.gradient_accumulation_steps",
         ),
         save_every=_positive_int(raw["save_every"], "training.save_every"),
-        eval_every=_positive_int(raw["eval_every"], "training.eval_every"),
         amp=bool(raw.get("amp", True)),
         gradient_checkpointing=bool(raw.get("gradient_checkpointing", True)),
-        log_every=_non_negative_int(raw.get("log_every", 50), "training.log_every"),
         uniformity_weight=float(raw.get("uniformity_weight", 0.0)),
         uniformity_warmup_epochs=_non_negative_int(
             raw.get("uniformity_warmup_epochs", 0),

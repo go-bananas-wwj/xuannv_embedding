@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from contextlib import nullcontext
-from typing import Any
+from typing import Any, Callable
 
 import torch
 from torch import nn
@@ -94,6 +94,7 @@ def train_steps(
     gradient_accumulation_steps: int,
     amp: bool,
     scheduler: Any | None = None,
+    epoch_end_callback: Callable[[int], None] | None = None,
 ) -> dict[str, float | int]:
     """训练有限个 epoch，并返回可序列化的发布门禁摘要。"""
     if epochs <= 0 or gradient_accumulation_steps <= 0:
@@ -133,8 +134,6 @@ def train_steps(
                     scaler.step(optimizer)
                     scaler.update()
                 optimizer.zero_grad(set_to_none=True)
-                if scheduler is not None:
-                    scheduler.step()
                 optimizer_steps += 1
                 pending = 0
         if pending:
@@ -144,9 +143,11 @@ def train_steps(
                 scaler.step(optimizer)
                 scaler.update()
             optimizer.zero_grad(set_to_none=True)
-            if scheduler is not None:
-                scheduler.step()
             optimizer_steps += 1
+        if scheduler is not None:
+            scheduler.step()
+        if epoch_end_callback is not None:
+            epoch_end_callback(epoch)
 
     if batch_count == 0:
         raise ValueError("训练 batches 为空")

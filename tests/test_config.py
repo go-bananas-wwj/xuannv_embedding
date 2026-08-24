@@ -49,7 +49,6 @@ training:
   warmup_epochs: 30
   gradient_accumulation_steps: 2
   save_every: 200
-  eval_every: 20
   amp: true
   gradient_checkpointing: true
   uniformity_weight: 0.06
