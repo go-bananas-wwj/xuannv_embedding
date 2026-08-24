@@ -116,6 +116,9 @@ def load_training_checkpoint(
     optimizer: Optimizer | None = None,
     scheduler: Any | None = None,
     device: str | torch.device = "cpu",
+    expected_config_sha256: str | None = None,
+    expected_source_schema: dict[str, Any] | None = None,
+    expected_regions: list[str] | None = None,
 ) -> dict[str, Any]:
     """严格加载新格式 checkpoint；不接受缺失溯源元数据的文件。"""
     try:
@@ -136,6 +139,18 @@ def load_training_checkpoint(
         regions=state["regions"],
         epoch=state["epoch"],
     )
+    if expected_config_sha256 is None:
+        raise CheckpointError("严格加载必须提供 expected config_sha256")
+    if expected_source_schema is None:
+        raise CheckpointError("严格加载必须提供 expected source_schema")
+    if expected_regions is None:
+        raise CheckpointError("严格加载必须提供 expected regions")
+    if state["config_sha256"] != expected_config_sha256:
+        raise CheckpointError("checkpoint config_sha256 与当前配置不一致")
+    if state["source_schema"] != expected_source_schema:
+        raise CheckpointError("checkpoint source_schema 与当前配置不一致")
+    if state["regions"] != expected_regions:
+        raise CheckpointError("checkpoint regions 与当前配置不一致")
     try:
         model.load_state_dict(state["model"], strict=True)
         if criterion is not None:

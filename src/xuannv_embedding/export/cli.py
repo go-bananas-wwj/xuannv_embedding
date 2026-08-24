@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
 
@@ -54,7 +56,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             profile=args.compatibility_profile,
         )
     else:
-        load_training_checkpoint(args.checkpoint, model=system.model)
+        load_training_checkpoint(
+            args.checkpoint,
+            model=system.model,
+            expected_config_sha256=hashlib.sha256(args.config.read_bytes()).hexdigest(),
+            expected_source_schema={
+                name: asdict(value) for name, value in config.model.input_sources.items()
+            },
+            expected_regions=[dataset.region for dataset in config.data.datasets],
+        )
     device = _device(args.device)
     selected = set(args.region or [item.region for item in config.data.datasets])
     known = {item.region for item in config.data.datasets}

@@ -23,6 +23,8 @@ torchrun --standalone --nproc-per-node=6 -m xuannv_embedding.cli train \
 以保留不同物理产品的原生高分尺寸。`--resume` 严格恢复模型、semantic probe、optimizer、scheduler
 和 epoch。学习率按绝对 epoch 执行线性 warmup 与 cosine 退火；`save_every` 每隔指定 epoch 原子
 写入带 `.epoch-NNNN` 后缀的恢复点，最终 checkpoint 始终写到 `--output`，两者不会互相覆盖。
+恢复或导出新格式 checkpoint 时，还会逐项核对当前配置文件 SHA-256、source schema 和 region
+清单；任一身份不一致都会在加载权重前失败，不能把别的运行状态静默套到当前数据合同。
 
 ## 导出
 

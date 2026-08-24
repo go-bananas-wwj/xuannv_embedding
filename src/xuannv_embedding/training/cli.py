@@ -344,6 +344,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     device, distributed, local_rank = _setup_device(args.device)
     torch.manual_seed(config.experiment.seed + (dist.get_rank() if distributed else 0))
     system = build_training_system(config).to(device)
+    config_sha256 = hashlib.sha256(args.config.read_bytes()).hexdigest()
+    source_schema = {name: asdict(value) for name, value in config.model.input_sources.items()}
+    regions = [dataset.region for dataset in config.data.datasets]
     optimizer = build_optimizer(
         system, lr=config.training.lr, weight_decay=config.training.weight_decay
     )
@@ -361,6 +364,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             optimizer=optimizer,
             scheduler=scheduler,
             device=device,
+            expected_config_sha256=config_sha256,
+            expected_source_schema=source_schema,
+            expected_regions=regions,
         )
         start_epoch = int(state["epoch"]) + 1
     wrapped: nn.Module = system
@@ -389,9 +395,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
     rank = dist.get_rank() if distributed else 0
-    config_sha256 = hashlib.sha256(args.config.read_bytes()).hexdigest()
-    source_schema = {name: asdict(value) for name, value in config.model.input_sources.items()}
-    regions = [dataset.region for dataset in config.data.datasets]
 
     def save_periodic(epoch: int) -> None:
         completed_epoch = epoch + 1

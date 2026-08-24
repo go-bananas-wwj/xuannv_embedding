@@ -126,6 +126,9 @@ def test_runtime_updates_model_and_saves_complete_training_state(tmp_path: Path)
         model=restored.model,
         criterion=restored.criterion,
         optimizer=restored_optimizer,
+        expected_config_sha256="a" * 64,
+        expected_source_schema={"s2": {"channels": 2, "role": "temporal"}},
+        expected_regions=["test-region"],
     )
     assert state["criterion"] is not None
     assert all(

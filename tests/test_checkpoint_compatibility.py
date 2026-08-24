@@ -172,13 +172,44 @@ def test_new_checkpoint_format_round_trip(tmp_path: Path) -> None:
         metrics={"loss": 1.0},
     )
     restored = nn.Linear(3, 2)
-    state = load_training_checkpoint(path, model=restored)
+    state = load_training_checkpoint(
+        path,
+        model=restored,
+        expected_config_sha256="a" * 64,
+        expected_source_schema={"s2": {"channels": 12, "role": "temporal"}},
+        expected_regions=["haidian", "harbin"],
+    )
 
     assert state["format_version"] == "1"
     assert state["config_sha256"] == "a" * 64
     assert state["git_sha"] == "1234567890abcdef"
     assert state["regions"] == ["haidian", "harbin"]
     assert all(torch.equal(a, b) for a, b in zip(model.parameters(), restored.parameters()))
+
+    with pytest.raises(CheckpointError, match="config_sha256"):
+        load_training_checkpoint(
+            path,
+            model=nn.Linear(3, 2),
+            expected_config_sha256="b" * 64,
+            expected_source_schema={"s2": {"channels": 12, "role": "temporal"}},
+            expected_regions=["haidian", "harbin"],
+        )
+    with pytest.raises(CheckpointError, match="source_schema"):
+        load_training_checkpoint(
+            path,
+            model=nn.Linear(3, 2),
+            expected_config_sha256="a" * 64,
+            expected_source_schema={"s2": {"channels": 2, "role": "temporal"}},
+            expected_regions=["haidian", "harbin"],
+        )
+    with pytest.raises(CheckpointError, match="regions"):
+        load_training_checkpoint(
+            path,
+            model=nn.Linear(3, 2),
+            expected_config_sha256="a" * 64,
+            expected_source_schema={"s2": {"channels": 12, "role": "temporal"}},
+            expected_regions=["haidian"],
+        )
 
 
 def test_new_checkpoint_rejects_missing_metadata(tmp_path: Path) -> None:
