@@ -14,14 +14,17 @@ from typing import Any, Sequence
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.utils.data import DataLoader, DistributedSampler
 
 from xuannv_embedding.config import Config
+from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
 from xuannv_embedding.models.model import AEFModel
 from xuannv_embedding.training.checkpoint import (
     load_training_checkpoint,
     save_training_checkpoint,
 )
 from xuannv_embedding.training.losses import TotalLoss
+from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.runtime import TrainingSystem, train_steps
 
 
@@ -163,6 +166,81 @@ def synthetic_batch(
     }
 
 
+class RegionBatchStream:
+    """按 sampling_weight 确定性轮转区域 loader，每个 epoch 可重新迭代。"""
+
+    def __init__(
+        self,
+        loaders: list[DataLoader],
+        weights: list[float],
+        *,
+        seed: int,
+        max_steps: int | None,
+        masking_config: dict[str, Any],
+    ) -> None:
+        if not loaders or len(loaders) != len(weights):
+            raise ValueError("loaders 与 weights 必须非空且长度一致")
+        self.loaders = loaders
+        self.weights = torch.tensor(weights, dtype=torch.double)
+        self.seed = seed
+        self.max_steps = max_steps
+        self.masking_config = masking_config
+        self.epoch = 0
+
+    def __iter__(self):
+        for loader in self.loaders:
+            sampler = loader.sampler
+            if hasattr(sampler, "set_epoch"):
+                sampler.set_epoch(self.epoch)
+        iterators = [iter(loader) for loader in self.loaders]
+        natural_steps = sum(len(loader) for loader in self.loaders)
+        steps = self.max_steps or natural_steps
+        generator = torch.Generator().manual_seed(self.seed + self.epoch)
+        self.epoch += 1
+        for _ in range(steps):
+            index = int(torch.multinomial(self.weights, 1, generator=generator).item())
+            try:
+                batch = next(iterators[index])
+            except StopIteration:
+                iterators[index] = iter(self.loaders[index])
+                batch = next(iterators[index])
+            yield apply_input_masking(batch, self.masking_config)
+
+
+def build_region_batch_stream(
+    config: Config,
+    *,
+    distributed: bool,
+    max_records: int | None,
+    max_steps: int | None,
+) -> RegionBatchStream:
+    loaders: list[DataLoader] = []
+    weights: list[float] = []
+    for dataset_config in config.data.datasets:
+        dataset = RegionRasterDataset(config, dataset_config, max_records=max_records)
+        sampler = DistributedSampler(dataset, shuffle=True) if distributed else None
+        loaders.append(
+            DataLoader(
+                dataset,
+                batch_size=config.data.batch_size,
+                shuffle=sampler is None,
+                sampler=sampler,
+                num_workers=config.data.num_workers,
+                collate_fn=collate_region_batch,
+                pin_memory=True,
+                drop_last=False,
+            )
+        )
+        weights.append(dataset_config.sampling_weight)
+    return RegionBatchStream(
+        loaders,
+        weights,
+        seed=config.experiment.seed,
+        max_steps=max_steps,
+        masking_config=asdict(config.training.input_masking),
+    )
+
+
 def _setup_device(requested: str | None) -> tuple[torch.device, bool, int]:
     distributed = "RANK" in os.environ
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
@@ -196,14 +274,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--device")
-    parser.add_argument("--steps", type=int, default=1)
+    parser.add_argument("--synthetic", action="store_true")
+    parser.add_argument("--steps", type=int, default=0)
+    parser.add_argument("--epochs", type=int)
+    parser.add_argument("--max-records", type=int)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--spatial-size", type=int, default=128)
     parser.add_argument("--missing-source", action="append", default=[])
     parser.add_argument("--no-amp", action="store_true")
     args = parser.parse_args(argv)
-    if args.steps <= 0:
-        parser.error("--steps 必须大于 0")
+    if args.steps < 0:
+        parser.error("--steps 不得为负")
+    if args.synthetic and args.steps == 0:
+        parser.error("--synthetic 需要显式提供正数 --steps")
 
     config = Config.from_yaml(args.config)
     device, distributed, local_rank = _setup_device(args.device)
@@ -229,19 +312,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         wrapped = nn.parallel.DistributedDataParallel(
             system, device_ids=[local_rank], broadcast_buffers=False
         )
-    batch = synthetic_batch(
-        config,
-        batch_size=args.batch_size,
-        spatial_size=args.spatial_size,
-        missing_sources=set(args.missing_source),
-    )
+    if args.synthetic:
+        batch = synthetic_batch(
+            config,
+            batch_size=args.batch_size,
+            spatial_size=args.spatial_size,
+            missing_sources=set(args.missing_source),
+        )
+        batches: Any = [batch] * args.steps
+    else:
+        batches = build_region_batch_stream(
+            config,
+            distributed=distributed,
+            max_records=args.max_records,
+            max_steps=args.steps or None,
+        )
     summary = train_steps(
         wrapped,
-        [batch] * args.steps,
+        batches,
         optimizer,
         scheduler=scheduler,
         device=device,
-        epochs=1,
+        epochs=args.epochs or config.training.epochs,
         gradient_accumulation_steps=config.training.gradient_accumulation_steps,
         amp=config.training.amp and not args.no_amp,
     )
