@@ -204,6 +204,8 @@ class SemanticProbeLoss(nn.Module):
         label_masks: dict[str, torch.Tensor] | None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         zero = embedding_map.sum() * 0.0
+        for parameter in self.probes.parameters():
+            zero = zero + parameter.sum() * 0.0
         if not self.tasks or labels is None:
             return zero, {
                 "semantic_probe_positive_pixels": zero.detach(),

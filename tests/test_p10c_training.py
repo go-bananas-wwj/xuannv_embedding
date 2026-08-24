@@ -69,6 +69,25 @@ def test_semantic_probe_supports_hard_negative_warmup() -> None:
     assert stats["semantic_probe_positive_pixels"].item() == 2.0
 
 
+def test_semantic_probe_keeps_all_parameters_in_graph_without_local_labels() -> None:
+    for labels, masks in (
+        (None, None),
+        ({"osm_building": torch.zeros(2, 4, 4)}, {"osm_building": torch.zeros(2)}),
+    ):
+        probe = SemanticProbeLoss(
+            embed_dim=4,
+            tasks=["osm_building", "osm_water"],
+            hidden_dim=3,
+        )
+        embedding_map = torch.randn(2, 1, 4, 4, 4, requires_grad=True)
+
+        loss, _ = probe(embedding_map, labels, masks)
+        loss.backward()
+
+        assert all(parameter.grad is not None for parameter in probe.parameters())
+        assert all(torch.count_nonzero(parameter.grad) == 0 for parameter in probe.parameters())
+
+
 def test_total_loss_contains_only_p10c_objectives() -> None:
     criterion = TotalLoss(
         target_cfg={"s2_recon": {"loss_type": "l1", "channels": 2, "weight": 0.8}},
