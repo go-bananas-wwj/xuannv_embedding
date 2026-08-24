@@ -748,29 +748,38 @@ def _audit_overlap(
     cross_zone_overlap_violation_count = 0
     max_cross_zone_overlap_fraction = 0.0
     if check_overlap:
-        candidates = connection.execute(
-            """
+        candidates = list(
+            connection.execute(
+                """
             SELECT geometries.grid_epsg, geometries.geometry_wkb
             FROM geometry_bounds
             JOIN geometries USING (geometry_id)
-            WHERE minx <= ? AND maxx >= ? AND miny <= ? AND maxy >= ?
+            WHERE minx < ? AND maxx > ? AND miny < ? AND maxy > ?
             """,
-            (maxx, minx, maxy, miny),
+                (maxx, minx, maxy, miny),
+            )
         )
-        projected_geometry = transform_geometry(to_equal_area.transform, geometry)
-        for candidate_epsg, candidate_wkb in candidates:
-            candidate_geometry = from_wkb(candidate_wkb)
-            candidate_projected = transform_geometry(to_equal_area.transform, candidate_geometry)
-            overlap_area = projected_geometry.intersection(candidate_projected).area
-            if overlap_area <= 0:
-                continue
-            if int(candidate_epsg) == grid_epsg:
-                same_zone_positive_overlap_count += 1
-                continue
-            overlap_fraction = overlap_area / min(projected_geometry.area, candidate_projected.area)
-            max_cross_zone_overlap_fraction = max(max_cross_zone_overlap_fraction, overlap_fraction)
-            if overlap_fraction > CROSS_ZONE_OVERLAP_FRACTION:
-                cross_zone_overlap_violation_count += 1
+        if candidates:
+            projected_geometry = transform_geometry(to_equal_area.transform, geometry)
+            for candidate_epsg, candidate_wkb in candidates:
+                candidate_geometry = from_wkb(candidate_wkb)
+                candidate_projected = transform_geometry(
+                    to_equal_area.transform, candidate_geometry
+                )
+                overlap_area = projected_geometry.intersection(candidate_projected).area
+                if overlap_area <= 0:
+                    continue
+                if int(candidate_epsg) == grid_epsg:
+                    same_zone_positive_overlap_count += 1
+                    continue
+                overlap_fraction = overlap_area / min(
+                    projected_geometry.area, candidate_projected.area
+                )
+                max_cross_zone_overlap_fraction = max(
+                    max_cross_zone_overlap_fraction, overlap_fraction
+                )
+                if overlap_fraction > CROSS_ZONE_OVERLAP_FRACTION:
+                    cross_zone_overlap_violation_count += 1
     cursor = connection.execute(
         "INSERT INTO geometries(grid_epsg, parent_key, geometry_wkb) VALUES (?, ?, ?)",
         (grid_epsg, parent_key_value, geometry.wkb),
@@ -785,15 +794,6 @@ def _audit_overlap(
         cross_zone_overlap_violation_count,
         max_cross_zone_overlap_fraction,
     )
-
-
-def _is_utm_seam_candidate(geometry: Any, grid_epsg: int) -> bool:
-    """Return whether a cell can intersect a footprint from an adjacent owner zone."""
-    zone = int(grid_epsg) % 100
-    west = -180.0 + 6.0 * (zone - 1)
-    east = west + 6.0
-    minx, _, maxx, _ = geometry.bounds
-    return minx <= west <= maxx or minx <= east <= maxx
 
 
 def assess_utm_seam_overlap_policy(
@@ -1099,7 +1099,6 @@ def audit_grid_package(
                 ((key,) for key in sampled_key_set),
             )
             all_columns = [*CANONICAL_METADATA_FIELDS, "geometry"]
-            noncanonical_geometry_seen = False
             for audited in _iter_audited_parquet_rows(all_paths, all_columns, batch_size):
                 row = audited["row"]
                 parent_key_value = str(row["parent_key"])
@@ -1170,14 +1169,8 @@ def audit_grid_package(
                     grid_epsg,
                     parent_key_value,
                     to_equal_area,
-                    check_overlap=(
-                        noncanonical_geometry_seen
-                        or coordinate_difference != 0.0
-                        or _is_utm_seam_candidate(geometry, grid_epsg)
-                    ),
+                    check_overlap=True,
                 )
-                if coordinate_difference != 0.0:
-                    noncanonical_geometry_seen = True
                 counters["same_zone_positive_overlap_count"] += same_zone_count
                 counters["cross_zone_overlap_violation_count"] += cross_zone_count
                 counters["max_cross_zone_overlap_fraction"] = max(

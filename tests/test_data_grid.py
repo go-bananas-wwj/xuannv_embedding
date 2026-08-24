@@ -607,7 +607,31 @@ def test_vectorized_partition_hashes_match_scalar_geometry_hashes(tmp_path: Path
         )
 
 
-def test_utm_seam_candidates_are_limited_to_owner_zone_boundaries() -> None:
-    assert MODULE._is_utm_seam_candidate(box(113.99, 30.0, 114.01, 30.01), 32650)
-    assert MODULE._is_utm_seam_candidate(box(119.99, 30.0, 120.01, 30.01), 32650)
-    assert not MODULE._is_utm_seam_candidate(box(116.0, 30.0, 116.01, 30.01), 32650)
+def test_overlap_audit_does_not_project_bbox_boundary_touches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connection = MODULE._audit_database(tmp_path / "audit.sqlite")
+    monkeypatch.setattr(
+        MODULE,
+        "transform_geometry",
+        lambda *args, **kwargs: pytest.fail("boundary-only candidates must not be projected"),
+    )
+    try:
+        MODULE._audit_overlap(
+            connection,
+            box(0.0, 0.0, 1.0, 1.0),
+            32650,
+            "first",
+            object(),
+            check_overlap=True,
+        )
+        MODULE._audit_overlap(
+            connection,
+            box(1.0, 0.0, 2.0, 1.0),
+            32650,
+            "second",
+            object(),
+            check_overlap=True,
+        )
+    finally:
+        connection.close()
