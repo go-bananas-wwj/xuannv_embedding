@@ -7,9 +7,6 @@ experiment:
   name: harbin_p10c
   seed: 42
   output_dir: /data/xuannv_embedding/outputs/paper_e5_p10c_recipe_harbin_scratch_20260714
-  use_wandb: true
-  wandb_project: xuannv-embedding-v1
-  wandb_run_name: harbin_p10c
 model:
   embed_dim: 64
   stem_dim: 32
@@ -185,4 +182,3 @@ data:
         osm_path_walk: /data/xuannv_embedding/processed/harbin/labels/osm_path_walk
         osm_playground: /data/xuannv_embedding/processed/harbin/labels/osm_playground
       sampling_weight: 1.0
-

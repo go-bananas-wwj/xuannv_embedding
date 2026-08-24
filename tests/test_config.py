@@ -19,7 +19,6 @@ experiment:
   name: contract_test
   seed: 42
   output_dir: /data/xuannv_embedding/outputs/contract_test
-  use_wandb: false
 model:
   embed_dim: 64
   stem_dim: 32
@@ -119,6 +118,7 @@ def test_loads_strict_region_agnostic_config(tmp_path: Path) -> None:
     ("needle", "replacement", "message"),
     [
         ("  seed: 42", "  seed: 42\n  surprise: true", "未知字段"),
+        ("  seed: 42", "  seed: 42\n  use_wandb: true", "未知字段"),
         (
             "    s2: {channels: 12, role: temporal}",
             "    s2: {channels: 12, role: temporal, city: haidian}",

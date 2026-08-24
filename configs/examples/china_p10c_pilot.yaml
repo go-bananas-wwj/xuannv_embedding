@@ -7,9 +7,6 @@ experiment:
   name: china_p10c_pilot
   seed: 42
   output_dir: /data/xuannv_embedding/outputs/china_p10c_pilot
-  use_wandb: true
-  wandb_project: xuannv-embedding-v1
-  wandb_run_name: china_p10c_pilot
 model:
   embed_dim: 64
   stem_dim: 32
@@ -186,4 +183,3 @@ data:
         osm_path_walk: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_path_walk
         osm_playground: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_playground
       sampling_weight: 1.0
-

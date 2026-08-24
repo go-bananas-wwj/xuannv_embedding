@@ -7,9 +7,6 @@ experiment:
   name: haidian_p10c_v1
   seed: 42
   output_dir: /data/xuannv_embedding/outputs/v2_p10c_haidian_202512_202605_osm_semantic_hardneg_20260704
-  use_wandb: true
-  wandb_project: xuannv-embedding-v1
-  wandb_run_name: haidian_p10c_v1
 model:
   embed_dim: 64
   stem_dim: 32
@@ -186,4 +183,3 @@ data:
         osm_path_walk: /data/xuannv_embedding/processed/haidian/labels/osm_path_walk
         osm_playground: /data/xuannv_embedding/processed/haidian/labels/osm_playground
       sampling_weight: 1.0
-

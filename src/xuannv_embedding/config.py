@@ -97,9 +97,6 @@ class ExperimentConfig:
     name: str
     seed: int = 42
     output_dir: Path | None = None
-    use_wandb: bool = False
-    wandb_project: str = "xuannv-embedding"
-    wandb_run_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -303,9 +300,6 @@ def _parse_experiment(value: Any) -> ExperimentConfig:
             "name",
             "seed",
             "output_dir",
-            "use_wandb",
-            "wandb_project",
-            "wandb_run_name",
         },
         required={"name"},
     )
@@ -313,9 +307,6 @@ def _parse_experiment(value: Any) -> ExperimentConfig:
         name=str(raw["name"]),
         seed=int(raw.get("seed", 42)),
         output_dir=Path(raw["output_dir"]) if raw.get("output_dir") else None,
-        use_wandb=bool(raw.get("use_wandb", False)),
-        wandb_project=str(raw.get("wandb_project", "xuannv-embedding")),
-        wandb_run_name=(str(raw["wandb_run_name"]) if raw.get("wandb_run_name") else None),
     )
 
 
