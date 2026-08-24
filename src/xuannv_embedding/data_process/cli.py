@@ -147,6 +147,7 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
     target.add_argument("--tenfold-root", type=Path)
     parser.add_argument("--sampled-registry", type=Path)
     parser.add_argument("--parent-grid-root", type=Path)
+    parser.add_argument("--utm-seam-audit", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--batch-size", type=int, default=100_000)
     args = parser.parse_args(argv)
@@ -168,6 +169,7 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
         from xuannv_embedding.data_process.grid import (
             audit_grid_package,
             read_sampled_registry_jsonl,
+            reconcile_utm_seam_audit,
         )
 
         report = audit_grid_package(
@@ -175,7 +177,17 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
             read_sampled_registry_jsonl(args.sampled_registry),
             batch_size=args.batch_size,
         )
+        if args.utm_seam_audit is not None:
+            try:
+                seam_report = json.loads(args.utm_seam_audit.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError(f"无法读取 UTM seam audit: {exc}") from exc
+            if not isinstance(seam_report, dict):
+                raise ValueError("UTM seam audit 必须是 JSON object")
+            report = reconcile_utm_seam_audit(report, seam_report)
     else:
+        if args.utm_seam_audit is not None:
+            parser.error("--utm-seam-audit 仅可与 --grid-root 一起使用")
         from xuannv_embedding.data_process.partition import audit_tenfold_delivery
 
         report = audit_tenfold_delivery(
