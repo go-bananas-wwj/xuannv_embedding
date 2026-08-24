@@ -32,6 +32,8 @@ AUDIT_AREA_TOLERANCE_M2 = 1.0
 CROSS_ZONE_OVERLAP_FRACTION = 0.01
 UTM_SEAM_GLOBAL_DUPLICATE_FRACTION = 0.001
 UTM_SEAM_POLICY_VERSION = "adjacent-owner-zone-seam-v1"
+GRID_PACKAGE_MANIFEST = "china_full_1280m_grid_package_manifest.json"
+GRID_PACKAGE_CHECKSUMS = "SHA256SUMS.json"
 AUDIT_EXAMPLE_LIMIT = 100
 AUDIT_COORDINATE_TOLERANCE = 1e-9
 CANONICAL_METADATA_FIELDS = (
@@ -721,6 +723,152 @@ def assess_utm_seam_overlap_policy(
         "max_pair_overlap_fraction": max_pair_overlap_fraction,
         "passed": passed,
     }
+
+
+def _read_json_object(path: Path, description: str) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"无法读取 {description}: {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"{description} 必须是 JSON object: {path}")
+    return value
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def bind_utm_seam_audit_to_package(
+    output_root: str | Path,
+    seam_path: str | Path,
+    base_audit: Mapping[str, Any],
+    *,
+    expected_manifest_sha256: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Verify that the seam decision is an immutable member of this exact grid package."""
+    output_root = Path(output_root).resolve()
+    manifest_path = output_root / GRID_PACKAGE_MANIFEST
+    checksum_path = output_root / GRID_PACKAGE_CHECKSUMS
+    if not manifest_path.is_file():
+        raise ValueError(f"grid package manifest 不存在: {manifest_path}")
+    if not checksum_path.is_file():
+        raise ValueError(f"grid package checksum manifest 不存在: {checksum_path}")
+    if (
+        not isinstance(expected_manifest_sha256, str)
+        or not all(
+            character in "0123456789abcdef" for character in expected_manifest_sha256.lower()
+        )
+        or len(expected_manifest_sha256) != 64
+    ):
+        raise ValueError("package manifest SHA-256 必须是 64 位十六进制字符串")
+    actual_manifest_sha256 = _file_sha256(manifest_path)
+    if actual_manifest_sha256 != expected_manifest_sha256.lower():
+        raise ValueError("grid package manifest SHA-256 与外部信任锚不一致")
+
+    manifest = _read_json_object(manifest_path, "grid package manifest")
+    if manifest.get("schema_version") != "china_full_1280m_grid_package_v1":
+        raise ValueError("grid package manifest schema_version 不受支持")
+    audits = manifest.get("audits")
+    if not isinstance(audits, Mapping):
+        raise ValueError("grid package manifest 缺少 audits object")
+
+    def resolve_member(field: str) -> tuple[str, Path]:
+        relative = audits.get(field)
+        if not isinstance(relative, str) or not relative:
+            raise ValueError(f"grid package manifest 缺少 audits.{field}")
+        candidate = (output_root / relative).resolve()
+        try:
+            candidate.relative_to(output_root)
+        except ValueError as exc:
+            raise ValueError(f"audits.{field} 逃逸 grid package 根目录") from exc
+        if not candidate.is_file():
+            raise ValueError(f"grid package audit 文件不存在: {candidate}")
+        return relative, candidate
+
+    seam_relative, expected_seam_path = resolve_member("utm_seam")
+    membership_relative, membership_path = resolve_member("final_membership")
+    if Path(seam_path).resolve() != expected_seam_path:
+        raise ValueError("UTM seam audit 未绑定到 grid package manifest 指定路径")
+    seam_audit = _read_json_object(expected_seam_path, "UTM seam audit")
+    membership_audit = _read_json_object(membership_path, "membership audit")
+
+    if seam_audit.get("schema_version") != "china_full_1280m_utm_seam_audit_v1":
+        raise ValueError("UTM seam audit schema_version 不受支持")
+    if seam_audit.get("policy_version") != UTM_SEAM_POLICY_VERSION:
+        raise ValueError("UTM seam audit policy_version 不受支持")
+    if seam_audit.get("passed") is not True:
+        raise ValueError("UTM seam audit did not pass")
+    if manifest.get("membership_audit") != membership_audit:
+        raise ValueError("membership audit 与 grid package manifest 内嵌副本不一致")
+    if membership_audit.get("cross_zone_seam_audit") != seam_audit:
+        raise ValueError("UTM seam audit 与 membership audit 内嵌副本不一致")
+
+    checksum_manifest = _read_json_object(checksum_path, "grid package checksum manifest")
+    if checksum_manifest.get("schema_version") != "xuannv_package_sha256_v1":
+        raise ValueError("grid package checksum schema_version 不受支持")
+    entries = checksum_manifest.get("files")
+    if not isinstance(entries, list):
+        raise ValueError("grid package checksum files 必须是 list")
+    by_path: dict[str, Mapping[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, Mapping) or not isinstance(entry.get("path"), str):
+            raise ValueError("grid package checksum entry 无效")
+        relative = str(entry["path"])
+        if relative in by_path:
+            raise ValueError(f"grid package checksum path 重复: {relative}")
+        by_path[relative] = entry
+    member_paths = (GRID_PACKAGE_MANIFEST, membership_relative, seam_relative)
+    verified: dict[str, str] = {}
+    for relative in member_paths:
+        path = output_root / relative
+        entry = by_path.get(relative)
+        if entry is None:
+            raise ValueError(f"grid package checksum 缺少: {relative}")
+        digest = _file_sha256(path)
+        if entry.get("sha256") != digest or entry.get("size_bytes") != path.stat().st_size:
+            raise ValueError(f"grid package checksum/size 不匹配: {relative}")
+        verified[relative] = digest
+
+    if base_audit.get("schema_version") != "china_full_1280m_membership_audit_v1":
+        raise ValueError("live membership audit schema_version 不受支持")
+    counts = manifest.get("counts")
+    if not isinstance(counts, Mapping):
+        raise ValueError("grid package manifest 缺少 counts object")
+    for manifest_key, audit_key in (
+        ("all", "all_count"),
+        ("sampled", "sampled_count"),
+        ("unsampled", "unsampled_count"),
+    ):
+        expected = counts.get(manifest_key)
+        if expected != base_audit.get(audit_key) or expected != membership_audit.get(audit_key):
+            raise ValueError(f"grid package {manifest_key} count 与 live/stored audit 不一致")
+    if seam_audit.get("total_parent_count") != base_audit.get("all_count"):
+        raise ValueError("UTM seam total_parent_count 与 live grid audit 不一致")
+
+    ignored_live_fields = {"passed", "cross_zone_overlap_violation_count"}
+    for field_name, value in base_audit.items():
+        if field_name in ignored_live_fields:
+            continue
+        if membership_audit.get(field_name) != value:
+            raise ValueError(f"live membership audit 与冻结 audit 不一致: {field_name}")
+    raw_cross_zone_count = int(base_audit.get("cross_zone_overlap_violation_count", 0))
+    if raw_cross_zone_count == 0 and "legacy_cross_zone_pair_over_1pct_count" in base_audit:
+        raw_cross_zone_count = int(base_audit["legacy_cross_zone_pair_over_1pct_count"])
+    if membership_audit.get("legacy_cross_zone_pair_over_1pct_count") != raw_cross_zone_count:
+        raise ValueError("live cross-zone count 与冻结 seam reconciliation 不一致")
+
+    binding = {
+        "schema_version": "china_full_1280m_grid_package_binding_v1",
+        "manifest_sha256": actual_manifest_sha256,
+        "verified_member_sha256": verified,
+        "passed": True,
+    }
+    return seam_audit, binding
 
 
 def reconcile_utm_seam_audit(
