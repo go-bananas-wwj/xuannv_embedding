@@ -6,10 +6,13 @@ P10C 模型、checkpoint 映射、训练目标或 embedding 数值路径。
 
 ## 结论
 
-- CPU：247 项完整测试通过；Black、Ruff、sdist/wheel 构建全部成功。
-- GitHub：`quality`、`test-and-package`、`secret-scan` 在候选提交 `d5c220b` 全部通过；CI 包含
+- CPU：全新目录 clone 后，248 项完整测试通过；Black、Ruff、sdist/wheel 构建全部成功。
+- 干净安装：在独立虚拟环境安装本地 wheel，依赖检查与全部 CLI help 通过；安装包报告版本
+  `1.0.0`，并从 wheel 的来源元数据复核到精确 Git SHA
+  `596e5431f8ea90a11041d87e9268c9a2cd479fbc`。
+- GitHub：`quality`、`test-and-package`、`secret-scan` 在候选提交 `596e543` 全部通过；CI 包含
   wheel/sdist、干净虚拟环境安装、全部 CLI help 和 CPU synthetic smoke。
-- 仓库策略：108 个 tracked 文件、823,509 bytes；无禁止文件和超限文件。
+- 仓库策略：该全新 clone 含 108 个 tracked 文件、824,494 bytes；无禁止文件和超限文件。
 - 安全：新仓完整历史 gitleaks 零命中；GitHub secret scanning 与 push protection 已启用。
 
 ## NPU 与兼容性
@@ -49,6 +52,6 @@ P10C 模型、checkpoint 映射、训练目标或 embedding 数值路径。
 
 ## 剩余发布动作
 
-全新目录 clone、安装和 CPU 复验在候选发布提交推送后执行；通过后才创建 `main` 保护、
-`v1.0.0` 标签和 GitHub Release。旧仓不可达泄露对象的 GitHub 缓存清理由仓库管理员继续按
-`MIGRATION.md` 提交 Support 请求；原令牌已撤销，全部公开 refs 与新仓历史均为零命中。
+全新目录 clone、安装和 CPU 复验已经通过。候选发布提交的 GitHub CI 全绿后创建 `main`
+保护、`v1.0.0` 标签和 GitHub Release。旧仓不可达泄露对象的 GitHub 缓存清理由仓库管理员
+继续按 `MIGRATION.md` 提交 Support 请求；原令牌已撤销，全部公开 refs 与新仓历史均为零命中。

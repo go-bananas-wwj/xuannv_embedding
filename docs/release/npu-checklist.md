@@ -14,7 +14,7 @@
 - [x] 全国父网格只读审计通过；sampled/unsampled、owner zone、哈希和重复覆盖均通过。
 - [x] 十片 manifest 只读核验：1–10 齐全、总量等于父网格总量、成员唯一。
 - [x] GitHub `quality`、`test-and-package`、`secret-scan` 全绿。
-- [ ] 全新目录 clone、默认 wheel 安装、CLI help 和 CPU 测试通过。
+- [x] 全新目录 clone、默认 wheel 安装、CLI help 和 CPU 测试通过。
 
 失败时不得打标签。修复必须单独提交、推送并重新运行受影响门禁。
 
