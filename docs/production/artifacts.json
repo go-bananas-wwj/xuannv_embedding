@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "release": "haidian-embedding-v1",
+  "modelscope_dataset": "WeijieWu/xuannv_haidian_embdding",
+  "artifacts": {
+    "embedding_model": {
+      "path": "artifacts/haidian-embedding-v1/checkpoints/haidian_embedding_v1_p10c_epoch800.pt",
+      "bytes": 407703076,
+      "sha256": "69dfd81c898544413a747f5c7304cc9210ad1cf420ce724864b8bd7deb6ed790",
+      "compatibility_profile": "haidian_p10c_v1",
+      "model_key_count": 431
+    },
+    "monthly_embeddings": {
+      "path": "artifacts/haidian-embedding-v1/embeddings/haidian_202512_202605_p10c_epoch800.tar.gz",
+      "bytes": 7309392235,
+      "sha256": "d9b9d1c838611be08bbcd69f340edc7d8bb17d609fcc2dcf5a32e0317e652e24"
+    },
+    "historical_downstream_heads": {
+      "building_mlp_fold0": "fc0cf5cd14621383fc7a63f9bf20100dae7b48b13d918dc02307401fc0d65727",
+      "road_mlp_fold0": "207d553f016998470a4679d85a48f2b9e4d815b12f3a6a71a8e0e6afc0ecee55",
+      "water_mlp_fold0": "4cd7ccb4bf430f10a33a6f6e94279407155c42208074bb659ad65dcef36106e7"
+    }
+  }
+}
