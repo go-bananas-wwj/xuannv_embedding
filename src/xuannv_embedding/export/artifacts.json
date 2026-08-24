@@ -1,0 +1,11 @@
+{
+  "artifacts": {
+    "haidian_p10c_v1": {
+      "compatibility_profile": "haidian_p10c_v1",
+      "filename": "haidian_embedding_v1_p10c_epoch800.pt",
+      "model_key_count": 431,
+      "sha256": "69dfd81c898544413a747f5c7304cc9210ad1cf420ce724864b8bd7deb6ed790"
+    }
+  },
+  "schema_version": "1"
+}
