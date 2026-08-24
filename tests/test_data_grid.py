@@ -555,3 +555,15 @@ def test_validate_patch_record_rejects_epsg_outside_china_owner_range() -> None:
 
     with pytest.raises(ValueError, match="32643 through 32653"):
         MODULE.validate_patch_record(record, spec)
+
+
+def test_wgs84_transformer_is_reused_for_same_grid_zone() -> None:
+    MODULE._transformer_to_wgs84.cache_clear()
+    record = {"grid_epsg": 32650, "utm_bounds": [500000, 4400000, 501280, 4401280]}
+
+    first = MODULE._wgs84_geometry(record)
+    second = MODULE._wgs84_geometry(record)
+
+    assert first.equals_exact(second, tolerance=0.0)
+    assert MODULE._transformer_to_wgs84.cache_info().misses == 1
+    assert MODULE._transformer_to_wgs84.cache_info().hits == 1

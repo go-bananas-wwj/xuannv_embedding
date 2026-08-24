@@ -11,6 +11,7 @@ import tempfile
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
@@ -214,9 +215,16 @@ def validate_patch_record(record: Mapping[str, Any], spec: GridSpec) -> None:
         raise ValueError("grid_epsg must own the WGS84 center point")
 
 
+@lru_cache(maxsize=len(CHINA_OWNER_EPSGS))
+def _transformer_to_wgs84(grid_epsg: int) -> Transformer:
+    """Reuse immutable PROJ pipelines across all cells in one owner zone."""
+    _validate_china_owner_epsg(grid_epsg)
+    return Transformer.from_crs(grid_epsg, 4326, always_xy=True)
+
+
 def _wgs84_geometry(record: Mapping[str, Any]):
     minx, miny, maxx, maxy = record["utm_bounds"]
-    to_wgs84 = Transformer.from_crs(int(record["grid_epsg"]), 4326, always_xy=True)
+    to_wgs84 = _transformer_to_wgs84(int(record["grid_epsg"]))
     return transform_geometry(to_wgs84.transform, box(minx, miny, maxx, maxy))
 
 
