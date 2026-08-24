@@ -89,7 +89,7 @@ def test_grid_validate_applies_explicit_utm_seam_policy(
         "all_count": 1,
         "sampled_count": 0,
         "unsampled_count": 1,
-        "cross_zone_overlap_violation_count": 1,
+        "cross_zone_overlap_violation_count": 2,
         "missing": [],
         "duplicate_atlas_keys": [],
         "duplicate_sampled_keys": [],
@@ -109,6 +109,10 @@ def test_grid_validate_applies_explicit_utm_seam_policy(
     }
     membership_path = tmp_path / "china_full_grid_membership_audit.json"
     membership_path.write_text(json.dumps(membership), encoding="utf-8")
+    legacy_path = tmp_path / "china_full_grid_membership_audit_legacy_pair_threshold.json"
+    legacy_path.write_text(
+        json.dumps({**base, "cross_zone_overlap_violation_count": 1}), encoding="utf-8"
+    )
     manifest_path = tmp_path / "china_full_1280m_grid_package_manifest.json"
     manifest_path.write_text(
         json.dumps(
@@ -119,13 +123,14 @@ def test_grid_validate_applies_explicit_utm_seam_policy(
                 "audits": {
                     "final_membership": membership_path.name,
                     "utm_seam": seam_path.name,
+                    "legacy_pair_threshold": legacy_path.name,
                 },
             }
         ),
         encoding="utf-8",
     )
     files = []
-    for path in (manifest_path, membership_path, seam_path):
+    for path in (manifest_path, membership_path, seam_path, legacy_path):
         payload = path.read_bytes()
         files.append(
             {
@@ -158,7 +163,9 @@ def test_grid_validate_applies_explicit_utm_seam_policy(
     )
     report = json.loads(capsys.readouterr().out)
     assert report["passed"] is True
-    assert report["legacy_cross_zone_pair_over_1pct_count"] == 1
+    assert report["live_cross_zone_pair_over_1pct_count"] == 2
+    assert report["package_binding"]["frozen_legacy_pair_threshold_count"] == 1
+    assert report["package_binding"]["live_pair_threshold_count"] == 2
     assert report["package_binding"]["passed"] is True
 
 

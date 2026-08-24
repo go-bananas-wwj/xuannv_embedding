@@ -912,10 +912,12 @@ def bind_utm_seam_audit_to_package(
 
     seam_relative, expected_seam_path = resolve_member("utm_seam")
     membership_relative, membership_path = resolve_member("final_membership")
+    legacy_relative, legacy_path = resolve_member("legacy_pair_threshold")
     if Path(seam_path).resolve() != expected_seam_path:
         raise ValueError("UTM seam audit 未绑定到 grid package manifest 指定路径")
     seam_audit = _read_json_object(expected_seam_path, "UTM seam audit")
     membership_audit = _read_json_object(membership_path, "membership audit")
+    legacy_audit = _read_json_object(legacy_path, "legacy pair-threshold audit")
 
     if seam_audit.get("schema_version") != "china_full_1280m_utm_seam_audit_v1":
         raise ValueError("UTM seam audit schema_version 不受支持")
@@ -927,6 +929,22 @@ def bind_utm_seam_audit_to_package(
         raise ValueError("membership audit 与 grid package manifest 内嵌副本不一致")
     if membership_audit.get("cross_zone_seam_audit") != seam_audit:
         raise ValueError("UTM seam audit 与 membership audit 内嵌副本不一致")
+    if legacy_audit.get("schema_version") != "china_full_1280m_membership_audit_v1":
+        raise ValueError("legacy pair-threshold audit schema_version 不受支持")
+    frozen_legacy_count = legacy_audit.get("cross_zone_overlap_violation_count")
+    if (
+        isinstance(frozen_legacy_count, bool)
+        or not isinstance(frozen_legacy_count, int)
+        or frozen_legacy_count < 0
+    ):
+        raise ValueError("legacy pair-threshold count 无效")
+    if membership_audit.get("legacy_cross_zone_pair_over_1pct_count") != frozen_legacy_count:
+        raise ValueError("冻结 membership 与 legacy pair-threshold audit 不一致")
+    for field_name, value in legacy_audit.items():
+        if field_name in {"passed", "cross_zone_overlap_violation_count"}:
+            continue
+        if membership_audit.get(field_name) != value:
+            raise ValueError(f"冻结 membership 与 legacy audit 不一致: {field_name}")
 
     checksum_manifest = _read_json_object(checksum_path, "grid package checksum manifest")
     if checksum_manifest.get("schema_version") != "xuannv_package_sha256_v1":
@@ -942,7 +960,12 @@ def bind_utm_seam_audit_to_package(
         if relative in by_path:
             raise ValueError(f"grid package checksum path 重复: {relative}")
         by_path[relative] = entry
-    member_paths = (GRID_PACKAGE_MANIFEST, membership_relative, seam_relative)
+    member_paths = (
+        GRID_PACKAGE_MANIFEST,
+        membership_relative,
+        seam_relative,
+        legacy_relative,
+    )
     verified: dict[str, str] = {}
     for relative in member_paths:
         path = output_root / relative
@@ -976,16 +999,14 @@ def bind_utm_seam_audit_to_package(
             continue
         if membership_audit.get(field_name) != value:
             raise ValueError(f"live membership audit 与冻结 audit 不一致: {field_name}")
-    raw_cross_zone_count = int(base_audit.get("cross_zone_overlap_violation_count", 0))
-    if raw_cross_zone_count == 0 and "legacy_cross_zone_pair_over_1pct_count" in base_audit:
-        raw_cross_zone_count = int(base_audit["legacy_cross_zone_pair_over_1pct_count"])
-    if membership_audit.get("legacy_cross_zone_pair_over_1pct_count") != raw_cross_zone_count:
-        raise ValueError("live cross-zone count 与冻结 seam reconciliation 不一致")
+    live_cross_zone_count = int(base_audit.get("cross_zone_overlap_violation_count", 0))
 
     binding = {
         "schema_version": "china_full_1280m_grid_package_binding_v1",
         "manifest_sha256": actual_manifest_sha256,
         "verified_member_sha256": verified,
+        "frozen_legacy_pair_threshold_count": frozen_legacy_count,
+        "live_pair_threshold_count": live_cross_zone_count,
         "passed": True,
     }
     return seam_audit, binding
@@ -1029,7 +1050,7 @@ def reconcile_utm_seam_audit(
         raise ValueError(f"base audit has other blocking failures: {sorted(set(blocking))}")
 
     reconciled = dict(base_audit)
-    reconciled["legacy_cross_zone_pair_over_1pct_count"] = int(
+    reconciled["live_cross_zone_pair_over_1pct_count"] = int(
         reconciled.get("cross_zone_overlap_violation_count", 0)
     )
     reconciled["cross_zone_overlap_violation_count"] = 0
