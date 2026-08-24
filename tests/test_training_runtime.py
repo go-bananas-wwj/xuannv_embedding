@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from xuannv_embedding.config import Config
@@ -12,7 +13,7 @@ from xuannv_embedding.training.checkpoint import (
     load_training_checkpoint,
     save_training_checkpoint,
 )
-from xuannv_embedding.training.cli import synthetic_batch
+from xuannv_embedding.training.cli import _epoch_count, synthetic_batch
 from xuannv_embedding.training.losses import TotalLoss
 from xuannv_embedding.training.runtime import TrainingSystem, train_steps
 
@@ -125,6 +126,33 @@ def test_runtime_updates_model_and_saves_complete_training_state(tmp_path: Path)
         torch.equal(left, right)
         for left, right in zip(system.criterion.parameters(), restored.criterion.parameters())
     )
+
+
+def test_runtime_preserves_absolute_epoch_for_resume_warmups() -> None:
+    system = _system()
+    optimizer = torch.optim.AdamW(system.parameters(), lr=1e-3)
+
+    summary = train_steps(
+        system,
+        [_batch()],
+        optimizer,
+        device=torch.device("cpu"),
+        epochs=2,
+        start_epoch=4,
+        gradient_accumulation_steps=1,
+        amp=False,
+    )
+
+    assert summary["start_epoch"] == 4
+    assert summary["end_epoch"] == 5
+    assert system.criterion.current_epoch == 5
+
+
+def test_configured_epochs_are_a_total_but_cli_override_is_incremental() -> None:
+    assert _epoch_count(800, None, 400) == 400
+    assert _epoch_count(800, 1, 400) == 1
+    with pytest.raises(ValueError, match="没有待训练"):
+        _epoch_count(800, None, 800)
 
 
 def test_export_writes_one_atomic_finite_embedding_per_patch(tmp_path: Path) -> None:

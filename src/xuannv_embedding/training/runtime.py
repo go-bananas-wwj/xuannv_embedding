@@ -90,6 +90,7 @@ def train_steps(
     *,
     device: torch.device,
     epochs: int,
+    start_epoch: int = 0,
     gradient_accumulation_steps: int,
     amp: bool,
     scheduler: Any | None = None,
@@ -97,6 +98,8 @@ def train_steps(
     """训练有限个 epoch，并返回可序列化的发布门禁摘要。"""
     if epochs <= 0 or gradient_accumulation_steps <= 0:
         raise ValueError("epochs 与 gradient_accumulation_steps 必须是正整数")
+    if start_epoch < 0:
+        raise ValueError("start_epoch 必须是非负整数")
     system.to(device)
     system.train()
     scaler = _grad_scaler(device, amp)
@@ -105,7 +108,8 @@ def train_steps(
     optimizer_steps = 0
     loss_sum = 0.0
 
-    for epoch in range(epochs):
+    end_epoch = start_epoch + epochs - 1
+    for epoch in range(start_epoch, end_epoch + 1):
         _unwrap(system).criterion.set_epoch(epoch)
         pending = 0
         for raw_batch in batches:
@@ -148,6 +152,8 @@ def train_steps(
         raise ValueError("训练 batches 为空")
     return {
         "epochs": epochs,
+        "start_epoch": start_epoch,
+        "end_epoch": end_epoch,
         "batches": batch_count,
         "optimizer_steps": optimizer_steps,
         "loss": loss_sum / batch_count,

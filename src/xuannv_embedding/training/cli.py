@@ -268,6 +268,16 @@ def _git_sha() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 
 
+def _epoch_count(configured_epochs: int, requested_epochs: int | None, start_epoch: int) -> int:
+    """无显式覆盖时，把配置 epochs 解释为最终总 epoch 数。"""
+    epochs = requested_epochs if requested_epochs is not None else configured_epochs - start_epoch
+    if epochs <= 0:
+        raise ValueError(
+            f"没有待训练 epoch: configured={configured_epochs}, start_epoch={start_epoch}"
+        )
+    return epochs
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv train")
     parser.add_argument("--config", type=Path, required=True)
@@ -327,13 +337,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_records=args.max_records,
             max_steps=args.steps or None,
         )
+    try:
+        epoch_count = _epoch_count(config.training.epochs, args.epochs, start_epoch)
+    except ValueError as exc:
+        parser.error(str(exc))
     summary = train_steps(
         wrapped,
         batches,
         optimizer,
         scheduler=scheduler,
         device=device,
-        epochs=args.epochs or config.training.epochs,
+        epochs=epoch_count,
+        start_epoch=start_epoch,
         gradient_accumulation_steps=config.training.gradient_accumulation_steps,
         amp=config.training.amp and not args.no_amp,
     )
@@ -352,7 +367,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             criterion=system.criterion,
             optimizer=optimizer,
             scheduler=scheduler,
-            epoch=start_epoch,
+            epoch=int(summary["end_epoch"]),
             config_sha256=hashlib.sha256(args.config.read_bytes()).hexdigest(),
             git_sha=_git_sha(),
             source_schema={
