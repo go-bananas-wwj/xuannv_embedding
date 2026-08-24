@@ -76,6 +76,12 @@ def _run_data(args: argparse.Namespace) -> int:
     return dispatch(args.data_command, args.forwarded_args)
 
 
+def _run_train(args: argparse.Namespace) -> int:
+    from xuannv_embedding.training.cli import main as train_main
+
+    return train_main(args.forwarded_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建不依赖可选运行组件的顶层命令解析器。"""
     parser = argparse.ArgumentParser(
@@ -86,6 +92,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
     _add_data_commands(subparsers)
     _add_downstream_commands(subparsers)
+    train = subparsers.add_parser("train", help="运行 P10C 训练或发布 smoke", add_help=False)
+    train.set_defaults(handler=_run_train)
     return parser
 
 
@@ -93,7 +101,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
-    if args.command == "data":
+    if args.command in {"data", "train"}:
         args.forwarded_args = unknown
     elif unknown:
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")

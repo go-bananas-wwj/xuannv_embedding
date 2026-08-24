@@ -24,6 +24,7 @@ _REQUIRED_FIELDS = {
     "regions",
     "epoch",
     "model",
+    "criterion",
     "optimizer",
     "scheduler",
     "metrics",
@@ -73,6 +74,7 @@ def save_training_checkpoint(
     path: str | Path,
     *,
     model: nn.Module,
+    criterion: nn.Module | None = None,
     optimizer: Optimizer,
     scheduler: Any | None,
     epoch: int,
@@ -98,6 +100,7 @@ def save_training_checkpoint(
         "regions": list(regions),
         "epoch": epoch,
         "model": model.state_dict(),
+        "criterion": criterion.state_dict() if criterion is not None else None,
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict() if scheduler is not None else None,
         "metrics": dict(metrics or {}),
@@ -109,6 +112,7 @@ def load_training_checkpoint(
     path: str | Path,
     *,
     model: nn.Module,
+    criterion: nn.Module | None = None,
     optimizer: Optimizer | None = None,
     scheduler: Any | None = None,
     device: str | torch.device = "cpu",
@@ -134,6 +138,10 @@ def load_training_checkpoint(
     )
     try:
         model.load_state_dict(state["model"], strict=True)
+        if criterion is not None:
+            if state["criterion"] is None:
+                raise CheckpointError("checkpoint 未保存 criterion 状态")
+            criterion.load_state_dict(state["criterion"], strict=True)
         if optimizer is not None:
             optimizer.load_state_dict(state["optimizer"])
         if scheduler is not None and state["scheduler"] is not None:
