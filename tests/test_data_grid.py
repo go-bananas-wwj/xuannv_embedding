@@ -589,6 +589,24 @@ def test_vectorized_audit_rows_match_scalar_geometry_checks(tmp_path: Path) -> N
         assert item["coordinate_difference"] == 0.0
 
 
+def test_vectorized_partition_hashes_match_scalar_geometry_hashes(tmp_path: Path) -> None:
+    records = synthetic_parent_records(count=2)
+    MODULE.write_zone_records(records, set(), tmp_path, batch_size=2)
+    parquet_path = next((tmp_path / "all" / "utm50n").glob("*.parquet"))
+
+    hashed = list(
+        MODULE._iter_hashed_parquet_rows(
+            [parquet_path], [*MODULE.CANONICAL_METADATA_FIELDS, "geometry"], batch_size=2
+        )
+    )
+
+    assert len(hashed) == 2
+    for item in hashed:
+        assert item["geometry_hash"] == MODULE._normalized_footprint_hash(
+            MODULE.from_wkb(item["row"]["geometry"])
+        )
+
+
 def test_utm_seam_candidates_are_limited_to_owner_zone_boundaries() -> None:
     assert MODULE._is_utm_seam_candidate(box(113.99, 30.0, 114.01, 30.01), 32650)
     assert MODULE._is_utm_seam_candidate(box(119.99, 30.0, 120.01, 30.01), 32650)

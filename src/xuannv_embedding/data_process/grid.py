@@ -600,6 +600,34 @@ def _iter_audited_parquet_rows(
                 }
 
 
+def _iter_hashed_parquet_rows(
+    paths: Iterable[Path], columns: list[str], batch_size: int
+) -> Iterator[dict[str, Any]]:
+    """Yield child-partition rows with vectorized normalized geometry hashes."""
+    import pyarrow.parquet as pq
+    import shapely
+
+    for path in paths:
+        parquet_file = pq.ParquetFile(path)
+        missing_columns = set(columns) - set(parquet_file.schema_arrow.names)
+        if missing_columns:
+            raise ValueError(f"{path} is missing audit columns: {sorted(missing_columns)}")
+        for batch in parquet_file.iter_batches(columns=columns, batch_size=batch_size):
+            rows = batch.to_pylist()
+            geometry_values = batch.column(batch.schema.get_field_index("geometry")).to_numpy(
+                zero_copy_only=False
+            )
+            normalized = shapely.normalize(
+                shapely.set_precision(shapely.from_wkb(geometry_values), 1e-9)
+            )
+            normalized_wkb = shapely.to_wkb(normalized)
+            for index, row in enumerate(rows):
+                yield {
+                    "row": row,
+                    "geometry_hash": hashlib.sha256(normalized_wkb[index]).hexdigest(),
+                }
+
+
 def _normalized_footprint_hash(geometry: Any) -> str:
     return hashlib.sha256(normalize_geometry(set_precision(geometry, 1e-9)).wkb).hexdigest()
 
@@ -1144,9 +1172,10 @@ def audit_grid_package(
             connection.commit()
 
             for partition in ("sampled", "unsampled"):
-                for row in _iter_parquet_rows(
+                for hashed in _iter_hashed_parquet_rows(
                     _parquet_paths(output_root, partition), all_columns, batch_size
                 ):
+                    row = hashed["row"]
                     parent_key_value = str(row["parent_key"])
                     _record_partition_key(connection, parent_key_value, partition)
                     canonical_row = connection.execute(
@@ -1161,7 +1190,7 @@ def audit_grid_package(
                         continue
                     if _metadata_hash(row) != canonical_row[0]:
                         counters["child_partition_metadata_mismatch_count"] += 1
-                    if _normalized_footprint_hash(from_wkb(row["geometry"])) != canonical_row[1]:
+                    if hashed["geometry_hash"] != canonical_row[1]:
                         counters["child_partition_geometry_mismatch_count"] += 1
             connection.commit()
 
