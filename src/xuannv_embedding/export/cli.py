@@ -10,10 +10,8 @@ from pathlib import Path
 from typing import Sequence
 
 import torch
-from torch.utils.data import DataLoader
 
 from xuannv_embedding.config import Config
-from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
 from xuannv_embedding.export.embedding import export_embedding_batches
 from xuannv_embedding.training.checkpoint import load_training_checkpoint
 from xuannv_embedding.training.cli import build_training_system
@@ -46,6 +44,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--device")
     parser.add_argument("--compatibility-profile", choices=["haidian_p10c_v1"])
     args = parser.parse_args(argv)
+
+    from torch.utils.data import DataLoader
+
+    from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
 
     config = Config.from_yaml(args.config)
     system = build_training_system(config)

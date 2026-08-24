@@ -4,6 +4,8 @@
 
 Ascend 环境先加载 CANN，再运行单卡或 `torchrun`。训练命令默认读取配置中的真实 manifest；
 `--synthetic` 只用于发布 smoke，必须显式给出 `--steps`。
+真实栅格训练与导出需要同时安装 `npu` 和 `data-process` extras：
+`pip install ".[npu,data-process]"`；基础安装仍可查看全部命令帮助并运行 synthetic CPU smoke。
 
 发布环境锁定为已验收的 `torch==2.6.0` 与 `torch-npu==2.6.0.post5`；不要混装不同主次版本。
 从不含 `.git` 的已安装 wheel 训练时，启动前必须把发布提交写入 `XUANNV_GIT_SHA`；非法或无法

@@ -25,7 +25,7 @@ manifest、统计量和 `source_map` 表达。权重、影像、embedding、日�
 pip install .
 pip install ".[data-process]"   # 网格、STAC、栅格和 manifest
 pip install ".[downstream]"    # 标准下游头与指标
-pip install ".[npu]"           # 已配置 CANN 的 Ascend 环境
+pip install ".[npu,data-process]" # Ascend 真实栅格训练/导出（已配置 CANN）
 ```
 
 唯一入口是 `xuannv`：

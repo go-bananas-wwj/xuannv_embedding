@@ -19,7 +19,6 @@ from torch import nn
 from torch.utils.data import DataLoader, DistributedSampler
 
 from xuannv_embedding.config import Config
-from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
 from xuannv_embedding.models.model import AEFModel
 from xuannv_embedding.training.checkpoint import (
     load_training_checkpoint,
@@ -221,6 +220,8 @@ def build_region_batch_stream(
     max_steps: int | None,
     start_epoch: int = 0,
 ) -> RegionBatchStream:
+    from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
+
     loaders: list[DataLoader] = []
     weights: list[float] = []
     for dataset_config in config.data.datasets:
