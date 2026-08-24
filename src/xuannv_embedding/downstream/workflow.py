@@ -78,6 +78,17 @@ class DenseDataset:
             self.labels.index_select(0, positions),
         )
 
+    def positive_patch_ids(self, candidates: tuple[str, ...]) -> set[str]:
+        index = {patch_id: position for position, patch_id in enumerate(self.patch_ids)}
+        missing = sorted(set(candidates) - set(index))
+        if missing:
+            raise DownstreamWorkflowError(f"数据集缺少 fold patch_id: {missing}")
+        return {
+            patch_id
+            for patch_id in candidates
+            if bool((self.labels[index[patch_id]] > 0).any().item())
+        }
+
 
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -98,6 +109,11 @@ def _fold_sha256(fold: SpatialFold) -> str:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _patch_ids_sha256(patch_ids: tuple[str, ...]) -> str:
+    payload = json.dumps(list(patch_ids), separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -165,7 +181,9 @@ def train_downstream(args: Namespace) -> dict[str, Any]:
     dataset = DenseDataset.from_npz(args.dataset)
     fold = SpatialFold.from_file(args.folds, fold=args.fold)
     protocol = EvaluationProtocol(fold=fold, shot=_shot(args.shot), seed=args.seed)
-    train_ids = protocol.training_patch_ids()
+    train_ids = protocol.training_patch_ids(
+        positive_patch_ids=dataset.positive_patch_ids(fold.train)
+    )
     train_data = dataset.subset(train_ids)
     validation_data = dataset.subset(fold.validation)
     device = torch.device(args.device)
@@ -209,6 +227,8 @@ def train_downstream(args: Namespace) -> dict[str, Any]:
         "fold_sha256": _fold_sha256(fold),
         "shot": protocol.shot,
         "report_scope": protocol.report_scope,
+        "training_patch_ids": train_ids,
+        "training_patch_ids_sha256": _patch_ids_sha256(train_ids),
         "seed": args.seed,
         "dataset_sha256": dataset.dataset_sha256,
         "label_sha256": dataset.label_sha256,
@@ -256,17 +276,28 @@ def evaluate_downstream(args: Namespace) -> dict[str, Any]:
         "label_sha256",
         "validation_threshold",
         "threshold_source",
+        "training_patch_ids",
+        "training_patch_ids_sha256",
     }
     if not isinstance(state, dict) or required - set(state):
         raise DownstreamWorkflowError("下游 checkpoint 缺少严格评测元数据")
     if state["format_version"] != "downstream-1":
         raise DownstreamWorkflowError("下游 checkpoint format_version 不兼容")
+    protocol = EvaluationProtocol(fold=fold, shot=state["shot"], seed=int(state["seed"]))
+    expected_training_ids = protocol.training_patch_ids(
+        positive_patch_ids=dataset.positive_patch_ids(fold.train)
+    )
     identity_checks = {
         "fold": (state["fold"], fold.fold),
         "fold_sha256": (state["fold_sha256"], _fold_sha256(fold)),
         "dataset_sha256": (state["dataset_sha256"], dataset.dataset_sha256),
         "label_sha256": (state["label_sha256"], dataset.label_sha256),
         "threshold_source": (state["threshold_source"], "validation"),
+        "training_patch_ids": (tuple(state["training_patch_ids"]), expected_training_ids),
+        "training_patch_ids_sha256": (
+            state["training_patch_ids_sha256"],
+            _patch_ids_sha256(expected_training_ids),
+        ),
     }
     mismatches = [
         name for name, (actual, expected) in identity_checks.items() if actual != expected

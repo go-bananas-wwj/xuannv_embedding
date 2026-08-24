@@ -93,17 +93,17 @@ def test_threshold_is_selected_only_from_validation_predictions() -> None:
 def test_spatial_fold_and_shot_protocol_are_fixed(tmp_path: Path) -> None:
     fold = SpatialFold(
         fold=0,
-        train=("p1", "p2", "p3", "p4", "p5", "p6"),
+        train=("p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"),
         validation=("v1",),
         test=("t1", "t2"),
     )
     protocol = EvaluationProtocol(fold=fold, shot=5, seed=42)
+    positive = {"p1", "p2", "p3", "p4", "p5"}
 
-    assert len(protocol.training_patch_ids()) == 5
-    assert (
-        protocol.training_patch_ids()
-        == EvaluationProtocol(fold=fold, shot=5, seed=42).training_patch_ids()
-    )
+    assert len(protocol.training_patch_ids(positive_patch_ids=positive)) == 10
+    assert protocol.training_patch_ids(positive_patch_ids=positive) == EvaluationProtocol(
+        fold=fold, shot=5, seed=42
+    ).training_patch_ids(positive_patch_ids=positive)
     assert protocol.report_scope == "5-shot"
 
     path = tmp_path / "folds.json"
@@ -113,6 +113,22 @@ def test_spatial_fold_and_shot_protocol_are_fixed(tmp_path: Path) -> None:
     )
     loaded = SpatialFold.from_file(path, fold=0)
     assert loaded.validation == ("v1",)
+
+
+def test_few_shot_requires_equal_positive_and_negative_patch_pools() -> None:
+    fold = SpatialFold(
+        fold=0,
+        train=tuple(f"p{index}" for index in range(12)),
+        validation=("v1",),
+        test=("t1",),
+    )
+    protocol = EvaluationProtocol(fold=fold, shot=5, seed=7)
+    selected = protocol.training_patch_ids(positive_patch_ids={"p0", "p1", "p2", "p3", "p4", "p5"})
+    assert len(selected) == 10
+    assert len(set(selected) & {"p0", "p1", "p2", "p3", "p4", "p5"}) == 5
+
+    with pytest.raises(ProtocolError, match="正样本 patch"):
+        protocol.training_patch_ids(positive_patch_ids={"p0"})
 
 
 def test_spatial_fold_rejects_leakage() -> None:

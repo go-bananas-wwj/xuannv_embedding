@@ -73,21 +73,40 @@ class EvaluationProtocol:
     def report_scope(self) -> str:
         return "full-label" if self.shot is None else f"{self.shot}-shot"
 
-    def training_patch_ids(self) -> tuple[str, ...]:
+    def training_patch_ids(
+        self,
+        *,
+        positive_patch_ids: set[str] | None = None,
+    ) -> tuple[str, ...]:
         if self.shot is None:
             return self.fold.train
-        if len(self.fold.train) < self.shot:
+        if positive_patch_ids is None:
+            raise ProtocolError("few-shot 必须提供由标签计算的正样本 patch 集合")
+        train = set(self.fold.train)
+        positives = train & positive_patch_ids
+        negatives = train - positive_patch_ids
+        if len(positives) < self.shot:
             raise ProtocolError(
-                f"fold={self.fold.fold} 只有 {len(self.fold.train)} 个训练 patch，"
+                f"fold={self.fold.fold} 只有 {len(positives)} 个正样本 patch，"
                 f"不足 {self.shot}-shot"
             )
-        ranked = sorted(
-            self.fold.train,
-            key=lambda patch_id: hashlib.sha256(
-                f"{self.seed}:{self.fold.fold}:{patch_id}".encode()
-            ).digest(),
+        if len(negatives) < self.shot:
+            raise ProtocolError(
+                f"fold={self.fold.fold} 只有 {len(negatives)} 个负样本 patch，"
+                f"不足与 {self.shot}-shot 正样本配对"
+            )
+
+        def rank(pool: set[str], label: str) -> list[str]:
+            return sorted(
+                pool,
+                key=lambda patch_id: hashlib.sha256(
+                    f"{self.seed}:{self.fold.fold}:{label}:{patch_id}".encode()
+                ).digest(),
+            )
+
+        return tuple(
+            rank(positives, "positive")[: self.shot] + rank(negatives, "negative")[: self.shot]
         )
-        return tuple(ranked[: self.shot])
 
 
 def choose_validation_threshold(
