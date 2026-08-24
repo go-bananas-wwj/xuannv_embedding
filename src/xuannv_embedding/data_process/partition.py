@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
+import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +20,177 @@ BASE_SHARD_SIZE = TOTAL_SHAPES // 10
 PARTITION_CRS = CRS.from_proj4(
     "+proj=lcc +lat_1=25 +lat_2=47 +lat_0=0 +lon_0=105 +datum=WGS84 +units=m +no_defs"
 )
+
+
+def _tenfold_manifest(output_root: Path) -> dict[str, object]:
+    path = output_root / "tenfold_partition_manifest.json"
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid tenfold manifest {path}: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError(f"Tenfold manifest must be an object: {path}")
+    schema_version = manifest.get("schema_version")
+    if not isinstance(schema_version, str) or not schema_version.startswith(
+        "china_full_grid_tenfold_spatial_partition_v"
+    ):
+        raise ValueError(f"Unsupported tenfold schema_version: {schema_version!r}")
+    return manifest
+
+
+def _manifest_shard_counts(manifest: dict[str, object]) -> dict[int, int]:
+    summaries = manifest.get("shards")
+    if not isinstance(summaries, list):
+        raise ValueError("Tenfold manifest shards must be a list")
+    counts: dict[int, int] = {}
+    for summary in summaries:
+        if not isinstance(summary, dict):
+            raise ValueError("Tenfold shard summary must be an object")
+        shard_id = int(summary["shard_id"])
+        if shard_id in counts:
+            raise ValueError(f"Duplicate shard_id in manifest: {shard_id}")
+        counts[shard_id] = int(summary["shape_count"])
+    if set(counts) != set(range(1, 11)):
+        raise ValueError(f"Tenfold manifest must contain shards 1..10: {sorted(counts)}")
+    return counts
+
+
+def _parent_key_batches(paths: list[Path], batch_size: int):
+    for path in paths:
+        parquet = pq.ParquetFile(path)
+        if "parent_key" not in parquet.schema_arrow.names:
+            raise ValueError(f"GeoParquet missing parent_key: {path}")
+        for batch in parquet.iter_batches(batch_size=batch_size, columns=["parent_key"]):
+            yield [str(value) for value in batch.column(0).to_pylist()]
+
+
+def audit_tenfold_delivery(
+    output_root: str | Path,
+    *,
+    parent_grid_root: str | Path | None = None,
+    batch_size: int = 100_000,
+) -> dict[str, object]:
+    """只读核验十片计数、成员唯一性及与父网格的精确集合相等性。"""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    output_root = Path(output_root)
+    manifest = _tenfold_manifest(output_root)
+    expected_counts = _manifest_shard_counts(manifest)
+    source_parent_count = int(manifest.get("source_parent_count", -1))
+    if source_parent_count <= 0:
+        raise ValueError("Tenfold manifest source_parent_count must be positive")
+
+    actual_counts: dict[int, int] = {}
+    file_counts: dict[int, int] = {}
+    wrong_shard_id_count = 0
+    actual_count = 0
+    duplicate_parent_count = 0
+    missing_parent_count: int | None = None
+    unknown_parent_count: int | None = None
+    parent_actual_count: int | None = None
+
+    with tempfile.TemporaryDirectory(prefix=".xuannv-tenfold-audit-") as temporary_dir:
+        connection = sqlite3.connect(Path(temporary_dir) / "membership.sqlite")
+        connection.execute("PRAGMA journal_mode=OFF")
+        connection.execute("PRAGMA synchronous=OFF")
+        connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute(
+            "CREATE TABLE members (parent_key TEXT PRIMARY KEY, seen_in_parent INTEGER NOT NULL) "
+            "WITHOUT ROWID"
+        )
+        try:
+            for shard_id in range(1, 11):
+                shard_root = output_root / "shards" / f"shard_{shard_id:02d}"
+                paths = sorted(shard_root.glob("utm*/part-*.parquet"))
+                file_counts[shard_id] = len(paths)
+                shard_count = 0
+                for path in paths:
+                    parquet = pq.ParquetFile(path)
+                    required = {"parent_key", "shard_id"}
+                    if not required <= set(parquet.schema_arrow.names):
+                        raise ValueError(f"GeoParquet missing audit columns: {path}")
+                    for batch in parquet.iter_batches(
+                        batch_size=batch_size,
+                        columns=["parent_key", "shard_id"],
+                    ):
+                        keys = [str(value) for value in batch.column(0).to_pylist()]
+                        shard_values = batch.column(1).to_pylist()
+                        wrong_shard_id_count += sum(
+                            int(value) != shard_id for value in shard_values
+                        )
+                        before = connection.total_changes
+                        connection.executemany(
+                            "INSERT OR IGNORE INTO members(parent_key, seen_in_parent) "
+                            "VALUES (?, 0)",
+                            ((key,) for key in keys),
+                        )
+                        inserted = connection.total_changes - before
+                        duplicate_parent_count += len(keys) - inserted
+                        shard_count += len(keys)
+                actual_counts[shard_id] = shard_count
+                actual_count += shard_count
+            connection.commit()
+
+            if parent_grid_root is not None:
+                parent_paths = sorted(Path(parent_grid_root).glob("all/utm*/part-*.parquet"))
+                if not parent_paths:
+                    raise ValueError(f"No parent GeoParquet below {parent_grid_root}")
+                missing_parent_count = 0
+                parent_actual_count = 0
+                for keys in _parent_key_batches(parent_paths, batch_size):
+                    before = connection.total_changes
+                    connection.executemany(
+                        "UPDATE members SET seen_in_parent=1 "
+                        "WHERE parent_key=? AND seen_in_parent=0",
+                        ((key,) for key in keys),
+                    )
+                    matched = connection.total_changes - before
+                    missing_parent_count += len(keys) - matched
+                    parent_actual_count += len(keys)
+                unknown_parent_count = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM members WHERE seen_in_parent=0"
+                    ).fetchone()[0]
+                )
+            unique_parent_count = int(
+                connection.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+            )
+        finally:
+            connection.close()
+
+    count_mismatch_shards = [
+        shard_id
+        for shard_id in range(1, 11)
+        if actual_counts[shard_id] != expected_counts[shard_id]
+    ]
+    manifest_count = sum(expected_counts.values())
+    passed = (
+        source_parent_count == manifest_count == actual_count == unique_parent_count
+        and not count_mismatch_shards
+        and all(file_counts.values())
+        and duplicate_parent_count == 0
+        and wrong_shard_id_count == 0
+        and (missing_parent_count in {None, 0})
+        and (unknown_parent_count in {None, 0})
+        and (parent_actual_count in {None, source_parent_count})
+    )
+    return {
+        "schema_version": "china_full_grid_tenfold_read_only_audit_v1",
+        "source_schema_version": manifest["schema_version"],
+        "source_parent_count": source_parent_count,
+        "manifest_count": manifest_count,
+        "actual_count": actual_count,
+        "unique_parent_count": unique_parent_count,
+        "duplicate_parent_count": duplicate_parent_count,
+        "wrong_shard_id_count": wrong_shard_id_count,
+        "missing_parent_count": missing_parent_count,
+        "unknown_parent_count": unknown_parent_count,
+        "parent_actual_count": parent_actual_count,
+        "count_mismatch_shards": count_mismatch_shards,
+        "file_counts": {str(key): value for key, value in file_counts.items()},
+        "shard_counts": {str(key): value for key, value in actual_counts.items()},
+        "passed": passed,
+    }
 
 
 def region_bounds_feature(summary: dict[str, object]) -> dict[str, object]:

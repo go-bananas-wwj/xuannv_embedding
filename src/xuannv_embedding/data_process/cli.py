@@ -144,7 +144,9 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--manifest", type=Path)
     target.add_argument("--grid-root", type=Path)
+    target.add_argument("--tenfold-root", type=Path)
     parser.add_argument("--sampled-registry", type=Path)
+    parser.add_argument("--parent-grid-root", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--batch-size", type=int, default=100_000)
     args = parser.parse_args(argv)
@@ -160,7 +162,7 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
             "sha256": document.meta.sha256,
             "passed": True,
         }
-    else:
+    elif args.grid_root is not None:
         if args.sampled_registry is None:
             parser.error("--grid-root 需要 --sampled-registry")
         from xuannv_embedding.data_process.grid import (
@@ -171,6 +173,14 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
         report = audit_grid_package(
             args.grid_root,
             read_sampled_registry_jsonl(args.sampled_registry),
+            batch_size=args.batch_size,
+        )
+    else:
+        from xuannv_embedding.data_process.partition import audit_tenfold_delivery
+
+        report = audit_tenfold_delivery(
+            args.tenfold_root,
+            parent_grid_root=args.parent_grid_root,
             batch_size=args.batch_size,
         )
     if args.output is not None:
