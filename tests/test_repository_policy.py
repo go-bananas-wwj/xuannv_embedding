@@ -28,6 +28,28 @@ def test_tree_policy_rejects_large_and_forbidden_files(tmp_path: Path) -> None:
         validate_tree(tmp_path, [large], max_file_bytes=10, max_tree_bytes=20)
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "preview.png",
+        "photo.jpeg",
+        "animation.gif",
+        "audio.wav",
+        "table.xlsx",
+        "bundle.zip",
+        "bundle.tar",
+        "records.parquet",
+        "cache.sqlite",
+    ],
+)
+def test_tree_policy_rejects_non_source_binary_and_data_formats(tmp_path: Path, name: str) -> None:
+    path = tmp_path / name
+    path.write_bytes(b"x")
+
+    with pytest.raises(PolicyError, match="禁止文件类型"):
+        validate_tree(tmp_path, [path])
+
+
 def test_markdown_policy_checks_relative_targets(tmp_path: Path) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()
