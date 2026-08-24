@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.venv/
+.env
+*.lock
+
+# Runtime artifacts and local data never belong in Git.
+outputs/
+data/
+checkpoints/
+embeddings/
+*.pt
+*.pth
+*.ckpt
