@@ -12,10 +12,10 @@ dist/
 *.lock
 
 # Runtime artifacts and local data never belong in Git.
-outputs/
-data/
-checkpoints/
-embeddings/
+/outputs/
+/data/
+/checkpoints/
+/embeddings/
 *.pt
 *.pth
 *.ckpt
