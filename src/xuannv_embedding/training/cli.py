@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import os
+import re
 import subprocess
 from dataclasses import asdict
 from pathlib import Path
@@ -265,7 +267,34 @@ def _setup_device(requested: str | None) -> tuple[torch.device, bool, int]:
 
 
 def _git_sha() -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    explicit = os.environ.get("XUANNV_GIT_SHA")
+    if explicit is not None:
+        if not re.fullmatch(r"[0-9a-fA-F]{7,64}", explicit):
+            raise RuntimeError("XUANNV_GIT_SHA 必须是 7-64 位十六进制 Git commit")
+        return explicit.lower()
+
+    project_root = Path(__file__).resolve().parents[3]
+    result = subprocess.run(
+        ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    candidate = result.stdout.strip()
+    if result.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", candidate):
+        return candidate
+
+    try:
+        direct_url = importlib.metadata.distribution("xuannv-embedding").read_text(
+            "direct_url.json"
+        )
+        metadata = json.loads(direct_url) if direct_url is not None else {}
+        candidate = str(metadata.get("vcs_info", {}).get("commit_id", ""))
+    except (importlib.metadata.PackageNotFoundError, json.JSONDecodeError):
+        candidate = ""
+    if re.fullmatch(r"[0-9a-fA-F]{7,64}", candidate):
+        return candidate.lower()
+    raise RuntimeError("无法证明训练代码的 Git SHA；请设置 XUANNV_GIT_SHA 后再启动训练")
 
 
 def _epoch_count(configured_epochs: int, requested_epochs: int | None, start_epoch: int) -> int:
@@ -299,6 +328,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--synthetic 需要显式提供正数 --steps")
 
     config = Config.from_yaml(args.config)
+    git_sha = _git_sha()
     device, distributed, local_rank = _setup_device(args.device)
     torch.manual_seed(config.experiment.seed + (dist.get_rank() if distributed else 0))
     system = build_training_system(config).to(device)
@@ -369,7 +399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             scheduler=scheduler,
             epoch=int(summary["end_epoch"]),
             config_sha256=hashlib.sha256(args.config.read_bytes()).hexdigest(),
-            git_sha=_git_sha(),
+            git_sha=git_sha,
             source_schema={
                 name: asdict(value) for name, value in config.model.input_sources.items()
             },

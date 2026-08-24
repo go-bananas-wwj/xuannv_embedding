@@ -13,7 +13,7 @@ from xuannv_embedding.training.checkpoint import (
     load_training_checkpoint,
     save_training_checkpoint,
 )
-from xuannv_embedding.training.cli import _epoch_count, synthetic_batch
+from xuannv_embedding.training.cli import _epoch_count, _git_sha, synthetic_batch
 from xuannv_embedding.training.losses import TotalLoss
 from xuannv_embedding.training.runtime import TrainingSystem, train_steps
 
@@ -153,6 +153,21 @@ def test_configured_epochs_are_a_total_but_cli_override_is_incremental() -> None
     assert _epoch_count(800, 1, 400) == 1
     with pytest.raises(ValueError, match="没有待训练"):
         _epoch_count(800, None, 800)
+
+
+def test_git_sha_is_independent_of_training_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    expected = _git_sha()
+    monkeypatch.chdir(tmp_path)
+
+    assert _git_sha() == expected
+
+
+def test_explicit_git_sha_must_be_a_real_hex_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XUANNV_GIT_SHA", "not-a-commit")
+    with pytest.raises(RuntimeError, match="XUANNV_GIT_SHA"):
+        _git_sha()
 
 
 def test_export_writes_one_atomic_finite_embedding_per_patch(tmp_path: Path) -> None:

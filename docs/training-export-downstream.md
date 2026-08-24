@@ -6,6 +6,8 @@ Ascend 环境先加载 CANN，再运行单卡或 `torchrun`。训练命令默认
 `--synthetic` 只用于发布 smoke，必须显式给出 `--steps`。
 
 发布环境锁定为已验收的 `torch==2.6.0` 与 `torch-npu==2.6.0.post5`；不要混装不同主次版本。
+从不含 `.git` 的已安装 wheel 训练时，启动前必须把发布提交写入 `XUANNV_GIT_SHA`；非法或无法
+证明的 SHA 会在设备初始化前被拒绝，避免产出无来源 checkpoint。
 
 ```bash
 source /usr/local/Ascend/cann-9.0.0/set_env.sh
