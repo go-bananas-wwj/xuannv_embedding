@@ -2,7 +2,8 @@
 
 以下门禁全部通过后才允许创建 `v1.0.0`。机器输出保存在仓库外，Git 只记录最终摘要。
 
-- [ ] 加载 `/usr/local/Ascend/cann-9.0.0/set_env.sh`，记录 CANN、PyTorch、torch_npu 和设备型号。
+- [ ] 加载 `/usr/local/Ascend/cann-9.0.0/set_env.sh`，核验 PyTorch `2.6.0`、torch_npu
+  `2.6.0.post5` 和设备型号。
 - [ ] 单卡 synthetic 128×128 mini-e2e：前向、反向、有限 loss、原子 checkpoint。
 - [ ] 原海淀 checkpoint SHA 未变化，431 键全部消费。
 - [ ] 同一真实海淀 2-patch batch 的旧/新模型 embedding `torch.equal`。

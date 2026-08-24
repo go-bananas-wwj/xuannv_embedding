@@ -21,12 +21,12 @@ classifiers = [
 dependencies = [
     "numpy>=1.24,<2",
     "PyYAML>=6.0",
-    "torch>=2.0,<2.2",
+    "torch==2.6.0",
     "tqdm>=4.66",
 ]
 
 [project.optional-dependencies]
-npu = ["torch-npu>=2.1,<2.2"]
+npu = ["torch-npu==2.6.0.post5"]
 data-process = [
     "geopandas>=0.14",
     "pandas>=2.0",
