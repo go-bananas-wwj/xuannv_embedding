@@ -40,7 +40,7 @@ data-process = [
     "shapely>=2.0",
     "stackstac>=0.5",
     "xarray>=2023.0",
-    "zarr>=2.16,<3",
+    "zarr>=2.16,<4",
 ]
 downstream = [
     "matplotlib>=3.7",
