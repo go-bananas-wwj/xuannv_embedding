@@ -1,0 +1,189 @@
+schema_version: "1"
+paths:
+  data_root: /data/xuannv_embedding
+  output_root: /data/xuannv_embedding/outputs
+  artifact_root: /data/xuannv_embedding/modelscope_upload
+experiment:
+  name: china_p10c_pilot
+  seed: 42
+  output_dir: /data/xuannv_embedding/outputs/china_p10c_pilot
+  use_wandb: true
+  wandb_project: xuannv-embedding-v1
+  wandb_run_name: china_p10c_pilot
+model:
+  embed_dim: 64
+  stem_dim: 32
+  num_months: 6
+  ref_year: 2025
+  ref_month: 12
+  input_sources:
+    s2:
+      channels: 12
+      role: temporal
+    s1:
+      channels: 2
+      role: temporal
+    landsat:
+      channels: 7
+      role: temporal
+    highres_optical:
+      channels: 3
+      role: highres
+    highres_sar:
+      channels: 1
+      role: highres
+  target_heads:
+    s2_recon:
+      source: s2
+      loss_type: continuous
+      channels: 12
+      weight: 0.8
+    s1_recon:
+      source: s1
+      loss_type: continuous
+      channels: 2
+      weight: 0.25
+    landsat_recon:
+      source: landsat
+      loss_type: continuous
+      channels: 7
+      weight: 0.45
+    worldcover:
+      source: worldcover
+      loss_type: categorical
+      channels: 11
+      weight: 0.45
+    highres_optical_recon:
+      source: highres_optical
+      loss_type: continuous
+      channels: 3
+      weight: 0.9
+    highres_sar_recon:
+      source: highres_sar
+      loss_type: continuous
+      channels: 1
+      weight: 0.35
+  stp:
+    space_dim: 512
+    time_dim: 256
+    precision_dim: 128
+    precision_scale: 1
+    num_blocks: 6
+    num_heads: 8
+    temporal_fusion: gated_sum
+    time_attention_mode: full
+    highres_fusion_to_embedding: true
+training:
+  epochs: 800
+  lr: 2.0e-6
+  weight_decay: 0.05
+  warmup_epochs: 30
+  gradient_accumulation_steps: 2
+  save_every: 200
+  eval_every: 20
+  amp: true
+  gradient_checkpointing: true
+  log_every: 50
+  uniformity_weight: 0.06
+  uniformity_warmup_epochs: 60
+  uniformity_temperature: 2.0
+  semantic_probe_weight: 0.14
+  semantic_probe_warmup_epochs: 80
+  semantic_probe_tasks:
+    - osm_building
+    - osm_major_road
+    - osm_minor_road
+    - osm_rail
+    - osm_water
+    - osm_green
+    - osm_agriculture
+    - osm_residential
+    - osm_commercial
+    - osm_industrial
+    - osm_construction
+    - osm_path_walk
+    - osm_playground
+  semantic_probe_task_weights:
+    osm_building: 1.3
+    osm_major_road: 1.4
+    osm_minor_road: 1.2
+    osm_rail: 0.8
+    osm_water: 1.3
+    osm_green: 0.8
+    osm_agriculture: 0.8
+    osm_residential: 0.6
+    osm_commercial: 0.6
+    osm_industrial: 0.6
+    osm_construction: 0.6
+    osm_path_walk: 0.6
+    osm_playground: 0.5
+  semantic_probe_pos_weight: 2.0
+  semantic_probe_pos_weights:
+    osm_building: 3
+    osm_major_road: 3.5
+    osm_minor_road: 3.5
+    osm_rail: 3
+    osm_water: 2
+    osm_green: 1.8
+    osm_agriculture: 2.5
+    osm_residential: 1.8
+    osm_commercial: 2.5
+    osm_industrial: 2.5
+    osm_construction: 2.5
+    osm_path_walk: 3.5
+    osm_playground: 2
+  semantic_probe_hidden_dim: 0
+  semantic_probe_hard_negative_ratio: 0.02
+  semantic_probe_hard_negative_weight: 0.35
+  semantic_probe_hard_negative_warmup_epochs: 120
+  input_masking:
+    enabled: true
+    drop_availability_masks: false
+    modality_dropout_probs:
+      s2: 0.18
+      s1: 0.35
+      landsat: 0.35
+    month_dropout_prob: 0.65
+    max_months_per_sample: 4
+    spatial_block_prob: 0.65
+    spatial_block_size: 16
+    spatial_block_ratio: 0.32
+data:
+  months:
+    - 2025-12
+    - 2026-01
+    - 2026-02
+    - 2026-03
+    - 2026-04
+    - 2026-05
+  batch_size: 3
+  num_workers: 8
+  patch_size: 128
+  datasets:
+    - region: china_pilot
+      manifest_path: /data/xuannv_embedding/processed/china_p10c_pilot/manifest.jsonl
+      statistics_dir: /data/xuannv_embedding/statistics/china_p10c_pilot
+      patch_grid_path: /data/xuannv_embedding/modelscope_upload/china_full_grid_tenfold_v3_20260819/releases/china-full-grid-tenfold-v3-20260819/tenfold_partition_manifest.json
+      source_map:
+        s2: s2
+        s1: s1
+        landsat: landsat
+        worldcover: worldcover
+        highres_optical: highres_optical
+        highres_sar: highres_sar
+      supervised_label_roots:
+        osm_building: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_building
+        osm_major_road: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_major_road
+        osm_minor_road: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_minor_road
+        osm_rail: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_rail
+        osm_water: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_water
+        osm_green: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_green
+        osm_agriculture: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_agriculture
+        osm_residential: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_residential
+        osm_commercial: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_commercial
+        osm_industrial: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_industrial
+        osm_construction: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_construction
+        osm_path_walk: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_path_walk
+        osm_playground: /data/xuannv_embedding/processed/china_p10c_pilot/labels/osm_playground
+      sampling_weight: 1.0
+

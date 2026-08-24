@@ -165,6 +165,11 @@ def test_aef_model_uses_native_resolution_highres_encoder() -> None:
         embed_dim,
         target_heads={"s2_recon": ("continuous", 10)},
         num_space_heads=2,
+        source_roles={
+            "s2": "temporal",
+            "highres_optical_haidian": "highres",
+            "highres_sar_haidian": "highres",
+        },
     )
 
     assert hasattr(model, "highres_encoders")
@@ -175,6 +180,30 @@ def test_aef_model_uses_native_resolution_highres_encoder() -> None:
     for encoder in model.highres_encoders.values():
         assert isinstance(encoder, NativeResolutionHighResEncoder)
         assert encoder.out_channels == embed_dim
+
+
+def test_aef_model_uses_explicit_source_roles_instead_of_names() -> None:
+    """高分源角色必须来自合同；source 名称本身不携带执行语义。"""
+    model = AEFModel(
+        {"highres_named_but_temporal": 2, "aerial": 3},
+        embed_dim=8,
+        target_heads={},
+        stem_dim=8,
+        stp={
+            "space_dim": 16,
+            "time_dim": 16,
+            "precision_dim": 16,
+            "num_blocks": 1,
+            "num_heads": 2,
+        },
+        source_roles={
+            "highres_named_but_temporal": "temporal",
+            "aerial": "highres",
+        },
+    )
+
+    assert set(model.temporal_stem_bank.encoders) == {"highres_named_but_temporal"}
+    assert set(model.highres_encoders) == {"aerial"}
 
 
 def test_stp_precision_operator_preserves_channels_last_layout_with_zero_convs() -> None:
@@ -614,6 +643,13 @@ def test_aef_model_forward() -> None:
         target_heads,
         num_space_heads=2,
         num_months=num_months,
+        source_roles={
+            "s2": "temporal",
+            "s1": "temporal",
+            "landsat": "temporal",
+            "highres_optical_haidian": "highres",
+            "highres_sar_haidian": "highres",
+        },
     )
 
     batch_size, time_steps, height, width = 2, 4, 16, 16
@@ -793,6 +829,7 @@ def test_aef_model_can_disable_highres_fusion_to_embedding() -> None:
             "highres_fusion_to_embedding": False,
         },
         num_months=num_months,
+        source_roles={"s2": "temporal", "highres_optical_haidian": "highres"},
     )
     model.eval()
 
@@ -841,6 +878,7 @@ def test_aef_model_highres_fusion_changes_embedding() -> None:
             "highres_fusion_to_embedding": True,
         },
         num_months=num_months,
+        source_roles={"s2": "temporal", "highres_optical_haidian": "highres"},
     )
     model.eval()
 

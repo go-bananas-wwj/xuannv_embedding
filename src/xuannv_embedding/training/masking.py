@@ -97,7 +97,7 @@ def _drop_months(
     temporal_sources = [
         source
         for source, frames in source_frames.items()
-        if not source.startswith("highres") and frames.dim() == 5 and frames.shape[1] > 0
+        if frames.dim() == 5 and frames.shape[1] > 0
     ]
     if not temporal_sources:
         return stats

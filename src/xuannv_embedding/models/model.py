@@ -58,15 +58,12 @@ class AEFModel(nn.Module):
         ref_year: int = 2025,
         ref_month: int = 1,
         gradient_checkpointing: bool = False,
+        source_roles: dict[str, str] | None = None,
     ) -> None:
         """初始化 AEFModel。
 
         Args:
-            sensor_channels: 数据源到输入通道数的映射，例如
-                ``{"s2": 12, "s1": 2, "landsat": 7,
-                "highres_optical_haidian": 4, "highres_sar_haidian": 1}``。
-                若使用高分辨率融合，需要为每个以 ``"highres"`` 开头的 source
-                注册对应的通道数。
+            sensor_channels: 规范 source 到输入通道数的映射。
             embed_dim: 统一嵌入维度，也是最终 embedding_map 的通道数。
             target_heads: 解码器配置，格式为 ``name -> (kind, channels)``，
                 其中 ``kind`` 为 ``"continuous"`` 或 ``"categorical"``。
@@ -78,6 +75,8 @@ class AEFModel(nn.Module):
             ref_year: 月度 bin 起始年份，应与数据集首月一致。
             ref_month: 月度 bin 起始月份，应与数据集首月一致。
             gradient_checkpointing: 是否启用 STP 编码器的梯度检查点。
+            source_roles: 规范 source 到 ``temporal`` 或 ``highres`` 的显式映射。
+                未提供时所有 source 均按 temporal 处理；名称不会参与角色推断。
         """
         super().__init__()
         self.sensor_channels = sensor_channels
@@ -87,6 +86,20 @@ class AEFModel(nn.Module):
         self.num_months = num_months
         self.ref_year = ref_year
         self.ref_month = ref_month
+        self.source_roles = source_roles or {source: "temporal" for source in sensor_channels}
+        if set(self.source_roles) != set(sensor_channels):
+            missing = sorted(set(sensor_channels) - set(self.source_roles))
+            extra = sorted(set(self.source_roles) - set(sensor_channels))
+            raise ValueError(
+                f"source_roles 必须与 sensor_channels 键完全一致: missing={missing}, extra={extra}"
+            )
+        invalid_roles = sorted(
+            source
+            for source, role in self.source_roles.items()
+            if role not in {"temporal", "highres"}
+        )
+        if invalid_roles:
+            raise ValueError(f"source_roles 包含非法角色: {invalid_roles}")
 
         stp_cfg = dict(stp) if stp is not None else {}
         stp_defaults = {
@@ -106,11 +119,17 @@ class AEFModel(nn.Module):
         self.stp_cfg = stp_cfg
 
         temporal_channels = {
-            name: ch for name, ch in sensor_channels.items() if not name.startswith("highres")
+            name: channels
+            for name, channels in sensor_channels.items()
+            if self.source_roles[name] == "temporal"
         }
         highres_channels = {
-            name: ch for name, ch in sensor_channels.items() if name.startswith("highres")
+            name: channels
+            for name, channels in sensor_channels.items()
+            if self.source_roles[name] == "highres"
         }
+        if not temporal_channels:
+            raise ValueError("至少需要一个 role=temporal 的 input source")
 
         self.temporal_source_order = list(temporal_channels.keys())
         self.temporal_stem_bank = SensorEncoderBank(temporal_channels, stem_dim)
@@ -198,14 +217,14 @@ class AEFModel(nn.Module):
             raise ValueError("source_frames 不能为空字典")
 
         # 1) 编码每个时序数据源到 stem 维度，并屏蔽缺失时间步。
-        # 跳过时间维度为 0 或未在 sensor_channels 中注册的 source
+        # 跳过时间维度为 0、未注册或角色并非 temporal 的 source
         # （未注册 source 通常作为 target-only 标签，例如 worldcover）。
         temporal_sources = [
             s
             for s in source_frames
-            if not s.startswith("highres")
-            and source_frames[s].shape[1] > 0
+            if source_frames[s].shape[1] > 0
             and s in self.sensor_channels
+            and self.source_roles[s] == "temporal"
         ]
         if not temporal_sources:
             raise ValueError("source_frames 中至少需要一个有效的时序数据源")
@@ -292,6 +311,8 @@ class AEFModel(nn.Module):
             for source, highres_frame in highres_frames.items():
                 if source not in self.sensor_channels:
                     raise KeyError(f"sensor_channels 中未注册 {source!r}，无法融合高分辨率数据")
+                if self.source_roles[source] != "highres":
+                    raise ValueError(f"source {source!r} 未声明 role=highres")
                 highres_mask = highres_masks.get(source)
                 if highres_mask is None:
                     raise KeyError(f"缺少 highres_mask: {source!r}")
