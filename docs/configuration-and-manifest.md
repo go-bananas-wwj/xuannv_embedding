@@ -54,4 +54,6 @@ xuannv data validate --manifest manifest.jsonl
 
 `null` 或空列表表示真实缺失。dataset 会生成 availability=0，并将对应重建监督 mask 置零。
 零 tensor 只用于维度占位，不能被解释为零值观测。配置中的通道、月份或重复规范映射冲突会在
-读数据前失败。
+读数据前失败。只要某区域 manifest 中实际提供了某个连续 source，该区域就必须提供通道数匹配、
+mean/std 全部有限且 std 严格为正的 `<canonical_source>_stats.json`；只有全区域真实缺失的 source
+可以不提供统计量。

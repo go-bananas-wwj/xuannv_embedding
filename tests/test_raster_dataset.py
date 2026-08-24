@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import rasterio
 import torch
 from rasterio.transform import from_origin
@@ -86,7 +87,15 @@ def _config(tmp_path: Path, manifest: Path) -> Config:
                 time_attention_mode="none",
             ),
         ),
-        training=TrainingConfig(1, 1e-3, 0.0, 0, 1, 1, 1, amp=False),
+        training=TrainingConfig(
+            epochs=1,
+            lr=1e-3,
+            weight_decay=0.0,
+            warmup_epochs=0,
+            gradient_accumulation_steps=1,
+            save_every=1,
+            amp=False,
+        ),
         data=DataConfig(["2025-12", "2026-01"], [dataset], 1, 0, 16),
     )
 
@@ -138,3 +147,51 @@ def test_region_raster_dataset_maps_sources_months_statistics_and_missingness(
     paths = export_embedding_batches(system.model, [batch], tmp_path / "export", device="cpu")
     with np.load(paths[0]) as payload:
         assert payload["embedding"].shape == (2, 8, 16, 16)
+
+
+def test_available_continuous_source_requires_statistics(tmp_path: Path) -> None:
+    source = tmp_path / "region-a" / "s2_20251201_patch_1.tif"
+    _write(source, np.ones((2, 16, 16)))
+    manifest = tmp_path / "manifest.jsonl"
+    write_manifest(
+        manifest,
+        [
+            ManifestRecord(
+                "patch-1", "region-a", {"physical_s2": "region-a/s2_20251201_patch_1.tif"}
+            )
+        ],
+        months=["2025-12", "2026-01"],
+    )
+    config = _config(tmp_path, manifest)
+    (config.data.datasets[0].statistics_dir / "s2_stats.json").unlink()
+
+    with pytest.raises(ValueError, match="缺少.*统计量.*s2"):
+        RegionRasterDataset(config, config.data.datasets[0])
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"mean": [NaN, 0.0], "std": [1.0, 1.0]}',
+        '{"mean": [0.0, 0.0], "std": [Infinity, 1.0]}',
+        '{"mean": [0.0, 0.0], "std": [0.0, 1.0]}',
+    ],
+)
+def test_statistics_must_be_finite_with_positive_std(tmp_path: Path, payload: str) -> None:
+    source = tmp_path / "region-a" / "s2_20251201_patch_1.tif"
+    _write(source, np.ones((2, 16, 16)))
+    manifest = tmp_path / "manifest.jsonl"
+    write_manifest(
+        manifest,
+        [
+            ManifestRecord(
+                "patch-1", "region-a", {"physical_s2": "region-a/s2_20251201_patch_1.tif"}
+            )
+        ],
+        months=["2025-12", "2026-01"],
+    )
+    config = _config(tmp_path, manifest)
+    (config.data.datasets[0].statistics_dir / "s2_stats.json").write_text(payload, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="统计量.*有限|std 必须为正"):
+        RegionRasterDataset(config, config.data.datasets[0])

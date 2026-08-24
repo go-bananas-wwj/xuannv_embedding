@@ -88,12 +88,29 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
         for source, source_config in self.config.model.input_sources.items():
             path = self.dataset_config.statistics_dir / f"{source}_stats.json"
             if not path.is_file():
+                available = any(
+                    _paths(self._record_value(record, source)) for record in self.records
+                )
+                if available:
+                    raise ValueError(
+                        f"区域 {self.dataset_config.region!r} 的可用 source {source!r} "
+                        f"缺少归一化统计量: {path}"
+                    )
                 continue
-            value = json.loads(path.read_text(encoding="utf-8"))
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError(f"无法读取统计量: {path}: {exc}") from exc
+            if not isinstance(value, dict):
+                raise ValueError(f"统计量必须是 JSON object: {path}")
             mean = torch.tensor(value.get("mean", []), dtype=torch.float32)
             std = torch.tensor(value.get("std", []), dtype=torch.float32)
             if len(mean) != source_config.channels or len(std) != source_config.channels:
                 raise ValueError(f"统计量通道冲突: {path}")
+            if not bool(torch.isfinite(mean).all().item()) or not bool(
+                torch.isfinite(std).all().item()
+            ):
+                raise ValueError(f"统计量 mean/std 必须全部有限: {path}")
             if bool((std <= 0).any().item()):
                 raise ValueError(f"统计量 std 必须为正: {path}")
             result[source] = (mean[:, None, None], std[:, None, None])
