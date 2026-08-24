@@ -635,3 +635,15 @@ def test_overlap_audit_does_not_project_bbox_boundary_touches(
         )
     finally:
         connection.close()
+
+
+def test_vectorized_cross_zone_groups_count_each_positive_overlap_once() -> None:
+    count, maximum = MODULE._audit_cross_zone_geometry_groups(
+        {
+            32649: [box(0.0, 0.0, 1.0, 1.0), box(3.0, 0.0, 4.0, 1.0)],
+            32650: [box(0.25, 0.0, 1.25, 1.0), box(5.0, 0.0, 6.0, 1.0)],
+        }
+    )
+
+    assert count == 1
+    assert maximum == pytest.approx(0.75)

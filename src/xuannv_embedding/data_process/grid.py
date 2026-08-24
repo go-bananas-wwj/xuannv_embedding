@@ -796,6 +796,106 @@ def _audit_overlap(
     )
 
 
+def _audit_cross_zone_geometry_groups(
+    geometries_by_epsg: Mapping[int, Iterable[Any]],
+) -> tuple[int, float]:
+    """Audit every positive-area overlap between adjacent UTM geometry groups."""
+    import numpy as np
+    import shapely
+    from shapely import STRtree
+
+    to_equal_area = Transformer.from_crs(4326, 6933, always_xy=True)
+    violation_count = 0
+    maximum_fraction = 0.0
+    epsgs = sorted(geometries_by_epsg)
+    for left_epsg, right_epsg in zip(epsgs, epsgs[1:], strict=False):
+        if right_epsg - left_epsg != 1:
+            continue
+        left = np.asarray(list(geometries_by_epsg[left_epsg]), dtype=object)
+        right = np.asarray(list(geometries_by_epsg[right_epsg]), dtype=object)
+        if len(left) == 0 or len(right) == 0:
+            continue
+        pairs = STRtree(right).query(left, predicate="intersects")
+        if pairs.shape[1] == 0:
+            continue
+        left_projected = shapely.transform(
+            left[pairs[0]], to_equal_area.transform, interleaved=False
+        )
+        right_projected = shapely.transform(
+            right[pairs[1]], to_equal_area.transform, interleaved=False
+        )
+        overlap_areas = shapely.area(shapely.intersection(left_projected, right_projected))
+        positive = overlap_areas > 0
+        if not np.any(positive):
+            continue
+        fractions = overlap_areas[positive] / np.minimum(
+            shapely.area(left_projected[positive]), shapely.area(right_projected[positive])
+        )
+        violation_count += int(np.count_nonzero(fractions > CROSS_ZONE_OVERLAP_FRACTION))
+        maximum_fraction = max(maximum_fraction, float(np.max(fractions)))
+    return violation_count, maximum_fraction
+
+
+def _read_geometry_paths(paths: Iterable[Path], batch_size: int) -> list[Any]:
+    """Read only WKB geometry for one bounded UTM zone."""
+    import pyarrow.parquet as pq
+    import shapely
+
+    geometries: list[Any] = []
+    for path in paths:
+        parquet_file = pq.ParquetFile(path)
+        if "geometry" not in parquet_file.schema_arrow.names:
+            raise ValueError(f"{path} is missing audit column: geometry")
+        for batch in parquet_file.iter_batches(columns=["geometry"], batch_size=batch_size):
+            values = batch.column(0).to_numpy(zero_copy_only=False)
+            geometries.extend(shapely.from_wkb(values).tolist())
+    return geometries
+
+
+def _audit_cross_zone_parquet(paths: Iterable[Path], batch_size: int) -> tuple[int, float]:
+    """Stream adjacent UTM zones and audit their complete cross-zone overlap relation."""
+    paths_by_epsg: dict[int, list[Path]] = defaultdict(list)
+    for path in paths:
+        grid_id = path.parent.name
+        if not grid_id.startswith("utm") or not grid_id.endswith("n"):
+            raise ValueError(f"cannot derive UTM EPSG from grid partition: {path}")
+        paths_by_epsg[32600 + int(grid_id[3:-1])].append(path)
+
+    total_count = 0
+    maximum_fraction = 0.0
+    previous_epsg: int | None = None
+    previous_geometries: list[Any] | None = None
+    for grid_epsg in sorted(paths_by_epsg):
+        geometries = _read_geometry_paths(sorted(paths_by_epsg[grid_epsg]), batch_size)
+        if previous_epsg is not None and previous_geometries is not None:
+            count, maximum = _audit_cross_zone_geometry_groups(
+                {previous_epsg: previous_geometries, grid_epsg: geometries}
+            )
+            total_count += count
+            maximum_fraction = max(maximum_fraction, maximum)
+        previous_epsg = grid_epsg
+        previous_geometries = geometries
+    return total_count, maximum_fraction
+
+
+def _audit_same_zone_overlap_fallback(
+    connection: sqlite3.Connection, paths: Iterable[Path], batch_size: int
+) -> int:
+    """Retain diagnostic overlap counts when non-canonical geometry is encountered."""
+    count = 0
+    to_equal_area = Transformer.from_crs(4326, 6933, always_xy=True)
+    for row in _iter_parquet_rows(paths, ["grid_epsg", "parent_key", "geometry"], batch_size):
+        same_zone, _, _ = _audit_overlap(
+            connection,
+            from_wkb(row["geometry"]),
+            int(row["grid_epsg"]),
+            str(row["parent_key"]),
+            to_equal_area,
+        )
+        count += same_zone
+    return count
+
+
 def assess_utm_seam_overlap_policy(
     *,
     overlap_pair_count: int,
@@ -1087,7 +1187,6 @@ def audit_grid_package(
 
     counters = Counter()
     max_footprint_coordinate_difference = 0.0
-    to_equal_area = Transformer.from_crs(4326, 6933, always_xy=True)
     temporary_parent = output_root.parent if output_root.parent.exists() else None
     with tempfile.TemporaryDirectory(
         prefix=".china-full-grid-audit-", dir=temporary_parent
@@ -1163,19 +1262,6 @@ def audit_grid_package(
                         > AUDIT_AREA_TOLERANCE_M2
                     ):
                         counters["invalid_geometry_count"] += 1
-                same_zone_count, cross_zone_count, overlap_fraction = _audit_overlap(
-                    connection,
-                    geometry,
-                    grid_epsg,
-                    parent_key_value,
-                    to_equal_area,
-                    check_overlap=True,
-                )
-                counters["same_zone_positive_overlap_count"] += same_zone_count
-                counters["cross_zone_overlap_violation_count"] += cross_zone_count
-                counters["max_cross_zone_overlap_fraction"] = max(
-                    counters["max_cross_zone_overlap_fraction"], overlap_fraction
-                )
                 connection.execute(
                     """
                     INSERT OR IGNORE INTO canonical_rows(parent_key, metadata_hash, geometry_hash)
@@ -1184,6 +1270,16 @@ def audit_grid_package(
                     (parent_key_value, _metadata_hash(row), actual_footprint_hash),
                 )
             connection.commit()
+            cross_zone_count, maximum_cross_zone_fraction = _audit_cross_zone_parquet(
+                all_paths, batch_size
+            )
+            counters["cross_zone_overlap_violation_count"] = cross_zone_count
+            counters["max_cross_zone_overlap_fraction"] = maximum_cross_zone_fraction
+            if counters["footprint_coordinate_mismatch_count"]:
+                counters["same_zone_positive_overlap_count"] = _audit_same_zone_overlap_fallback(
+                    connection, all_paths, batch_size
+                )
+                connection.commit()
 
             for partition in ("sampled", "unsampled"):
                 for hashed in _iter_hashed_parquet_rows(
