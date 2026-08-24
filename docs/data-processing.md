@@ -24,6 +24,8 @@ xuannv data validate     审计 manifest 或父网格包
 
 每个命令使用 `--help` 查看精确参数。`grid` 和 `materialize` 拒绝覆盖完成目录；批次先写入临时
 位置，再原子发布。物化失败保留可识别的 partial 状态和 fingerprint，重跑必须匹配同一输入。
+fingerprint 覆盖 patch 身份与两套坐标边界、月份、物化策略、像元/尺寸合同、source/QA schema，
+以及每个冻结 STAC catalog JSONL 的大小和 SHA-256；任一项变化都拒绝复用旧 partial。
 
 ## 全国不变量
 

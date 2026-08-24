@@ -714,16 +714,58 @@ def _create_arrays(
 
 
 def _fingerprint(
-    points: list[Patch], months: list[str], max_clean_scenes: int, strategy: str
+    points: list[Patch],
+    months: list[str],
+    max_clean_scenes: int,
+    strategy: str,
+    catalog_root: Path,
 ) -> str:
+    catalog_digests: dict[str, dict[str, int | str]] = {}
+    for source in SOURCES:
+        for month in months:
+            path = catalog_root / source / month / "items.jsonl"
+            digest = hashlib.sha256()
+            try:
+                with path.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            except OSError as exc:
+                raise FileNotFoundError(f"catalog fingerprint input unavailable: {path}") from exc
+            catalog_digests[f"{source}/{month}/items.jsonl"] = {
+                "sha256": digest.hexdigest(),
+                "size_bytes": path.stat().st_size,
+            }
+    source_schema = {
+        source: {
+            "assets": list(config["assets"]),
+            "categorical": sorted(config["categorical"]),
+            "quality_asset": config["quality_asset"],
+            "min_clear_fraction": config["min_clear_fraction"],
+        }
+        for source, config in SOURCES.items()
+    }
     payload = {
-        "patch_ids": [patch.patch_id for patch in points],
-        "months": months,
+        "fingerprint_schema_version": "china_v1_materialization_input_v2",
+        "patches": [
+            {
+                "patch_id": patch.patch_id,
+                "epsg": patch.epsg,
+                "bounds": list(patch.bounds),
+                "wgs84_bounds": list(patch.wgs84_bounds),
+            }
+            for patch in points
+        ],
+        "months": list(months),
         "max_clean_scenes": max_clean_scenes,
         "strategy": strategy,
-        "quality_thresholds": {source: SOURCES[source]["min_clear_fraction"] for source in SOURCES},
+        "chip_pixels": CHIP_PIXELS,
+        "chip_side_meters": CHIP_SIDE_METERS,
+        "source_schema": source_schema,
+        "catalog_schema_version": "stac-items-jsonl-v1",
+        "catalogs": catalog_digests,
     }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _record_key(record: dict[str, Any]) -> tuple[str, str, str]:
@@ -778,7 +820,7 @@ def materialize(
         lock_path.mkdir()
     except FileExistsError as exc:
         raise RuntimeError(f"shard is already owned by another worker: {lock_path}") from exc
-    fingerprint = _fingerprint(points, months, max_clean_scenes, "patch")
+    fingerprint = _fingerprint(points, months, max_clean_scenes, "patch", catalog_root)
     try:
         creating = not temporary.exists()
         group = zarr.open_group(str(temporary), mode="w" if creating else "a")
@@ -936,7 +978,7 @@ def materialize_scene_centric(
         lock_path.mkdir()
     except FileExistsError as exc:
         raise RuntimeError(f"shard is already owned by another worker: {lock_path}") from exc
-    fingerprint = _fingerprint(points, months, max_clean_scenes, "scene")
+    fingerprint = _fingerprint(points, months, max_clean_scenes, "scene", catalog_root)
     try:
         creating = not temporary.exists()
         group = zarr.open_group(str(temporary), mode="w" if creating else "a")

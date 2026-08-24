@@ -1,10 +1,43 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import numpy as np
 
 from xuannv_embedding.data_process import materialize as MODULE
+
+
+def _catalog_root(tmp_path, months=("2025-04",)):
+    root = tmp_path / "catalogs"
+    for source in MODULE.SOURCES:
+        for month in months:
+            path = root / source / month
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "items.jsonl").write_text(
+                json.dumps({"id": f"{source}-{month}", "assets": {}}) + "\n",
+                encoding="utf-8",
+            )
+    return root
+
+
+def test_materialization_fingerprint_binds_geometry_catalog_and_schema(
+    tmp_path, monkeypatch
+) -> None:
+    catalog_root = _catalog_root(tmp_path)
+    patch = MODULE.Patch("p", 32647, (0.0, 0.0, 1280.0, 1280.0), (100.0, 30.0, 100.1, 30.1))
+    baseline = MODULE._fingerprint([patch], ["2025-04"], 2, "patch", catalog_root)
+
+    shifted = replace(patch, bounds=(1280.0, 0.0, 2560.0, 1280.0))
+    assert MODULE._fingerprint([shifted], ["2025-04"], 2, "patch", catalog_root) != baseline
+
+    catalog = catalog_root / "s1" / "2025-04" / "items.jsonl"
+    catalog.write_text(catalog.read_text(encoding="utf-8") + "{}\n", encoding="utf-8")
+    changed_catalog = MODULE._fingerprint([patch], ["2025-04"], 2, "patch", catalog_root)
+    assert changed_catalog != baseline
+
+    monkeypatch.setitem(MODULE.SOURCES["s1"], "min_clear_fraction", 0.5)
+    assert MODULE._fingerprint([patch], ["2025-04"], 2, "patch", catalog_root) != changed_catalog
 
 
 def test_patch_bounds_reconstruct_the_grid_cell() -> None:
