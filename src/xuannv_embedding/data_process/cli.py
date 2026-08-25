@@ -208,6 +208,45 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
     return 0 if report.get("passed") is True else 1
 
 
+def local_index_main(argv: Sequence[str] | None = None) -> int:
+    """Index immutable local V2 archives and write deterministic registries."""
+    parser = argparse.ArgumentParser(prog="xuannv data local-index")
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--skip-sha256",
+        action="store_true",
+        help="仅用于快速诊断；正式锁定不得跳过 archive SHA256",
+    )
+    args = parser.parse_args(argv)
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.local_inventory import build_local_archive_inventory
+    from xuannv_embedding.data_process.preflight import index_local_highres_and_auxiliary
+
+    config = V2Config.from_yaml(args.config)
+    report = build_local_archive_inventory(config, calculate_sha256=not args.skip_sha256)
+    report.update(index_local_highres_and_auxiliary(config))
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def preflight_main(argv: Sequence[str] | None = None) -> int:
+    """Audit V2 local pixels, processing state, and declared spatial contracts."""
+    parser = argparse.ArgumentParser(prog="xuannv data preflight")
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--max-pixel-audits", type=int, default=96)
+    args = parser.parse_args(argv)
+    if args.max_pixel_audits <= 0:
+        parser.error("--max-pixel-audits 必须大于 0")
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.preflight import run_preflight
+
+    report = run_preflight(V2Config.from_yaml(args.config), max_pixel_audits=args.max_pixel_audits)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report["passed"] else 1
+
+
 def dispatch(command: str, argv: Sequence[str]) -> int:
     """延迟导入可选地理依赖并转发统一命令。"""
     if command == "grid":
@@ -235,4 +274,8 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
         return manifest_main(argv)
     if command == "validate":
         return validate_main(argv)
+    if command == "local-index":
+        return local_index_main(argv)
+    if command == "preflight":
+        return preflight_main(argv)
     raise ValueError(f"未知 data command: {command}")

@@ -145,3 +145,7 @@ def test_shipped_v2_configs_are_offline_and_use_real_s2_bands() -> None:
     assert all(not config.network_policy.allow_remote_pixels for config in configs)
     assert all(config.products["s2_local"].bands[-2:] == ("B11", "B12") for config in configs)
     assert all("B09" not in config.products["s2_local"].bands for config in configs)
+    assert configs[1].paths.product_roots["planetscope_3m_sr"] == Path(
+        "/data/xuannv_embedding/raw/haidian/highres_optical/_unzipped"
+    )
+    assert "harbin_0_5m" in configs[1].paths.legacy_unverified_roots

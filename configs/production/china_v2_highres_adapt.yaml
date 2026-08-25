@@ -3,6 +3,13 @@ paths:
   data_root: /data2/xuannv_embedding/v2
   source_root: /data2/china_xuannv_embedding/data
   grid_package: /data/xuannv_embedding/outputs/china_full_1280m_grid_package_v1_20260805
+  product_roots:
+    planetscope_3m_sr: /data/xuannv_embedding/raw/haidian/highres_optical/_unzipped
+  auxiliary_roots:
+    aef: /data2/china_xuannv_embedding/data/aef-labels
+    static: /data2/china_xuannv_embedding/data/static
+  legacy_unverified_roots:
+    harbin_0_5m: /data/xuannv_embedding/processed/harbin/patches/highres_optical
 network_policy:
   allow_remote_metadata: false
   allow_remote_pixels: false

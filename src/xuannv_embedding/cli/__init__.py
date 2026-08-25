@@ -64,6 +64,8 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
         "preprocess": "对齐并切分多源栅格",
         "manifest": "生成带摘要的 manifest v1",
         "validate": "审计 manifest 或父网格包",
+        "local-index": "索引本地 V2 月度 ZIP 与高分场景",
+        "preflight": "训练前审计 V2 数据合同与像元质量",
     }
     for command, help_text in descriptions.items():
         action = actions.add_parser(command, help=help_text, add_help=False)

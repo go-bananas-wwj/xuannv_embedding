@@ -808,6 +808,9 @@ class V2PathsConfig:
     data_root: Path
     source_root: Path
     grid_package: Path
+    product_roots: dict[str, Path] = field(default_factory=dict)
+    auxiliary_roots: dict[str, Path] = field(default_factory=dict)
+    legacy_unverified_roots: dict[str, Path] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -947,14 +950,36 @@ def _parse_v2_paths(value: Any) -> V2PathsConfig:
     raw = _strict(
         value,
         "paths",
-        allowed={"data_root", "source_root", "grid_package"},
+        allowed={
+            "data_root",
+            "source_root",
+            "grid_package",
+            "product_roots",
+            "auxiliary_roots",
+            "legacy_unverified_roots",
+        },
         required={"data_root", "source_root", "grid_package"},
     )
     return V2PathsConfig(
         data_root=Path(_string(raw["data_root"], "paths.data_root")),
         source_root=Path(_string(raw["source_root"], "paths.source_root")),
         grid_package=Path(_string(raw["grid_package"], "paths.grid_package")),
+        product_roots=_parse_path_mapping(raw.get("product_roots", {}), "paths.product_roots"),
+        auxiliary_roots=_parse_path_mapping(
+            raw.get("auxiliary_roots", {}), "paths.auxiliary_roots"
+        ),
+        legacy_unverified_roots=_parse_path_mapping(
+            raw.get("legacy_unverified_roots", {}), "paths.legacy_unverified_roots"
+        ),
     )
+
+
+def _parse_path_mapping(value: Any, section: str) -> dict[str, Path]:
+    raw = _mapping(value, section)
+    return {
+        _string(name, f"{section}.key"): Path(_string(path, f"{section}.{name}"))
+        for name, path in raw.items()
+    }
 
 
 def _parse_network_policy(value: Any) -> NetworkPolicyConfig:
