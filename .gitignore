@@ -19,3 +19,4 @@ dist/
 *.pt
 *.pth
 *.ckpt
+fusion_result.json
