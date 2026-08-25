@@ -127,9 +127,10 @@ def test_data_manifest_rejects_changed_indexed_highres_content(tmp_path: Path) -
         ),
         scenes,
     )
+    patch_row = pq.read_table(scenes).to_pylist()[0]
+    patch_row.update({"patch_id": "p1", "scene_id": "s1"})
     pq.write_table(
-        pa.Table.from_pylist([{"patch_id": "p1", "scene_id": "s1"}]),
-        scenes.with_name("patch_observations.parquet"),
+        pa.Table.from_pylist([patch_row]), scenes.with_name("patch_observations.parquet")
     )
 
     first = data_manifest_sha256(tmp_path)

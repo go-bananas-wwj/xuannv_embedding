@@ -78,14 +78,14 @@ def data_manifest_sha256(root: Path, *, config: V2Config | None = None) -> str:
     if label_tasks is not None:
         label_indexes = [path for path in label_indexes if path.parent.name in label_tasks]
     for path in highres_scenes:
-        _verify_indexed_content(
-            path,
-            (
-                ("image_path", "image_size_bytes", "image_sha256"),
-                ("qa_path", "qa_size_bytes", "qa_sha256"),
-            ),
+        content_fields = (
+            ("image_path", "image_size_bytes", "image_sha256"),
+            ("qa_path", "qa_size_bytes", "qa_sha256"),
         )
-        paths.extend((path, path.with_name("patch_observations.parquet")))
+        patch_index = path.with_name("patch_observations.parquet")
+        _verify_indexed_content(path, content_fields)
+        _verify_indexed_content(patch_index, content_fields)
+        paths.extend((path, patch_index))
     for path in label_indexes:
         _verify_indexed_content(path, (("label_path", "label_size_bytes", "label_sha256"),))
         paths.append(path)
