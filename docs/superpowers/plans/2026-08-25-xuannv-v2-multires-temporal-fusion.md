@@ -14,6 +14,26 @@
 
 **Tech Stack:** Python 3.11、PyTorch、torch-npu、Rasterio、PyArrow、Zarr、pytest。
 
+## 实施状态（2026-08-25）
+
+Stage 01—06 已完成并分别推送 annotated tag。最终门禁为 `307 passed`，Black、Ruff、
+仓库内容检查和发行包构建全部通过。真实 8×Ascend 910B smoke 使用两个独立 `torchrun`
+进程完成 100 optimizer step，在第 50 step 跨进程恢复；8 个 rank 同步，恢复首批 loss
+差值为 0，峰值显存约 3.35GB，吞吐约 21.08 sample/s。
+
+本轮对数据事实作了两项必要修正：
+
+- 本地可验证高分数据只有海淀 PlanetScope 3m。0.5m/2m/5m 由合同和合成单元测试覆盖，
+  不宣称完成了不存在的真实产品验证。PlanetScope 日期为 2025—2026，不能因果接入
+  2020—2021 全国时序，因此使用独立 `highres_real.parquet` 和真实高分 mini 验证。
+- 现有全国 dense 波段统计是显式的 smoke 抽样统计，不冒充生产全量统计。生产数据集会
+  拒绝不完整统计；启动全国 62,000 样本长训前，必须运行无
+  `--max-observations` 限制的全量统计任务。高分 PlanetScope 训练划分统计已完整生成。
+
+由于 ZIP 直接读取的数据等待比例超过 10%，已按计划生成并校验本地 Zarr cache 后重跑；
+最终数据等待比例约 19.9%，因此后续全国长训仍需继续做 I/O profiling，但不影响本轮
+正确性 smoke 的通过结论。全程没有下载像元。
+
 ## Global Constraints
 
 - 工作分支固定为 `wwj`，每阶段测试、原子提交、push、annotated tag；禁止 force-push。
@@ -146,37 +166,37 @@ gradient_checkpointing: true
 
 ### Stage 01 — `wwj-stage-01-contract`
 
-- [ ] 建立隔离 `wwj` 工作区并提交本计划。
-- [ ] 以失败测试驱动 V2 配置、产品、时间、网络和 profile 合同。
-- [ ] 配置门禁通过后 commit、push、创建 Draft PR、打 annotated tag。
+- [x] 建立隔离 `wwj` 工作区并提交本计划。
+- [x] 以失败测试驱动 V2 配置、产品、时间、网络和 profile 合同。
+- [x] 配置门禁通过后 commit、push、创建 Draft PR、打 annotated tag。
 
 ### Stage 02 — `wwj-stage-02-data`
 
-- [ ] 实现 ZIP inventory、成员索引、preflight、split/mini/smoke registry。
-- [ ] 运行 16 patch、2020-01/2021-01 的真实 data mini，网络请求为零。
+- [x] 实现 ZIP inventory、成员索引、preflight、split/mini/smoke registry。
+- [x] 运行 16 patch、2020-01/2021-01 的真实 data mini，网络请求为零。
 
 ### Stage 03 — `wwj-stage-03-model`
 
-- [ ] 实现独立时间线、显式输出区间、稠密 adapter 和高分双记忆。
-- [ ] synthetic mini 使用不等长 S2/S1/Landsat、多景 2m/5m 和两个输出区间；
+- [x] 实现独立时间线、显式输出区间、稠密 adapter 和高分双记忆。
+- [x] synthetic mini 使用不等长 S2/S1/Landsat、多景 2m/5m 和两个输出区间；
   输出 `[2,2,64,32,32]`，causal 无未来泄漏，高分原生卷积梯度非零。
-- [ ] 生产 profile 参数量位于 90M—120M。
+- [x] 生产 profile 参数量位于 90M—120M。
 
 ### Stage 04 — `wwj-stage-04-training`
 
-- [ ] real mini：16 patch、两个月、batch 2、训练 2 step、保存恢复后再训练 1 step。
-- [ ] 单 batch 过拟合 20 step 总损失至少下降 5%；checkpoint 记录数据/config/Git SHA。
+- [x] real mini：16 patch、两个月、batch 2、训练 2 step、保存恢复后再训练 1 step。
+- [x] 单 batch 过拟合 20 step 总损失至少下降 5%；checkpoint 记录数据/config/Git SHA。
 
 ### Stage 05 — `wwj-stage-05-export`
 
-- [ ] 652 个真实样本、全 24 月、365 天上下文训练 50 step，验证恢复和缺失模态。
-- [ ] 输出 sharded Zarr 与 `catalog.parquet`，完整记录来源和输出区间。
+- [x] 652 个真实样本、全 24 月、365 天上下文训练 50 step，验证恢复和缺失模态。
+- [x] 输出 sharded Zarr 与 `catalog.parquet`，完整记录来源和输出区间。
 
 ### Stage 06 — `wwj-stage-06-npu-smoke`
 
-- [ ] 8×910B、每卡 microbatch 1、梯度累积 8、AMP/checkpointing，运行 100 step；
+- [x] 8×910B、每卡 microbatch 1、梯度累积 8、AMP/checkpointing，运行 100 step；
   第 50 step 保存恢复，记录吞吐、数据等待、显存和 loss。
-- [ ] 实际不可见 8 张 NPU 时不得伪造结果，保留可运行合同并明确报告硬件阻断。
+- [x] 实际检测并使用 8 张 NPU；保存各 rank RNG/sampler 状态并验证跨进程恢复。
 
 每个阶段执行：
 
