@@ -266,6 +266,11 @@ def load_v2_training_checkpoint(
         model.load_state_dict(state["model"], strict=True)
         criterion.load_state_dict(state["criterion"], strict=True)
         optimizer.load_state_dict(state["optimizer"])
+        target_device = torch.device(device)
+        for optimizer_state in optimizer.state.values():
+            for name, value in optimizer_state.items():
+                if isinstance(value, torch.Tensor):
+                    optimizer_state[name] = value.to(target_device)
         if scheduler is not None and state["scheduler"] is not None:
             scheduler.load_state_dict(state["scheduler"])
     except (KeyError, RuntimeError, ValueError) as exc:
