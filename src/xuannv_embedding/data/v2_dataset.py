@@ -13,6 +13,7 @@ import numpy as np
 import pyarrow.parquet as pq
 import torch
 import torch.nn.functional as F
+import zarr
 from rasterio.io import MemoryFile
 from torch.utils.data import Dataset
 
@@ -55,6 +56,8 @@ def _load_statistics(config: V2Config, product_id: str) -> tuple[torch.Tensor, t
 
 
 def _epoch_days(value) -> float:
+    if isinstance(value, (float, int)):
+        return float(value)
     return float(value.timestamp() / 86400.0)
 
 
@@ -93,6 +96,7 @@ class V2LocalZipDataset(Dataset):
         context_days: int | None = None,
         include_targets: bool = True,
         normalize: bool = True,
+        zarr_cache_path: Path | None = None,
     ) -> None:
         if output_selection == "fixed" and not fixed_output_months:
             raise ValueError("fixed output_selection 必须提供 fixed_output_months")
@@ -111,16 +115,61 @@ class V2LocalZipDataset(Dataset):
             registry = registry.slice(0, max_records)
         self.records = registry.to_pylist()
         patch_ids = [str(row["patch_id"]) for row in self.records]
-        filters: list[tuple[str, str, Any]] = [("patch_id", "in", patch_ids)]
-        if january_pair_only:
-            filters.extend([("month", "=", 1), ("year", "in", [2020, 2021])])
-        observations = pq.read_table(
-            config.paths.data_root / "observations" / "index" / "availability.parquet",
-            filters=filters,
-        )
         lookup: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
-        for row in observations.to_pylist():
-            lookup[(str(row["patch_id"]), str(row["product_id"]))].append(row)
+        self._zarr = None
+        self._zarr_patch_index: dict[str, int] = {}
+        if zarr_cache_path is None:
+            filters: list[tuple[str, str, Any]] = [("patch_id", "in", patch_ids)]
+            if january_pair_only:
+                filters.extend([("month", "=", 1), ("year", "in", [2020, 2021])])
+            observations = pq.read_table(
+                config.paths.data_root / "observations" / "index" / "availability.parquet",
+                filters=filters,
+            )
+            for row in observations.to_pylist():
+                lookup[(str(row["patch_id"]), str(row["product_id"]))].append(row)
+        else:
+            self._zarr = zarr.open_group(str(zarr_cache_path), mode="r")
+            if self._zarr.attrs.get("schema_version") != "xuannv_v2_smoke_dense_cache_v1":
+                raise ValueError(f"Zarr cache schema 非法: {zarr_cache_path}")
+            if self._zarr.attrs.get("network_remote_pixels") is not False:
+                raise ValueError(f"Zarr cache 未证明 remote pixels 禁用: {zarr_cache_path}")
+            lock_path = config.paths.data_root / "locks" / "local_archive_sha256.jsonl"
+            lock_sha = hashlib.sha256(lock_path.read_bytes()).hexdigest()
+            if self._zarr.attrs.get("source_archive_lock_sha256") != lock_sha:
+                raise ValueError(f"Zarr cache 与当前 archive lock 不一致: {zarr_cache_path}")
+            cached_patch_ids = [str(value) for value in self._zarr.attrs["patch_ids"]]
+            self._zarr_patch_index = {
+                patch_id: index for index, patch_id in enumerate(cached_patch_ids)
+            }
+            missing_patches = sorted(set(patch_ids) - set(cached_patch_ids))
+            if missing_patches:
+                raise ValueError(f"Zarr cache 缺少 registry patch: {missing_patches[:5]}")
+            years = self._zarr.attrs["years"]
+            months = self._zarr.attrs["months"]
+            starts = self._zarr.attrs["interval_start_days"]
+            ends = self._zarr.attrs["interval_end_days"]
+            available = self._zarr.attrs["available_at_days"]
+            for patch_id in patch_ids:
+                patch_index = self._zarr_patch_index[patch_id]
+                for product_id, product in config.products.items():
+                    if product.role != "dense":
+                        continue
+                    present = self._zarr[product_id]["present"][patch_index]
+                    for month_index, (year, month) in enumerate(zip(years, months, strict=True)):
+                        if january_pair_only and not (month == 1 and year in {2020, 2021}):
+                            continue
+                        lookup[(patch_id, product_id)].append(
+                            {
+                                "year": int(year),
+                                "month": int(month),
+                                "interval_start": float(starts[month_index]),
+                                "interval_end": float(ends[month_index]),
+                                "available_at": float(available[month_index]),
+                                "present": bool(present[month_index]),
+                                "cache_month_index": month_index,
+                            }
+                        )
         self.observations = {
             key: sorted(value, key=lambda row: (row["year"], row["month"]))
             for key, value in lookup.items()
@@ -212,6 +261,18 @@ class V2LocalZipDataset(Dataset):
             self._archives[path] = archive
         return _decode_member(archive, member)
 
+    def _read_row(
+        self, patch_id: str, product_id: str, row: dict[str, Any]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self._zarr is None:
+            return self._read_member(row["archive_path"], row["member_name"])
+        patch_index = self._zarr_patch_index[patch_id]
+        month_index = int(row["cache_month_index"])
+        group = self._zarr[product_id]
+        frame = torch.from_numpy(group["frames"][patch_index, month_index].astype(np.float32))
+        mask = torch.from_numpy(group["masks"][patch_index, month_index].astype(np.float32))
+        return frame, mask
+
     def __getitem__(self, index: int) -> dict[str, Any]:
         record = self.records[index]
         patch_id = str(record["patch_id"])
@@ -251,7 +312,7 @@ class V2LocalZipDataset(Dataset):
             availability = []
             for row in rows_with_padding:
                 if row is not None and row["present"]:
-                    frame, mask = self._read_member(row["archive_path"], row["member_name"])
+                    frame, mask = self._read_row(patch_id, product_id, row)
                 else:
                     frame = torch.zeros(channels, height, width)
                     mask = torch.zeros(1, height, width)
@@ -277,7 +338,7 @@ class V2LocalZipDataset(Dataset):
                 target_pixel_masks = []
                 for row in target_rows:
                     if row["present"]:
-                        frame, mask = self._read_member(row["archive_path"], row["member_name"])
+                        frame, mask = self._read_row(patch_id, product_id, row)
                     else:
                         frame = torch.zeros(channels, height, width)
                         mask = torch.zeros(1, height, width)

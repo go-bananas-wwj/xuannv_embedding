@@ -67,6 +67,7 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
         "local-index": "索引本地 V2 月度 ZIP 与高分场景",
         "preflight": "训练前审计 V2 数据合同与像元质量",
         "statistics": "计算 V2 训练划分的 stored-DN 波段统计量",
+        "local-zarr-cache": "将本地 ZIP 顺序重打包为 smoke Zarr cache",
     }
     for command, help_text in descriptions.items():
         action = actions.add_parser(command, help=help_text, add_help=False)

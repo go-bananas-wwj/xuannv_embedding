@@ -20,3 +20,4 @@ dist/
 *.pth
 *.ckpt
 fusion_result.json
+kernel_meta/

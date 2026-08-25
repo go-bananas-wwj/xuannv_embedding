@@ -277,6 +277,26 @@ def v2_statistics_main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def local_zarr_cache_main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="xuannv data local-zarr-cache")
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--registry", type=Path)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args(argv)
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.v2_zarr_cache import build_smoke_zarr_cache
+
+    config = V2Config.from_yaml(args.config)
+    registry = args.registry or (config.paths.data_root / "registry" / "smoke_620_plus_32.parquet")
+    output = args.output or (
+        config.paths.data_root / "observations" / "dense_2020_2021" / "smoke_652.zarr"
+    )
+    result = build_smoke_zarr_cache(config, registry, output)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def dispatch(command: str, argv: Sequence[str]) -> int:
     """延迟导入可选地理依赖并转发统一命令。"""
     if command == "grid":
@@ -310,4 +330,6 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
         return preflight_main(argv)
     if command == "statistics":
         return v2_statistics_main(argv)
+    if command == "local-zarr-cache":
+        return local_zarr_cache_main(argv)
     raise ValueError(f"未知 data command: {command}")

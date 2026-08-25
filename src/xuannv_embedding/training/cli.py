@@ -676,6 +676,9 @@ def _run_v2_npu_smoke(
         raise ValueError(f"npu-smoke 等效全局 batch 必须为 64，实际 {effective_batch}")
     registry_path = _v2_registry(config, "npu-smoke")
     split_counts = assert_macro_disjoint(registry_path)
+    cache_path = config.paths.data_root / "observations" / "dense_2020_2021" / "smoke_652.zarr"
+    active_cache = cache_path if cache_path.is_dir() else None
+    input_backend = "zarr" if active_cache is not None else "zip"
     dataset = V2LocalZipDataset(
         config,
         registry_path,
@@ -684,6 +687,7 @@ def _run_v2_npu_smoke(
         output_selection="random_single",
         random_seed=42,
         context_days=config.temporal.dense_lookback_days,
+        zarr_cache_path=active_cache,
     )
     sampler = DistributedSampler(
         dataset,
@@ -808,34 +812,40 @@ def _run_v2_npu_smoke(
     matrix = torch.stack(gathered).cpu()
     if not bool((matrix[:, :3] == matrix[0, :3]).all()):
         raise RuntimeError(f"DDP rank step/样本计数不一致: {matrix[:, :3].tolist()}")
+    summary = {
+        "profile": "npu-smoke",
+        "world_size": world_size,
+        "device_name": torch.npu.get_device_name(device),
+        "optimizer_steps": profile.steps,
+        "micro_batches_per_rank": int(matrix[0, 1]),
+        "samples_per_rank": int(matrix[0, 2]),
+        "effective_global_batch": effective_batch,
+        "global_samples": int(matrix[:, 2].sum()),
+        "loss": float(matrix[:, 3].sum() / (world_size * profile.steps)),
+        "data_seconds_sum": float(matrix[:, 4].sum()),
+        "compute_seconds_sum": float(matrix[:, 5].sum()),
+        "data_wait_fraction": float(matrix[:, 4].sum() / (matrix[:, 4].sum() + matrix[:, 5].sum())),
+        "wall_seconds_max": float(matrix[:, 7].max()),
+        "throughput_samples_per_second": float(matrix[:, 2].sum() / matrix[:, 7].max()),
+        "peak_memory_bytes_max": int(matrix[:, 6].max()),
+        "checkpoint_seconds_max": float(matrix[:, 8].max()),
+        "checkpoint_restore_step": boundary_step,
+        "rank_sync_verified": True,
+        "split_counts": split_counts,
+        "config_sha256": config_sha,
+        "data_manifest_sha256": manifest_sha,
+        "git_sha": git_sha,
+        "network_remote_pixels": config.network_policy.allow_remote_pixels,
+        "input_backend": input_backend,
+        "zarr_metadata_sha256": (
+            hashlib.sha256((active_cache / ".zmetadata").read_bytes()).hexdigest()
+            if active_cache is not None
+            else None
+        ),
+        "zarr_repack_required": input_backend == "zip"
+        and float(matrix[:, 4].sum() / (matrix[:, 4].sum() + matrix[:, 5].sum())) > 0.1,
+    }
     if rank == 0:
-        summary = {
-            "profile": "npu-smoke",
-            "world_size": world_size,
-            "device_name": torch.npu.get_device_name(device),
-            "optimizer_steps": profile.steps,
-            "micro_batches_per_rank": int(matrix[0, 1]),
-            "samples_per_rank": int(matrix[0, 2]),
-            "effective_global_batch": effective_batch,
-            "global_samples": int(matrix[:, 2].sum()),
-            "loss": float(matrix[:, 3].sum() / (world_size * profile.steps)),
-            "data_seconds_sum": float(matrix[:, 4].sum()),
-            "compute_seconds_sum": float(matrix[:, 5].sum()),
-            "data_wait_fraction": float(
-                matrix[:, 4].sum() / (matrix[:, 4].sum() + matrix[:, 5].sum())
-            ),
-            "wall_seconds_max": float(matrix[:, 7].max()),
-            "throughput_samples_per_second": float(matrix[:, 2].sum() / matrix[:, 7].max()),
-            "peak_memory_bytes_max": int(matrix[:, 6].max()),
-            "checkpoint_seconds_max": float(matrix[:, 8].max()),
-            "checkpoint_restore_step": boundary_step,
-            "rank_sync_verified": True,
-            "split_counts": split_counts,
-            "config_sha256": config_sha,
-            "data_manifest_sha256": manifest_sha,
-            "git_sha": git_sha,
-            "network_remote_pixels": config.network_policy.allow_remote_pixels,
-        }
         save_v2_training_checkpoint(
             args.output,
             model=system.model,
@@ -850,6 +860,17 @@ def _run_v2_npu_smoke(
             temporal_contract=temporal_contract,
             metrics=summary,
         )
+    dist.barrier()
+    free_memory = torch.tensor(
+        [float(torch.npu.mem_get_info(device)[0])], dtype=torch.float32, device=device
+    )
+    free_by_rank = [torch.zeros_like(free_memory) for _ in range(world_size)]
+    dist.all_gather(free_by_rank, free_memory)
+    export_rank = int(torch.stack(free_by_rank).cpu().argmax().item())
+    product_version = f"xuannv-v2-npu-smoke-{git_sha[:12]}"
+    catalog = config.paths.data_root / "products" / product_version / "catalog.parquet"
+    export_metrics = torch.zeros(2, dtype=torch.float32, device=device)
+    if rank == export_rank:
         export_start = time.perf_counter()
         export_dataset = V2LocalZipDataset(
             config,
@@ -860,6 +881,7 @@ def _run_v2_npu_smoke(
             fixed_output_months=((2020, 12), (2021, 12)),
             context_days=config.temporal.dense_lookback_days,
             include_targets=False,
+            zarr_cache_path=active_cache,
         )
         export_loader = DataLoader(
             export_dataset,
@@ -868,8 +890,7 @@ def _run_v2_npu_smoke(
             num_workers=0,
             collate_fn=collate_v2,
         )
-        product_version = f"xuannv-v2-npu-smoke-{git_sha[:12]}"
-        catalog = export_v2_sharded(
+        written_catalog = export_v2_sharded(
             system.model,
             export_loader,
             config.paths.data_root / "products",
@@ -879,9 +900,14 @@ def _run_v2_npu_smoke(
             config_sha256=config_sha,
             git_sha=git_sha,
         )
-        summary["export_seconds"] = time.perf_counter() - export_start
+        export_metrics[0] = time.perf_counter() - export_start
+        export_metrics[1] = pq.read_metadata(written_catalog).num_rows
+    dist.broadcast(export_metrics, src=export_rank)
+    if rank == 0:
+        summary["export_seconds"] = float(export_metrics[0].cpu())
+        summary["export_rank"] = export_rank
         summary["catalog"] = str(catalog)
-        summary["catalog_rows"] = pq.read_metadata(catalog).num_rows
+        summary["catalog_rows"] = int(export_metrics[1].cpu())
         report_path = config.paths.data_root / "runs" / "npu-smoke" / "metrics.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(
