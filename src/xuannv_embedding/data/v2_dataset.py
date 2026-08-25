@@ -163,8 +163,11 @@ class V2LocalZipDataset(Dataset):
             ]
             if any(bool(candidate["present"]) for candidate in product_rows):
                 eligible.append(row)
+        # All-missing sentinel patches still belong to validation. Selecting a
+        # deterministic interval yields zero source/target masks and a legal
+        # zero-gradient backward pass instead of silently dropping the record.
         if not eligible:
-            raise ValueError(f"{patch_id} 没有任何可监督输出月份")
+            eligible = candidates
         digest = hashlib.sha256(f"{self.random_seed}:{patch_id}".encode("utf-8")).digest()
         return [eligible[int.from_bytes(digest[:8], "big") % len(eligible)]]
 

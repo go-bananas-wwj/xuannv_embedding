@@ -81,6 +81,19 @@ def test_random_output_avoids_month_with_all_dense_products_missing() -> None:
     assert [(row["year"], row["month"]) for row in output] == [(2020, 6)]
 
 
+def test_all_missing_sentinel_still_gets_deterministic_output_interval() -> None:
+    dataset = _bare_dataset()
+    for product in dataset.dense_products:
+        for row in dataset.observations[("p1", product)]:
+            row["present"] = False
+
+    first = dataset._output_rows("p1")
+    second = dataset._output_rows("p1")
+
+    assert len(first) == 1
+    assert first == second
+
+
 def test_statistics_keep_stored_dn_contract_and_normalize_per_band(tmp_path: Path) -> None:
     statistics = tmp_path / "statistics"
     statistics.mkdir()
