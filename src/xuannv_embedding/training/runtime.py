@@ -196,7 +196,21 @@ def train_v2_steps(
         raise ValueError("max_steps 必须是正整数")
     system.to(device)
     system.train()
-    scaler = _grad_scaler(device, amp)
+    # V2 stored-DN inputs are standardized, then run in BF16 on Ascend 910B.
+    # BF16 has FP32-like exponent range and needs no dynamic scaler state.
+    if amp and device.type == "npu":
+        import torch_npu
+
+        def autocast():
+            return torch_npu.npu.amp.autocast(dtype=torch.bfloat16)
+
+        scaler = None
+    else:
+
+        def autocast():
+            return _autocast(device, amp)
+
+        scaler = _grad_scaler(device, amp)
     iterator = iter(batches)
     losses: list[float] = []
     optimizer.zero_grad(set_to_none=True)
@@ -210,7 +224,7 @@ def train_v2_steps(
             except StopIteration as exc:
                 raise ValueError("V2 训练 batches 为空") from exc
         batch = _move(raw_batch, device)
-        with _autocast(device, amp):
+        with autocast():
             result = system(batch)
             loss = result["total"]
         if not bool(torch.isfinite(loss).item()):

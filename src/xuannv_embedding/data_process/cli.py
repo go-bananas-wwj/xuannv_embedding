@@ -247,6 +247,36 @@ def preflight_main(argv: Sequence[str] | None = None) -> int:
     return 0 if report["passed"] else 1
 
 
+def v2_statistics_main(argv: Sequence[str] | None = None) -> int:
+    """Compute deterministic train-split band statistics in stored units."""
+    parser = argparse.ArgumentParser(prog="xuannv data statistics")
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--max-observations", type=int, default=1024)
+    args = parser.parse_args(argv)
+    if args.max_observations <= 0:
+        parser.error("--max-observations 必须大于 0")
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.statistics import compute_v2_archive_statistics
+
+    config = V2Config.from_yaml(args.config)
+    root = config.paths.data_root
+    results = {}
+    for product_id, product_config in config.products.items():
+        if product_config.role != "dense":
+            continue
+        result = compute_v2_archive_statistics(
+            product_config.to_product_spec(product_id),
+            root / "registry" / "split_80_10_10.parquet",
+            root / "observations" / "index" / "local_zip_members.parquet",
+            max_observations=args.max_observations,
+        )
+        _atomic_json(root / "statistics" / f"{product_id}.json", result)
+        results[product_id] = result
+    print(json.dumps(results, ensure_ascii=False, indent=2))
+    return 0
+
+
 def dispatch(command: str, argv: Sequence[str]) -> int:
     """延迟导入可选地理依赖并转发统一命令。"""
     if command == "grid":
@@ -278,4 +308,6 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
         return local_index_main(argv)
     if command == "preflight":
         return preflight_main(argv)
+    if command == "statistics":
+        return v2_statistics_main(argv)
     raise ValueError(f"未知 data command: {command}")

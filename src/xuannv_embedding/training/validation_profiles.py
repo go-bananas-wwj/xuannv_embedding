@@ -21,6 +21,9 @@ def data_manifest_sha256(root: Path) -> str:
         root / "registry" / "split_80_10_10.parquet",
         root / "observations" / "index" / "availability.parquet",
     ]
+    paths.extend(sorted((root / "statistics").glob("*.json")))
+    if not any(path.parent.name == "statistics" for path in paths):
+        raise FileNotFoundError(f"数据 manifest 缺少训练波段统计量: {root / 'statistics'}")
     digest = hashlib.sha256()
     for path in paths:
         if not path.is_file():

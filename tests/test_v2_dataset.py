@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
 
-from xuannv_embedding.data.v2_dataset import V2LocalZipDataset
+import torch
+
+from xuannv_embedding.data.v2_dataset import (
+    V2LocalZipDataset,
+    _load_statistics,
+    _stored_pixel_validity,
+)
 
 
 def _row(year: int, month: int, *, present: bool = True) -> dict[str, object]:
@@ -70,3 +79,39 @@ def test_random_output_avoids_month_with_all_dense_products_missing() -> None:
     output = dataset._output_rows("p1")
 
     assert [(row["year"], row["month"]) for row in output] == [(2020, 6)]
+
+
+def test_statistics_keep_stored_dn_contract_and_normalize_per_band(tmp_path: Path) -> None:
+    statistics = tmp_path / "statistics"
+    statistics.mkdir()
+    document = {
+        "schema_version": "xuannv_v2_band_statistics_v1",
+        "product_id": "dense",
+        "bands": ["a", "b"],
+        "mean": [1000.0, 2000.0],
+        "std": [100.0, 200.0],
+        "split": "train",
+        "representation": "stored_dn",
+        "scaling_applied": False,
+    }
+    (statistics / "dense.json").write_text(json.dumps(document), encoding="utf-8")
+    config = SimpleNamespace(
+        paths=SimpleNamespace(data_root=tmp_path),
+        products={"dense": SimpleNamespace(bands=("a", "b"))},
+    )
+
+    mean, std = _load_statistics(config, "dense")
+
+    assert torch.equal(mean[:, 0, 0], torch.tensor([1000.0, 2000.0]))
+    assert torch.equal(std[:, 0, 0], torch.tensor([100.0, 200.0]))
+
+
+def test_stored_pixel_validity_rejects_zero_and_minus_32768_fill() -> None:
+    values = torch.tensor(
+        [
+            [[1.0, 0.0, -32768.0, 2.0]],
+            [[2.0, 0.0, 3.0, float("nan")]],
+        ]
+    ).numpy()
+
+    assert _stored_pixel_validity(values).tolist() == [[True, False, False, False]]

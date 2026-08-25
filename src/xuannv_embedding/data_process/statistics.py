@@ -140,8 +140,13 @@ def compute_v2_archive_statistics(
                         f"波段数量冲突: {path}!{row['member_name']}={values.shape[0]}, "
                         f"expected={len(accumulators)}"
                     )
+                valid = np.isfinite(values).all(axis=0)
+                if nodata is not None and not math.isnan(nodata):
+                    valid &= (values != nodata).all(axis=0)
+                valid &= ~(values == 0).all(axis=0)
+                valid &= ~(values == -32768).any(axis=0)
                 for accumulator, band in zip(accumulators, values, strict=True):
-                    accumulator.update(band[_valid_mask(band, nodata)])
+                    accumulator.update(band[valid])
                 observations += 1
                 if max_observations is not None and observations >= max_observations:
                     break

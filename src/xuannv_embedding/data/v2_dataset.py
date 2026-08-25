@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
@@ -24,8 +25,44 @@ _DENSE_SHAPES = {
 }
 
 
+def _load_statistics(config: V2Config, product_id: str) -> tuple[torch.Tensor, torch.Tensor]:
+    path = config.paths.data_root / "statistics" / f"{product_id}.json"
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"无法读取 V2 波段统计量 {path}: {exc}") from exc
+    product = config.products[product_id]
+    expected = {
+        "schema_version": "xuannv_v2_band_statistics_v1",
+        "product_id": product_id,
+        "bands": list(product.bands),
+        "split": "train",
+        "representation": "stored_dn",
+        "scaling_applied": False,
+    }
+    for key, value in expected.items():
+        if document.get(key) != value:
+            raise ValueError(f"V2 波段统计量合同不匹配: {path}:{key}")
+    mean = torch.tensor(document.get("mean", []), dtype=torch.float32)
+    std = torch.tensor(document.get("std", []), dtype=torch.float32)
+    if mean.numel() != len(product.bands) or std.numel() != len(product.bands):
+        raise ValueError(f"V2 波段统计量通道数不匹配: {path}")
+    if not bool(torch.isfinite(mean).all()) or not bool(torch.isfinite(std).all()):
+        raise ValueError(f"V2 波段统计量包含 NaN/Inf: {path}")
+    if bool((std <= 0).any()):
+        raise ValueError(f"V2 波段统计量 std 必须为正: {path}")
+    return mean[:, None, None], std[:, None, None]
+
+
 def _epoch_days(value) -> float:
     return float(value.timestamp() / 86400.0)
+
+
+def _stored_pixel_validity(values: np.ndarray) -> np.ndarray:
+    finite = np.isfinite(values).all(axis=0)
+    all_zero = (values == 0).all(axis=0)
+    explicit_fill = (values == -32768).any(axis=0)
+    return finite & ~all_zero & ~explicit_fill
 
 
 def _decode_member(archive: ZipFile, member: str) -> tuple[torch.Tensor, torch.Tensor]:
@@ -33,9 +70,9 @@ def _decode_member(archive: ZipFile, member: str) -> tuple[torch.Tensor, torch.T
     with MemoryFile(payload) as memory:
         with memory.open() as dataset:
             values = dataset.read()
-    finite = np.isfinite(values)
-    tensor = torch.from_numpy(np.where(finite, values, 0).astype(np.float32, copy=False))
-    mask = torch.from_numpy(finite.all(axis=0, keepdims=True).astype(np.float32))
+    valid = _stored_pixel_validity(values)
+    tensor = torch.from_numpy(np.where(valid[None], values, 0).astype(np.float32, copy=False))
+    mask = torch.from_numpy(valid[None].astype(np.float32))
     return tensor, mask
 
 
@@ -55,6 +92,7 @@ class V2LocalZipDataset(Dataset):
         random_seed: int = 42,
         context_days: int | None = None,
         include_targets: bool = True,
+        normalize: bool = True,
     ) -> None:
         if output_selection == "fixed" and not fixed_output_months:
             raise ValueError("fixed output_selection 必须提供 fixed_output_months")
@@ -90,6 +128,17 @@ class V2LocalZipDataset(Dataset):
         self.dense_products = tuple(
             product_id for product_id, product in config.products.items() if product.role == "dense"
         )
+        self.statistics = (
+            {product_id: _load_statistics(config, product_id) for product_id in self.dense_products}
+            if normalize
+            else {}
+        )
+
+    def _normalize(self, product_id: str, frame: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        if product_id not in self.statistics:
+            return frame
+        mean, std = self.statistics[product_id]
+        return ((frame - mean) / std) * mask
 
     def _output_rows(self, patch_id: str) -> list[dict[str, Any]]:
         candidates = self.observations[(patch_id, self.dense_products[0])]
@@ -203,6 +252,7 @@ class V2LocalZipDataset(Dataset):
                 else:
                     frame = torch.zeros(channels, height, width)
                     mask = torch.zeros(1, height, width)
+                frame = self._normalize(product_id, frame, mask)
                 frames.append(frame)
                 masks.append(mask)
                 present.append(bool(row is not None and row["present"]))
@@ -228,6 +278,7 @@ class V2LocalZipDataset(Dataset):
                     else:
                         frame = torch.zeros(channels, height, width)
                         mask = torch.zeros(1, height, width)
+                    frame = self._normalize(product_id, frame, mask)
                     target_frames.append(frame)
                     target_pixel_masks.append(mask)
                 target = F.interpolate(
