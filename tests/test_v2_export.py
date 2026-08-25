@@ -24,6 +24,10 @@ def _batch() -> dict[str, object]:
         "macro_ids": ["m1", "m2"],
         "splits": ["train", "test"],
         "grid_epsgs": torch.tensor([32649, 32649]),
+        "observation_lineage": [
+            {"s2_local": ["s2:2020-01"], "s1_local": []},
+            {"s2_local": [], "s1_local": ["s1:2020-01"]},
+        ],
         "model_inputs": {
             "output_intervals": torch.tensor(
                 [
@@ -45,6 +49,9 @@ def test_v2_export_writes_interval_utm_zarr_and_lineage_catalog(tmp_path: Path) 
         data_manifest_sha256="a" * 64,
         config_sha256="b" * 64,
         git_sha="1234567890abcdef",
+        checkpoint_sha256="c" * 64,
+        model_state_sha256="d" * 64,
+        run_id="smoke-test",
         shard_size=2,
     )
 
@@ -58,7 +65,10 @@ def test_v2_export_writes_interval_utm_zarr_and_lineage_catalog(tmp_path: Path) 
     assert relative.startswith("interval=20200101-20200201/utm=32649/")
     group = zarr.open_group(str(catalog.parent / relative), mode="r")
     assert group.attrs["data_manifest_sha256"] == "a" * 64
+    assert group.attrs["checkpoint_sha256"] == "c" * 64
     assert group["embedding"].shape == (2, 4, 3, 3)
+    assert table["observation_lineage_json"][0].as_py()
+    assert table["shard_sha256"][0].as_py()
 
 
 def test_v2_export_refuses_to_overwrite_catalog(tmp_path: Path) -> None:
@@ -68,6 +78,9 @@ def test_v2_export_refuses_to_overwrite_catalog(tmp_path: Path) -> None:
         "data_manifest_sha256": "a" * 64,
         "config_sha256": "b" * 64,
         "git_sha": "1234567890abcdef",
+        "checkpoint_sha256": "c" * 64,
+        "model_state_sha256": "d" * 64,
+        "run_id": "smoke-test",
     }
     export_v2_sharded(_Model(), [_batch()], tmp_path, **kwargs)
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import random
 from pathlib import Path
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
@@ -170,6 +172,44 @@ def test_v2_checkpoint_round_trip_carries_data_provenance(tmp_path: Path) -> Non
     assert state["data_manifest_sha256"] == "b" * 64
     assert state["step"] == 2
     assert restored_optimizer.state
+
+
+def test_v2_checkpoint_restores_python_numpy_and_torch_rng(tmp_path: Path) -> None:
+    system = _system()
+    optimizer = torch.optim.AdamW(system.parameters(), lr=1e-3)
+    random.seed(9)
+    np.random.seed(9)
+    torch.manual_seed(9)
+    path = tmp_path / "rng.pt"
+    save_v2_training_checkpoint(
+        path,
+        model=system.model,
+        criterion=system.criterion,
+        optimizer=optimizer,
+        scheduler=None,
+        step=0,
+        metrics={},
+        sampler_state={"epoch": 3, "offset": 17},
+        **_checkpoint_contract(),
+    )
+    expected = (random.random(), float(np.random.random()), float(torch.rand(())))
+    random.seed(1)
+    np.random.seed(1)
+    torch.manual_seed(1)
+    state = load_v2_training_checkpoint(
+        path,
+        model=system.model,
+        criterion=system.criterion,
+        optimizer=optimizer,
+        scheduler=None,
+        expected_config_sha256="a" * 64,
+        expected_data_manifest_sha256="b" * 64,
+        expected_product_schema={"dense": {"bands": ["a", "b"]}},
+        expected_temporal_contract={"mode": "causal_window"},
+    )
+
+    assert state["sampler_state"] == {"epoch": 3, "offset": 17}
+    assert (random.random(), float(np.random.random()), float(torch.rand(()))) == expected
 
 
 def test_v2_checkpoint_loader_explicitly_rejects_v1(tmp_path: Path) -> None:

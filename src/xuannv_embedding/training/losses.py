@@ -227,6 +227,8 @@ class SemanticProbeLoss(nn.Module):
             if task not in labels or task not in self.probes:
                 continue
             label = labels[task].to(device=emb.device, dtype=emb.dtype)
+            if label.dim() == 4:
+                label = label[:, self.month_index]
             if label.dim() != 3:
                 raise ValueError(
                     f"semantic label {task!r} 形状应为 [B,H,W]，实际为 {tuple(label.shape)}"
@@ -240,8 +242,20 @@ class SemanticProbeLoss(nn.Module):
             if label_masks is not None and task in label_masks:
                 sample_mask = label_masks[task].to(device=emb.device, dtype=emb.dtype)
             if sample_mask is None:
-                sample_mask = torch.ones((emb.shape[0],), device=emb.device, dtype=emb.dtype)
-            valid = sample_mask[:, None, None, None].expand_as(label)
+                valid = torch.ones_like(label)
+            elif sample_mask.dim() == 4:
+                valid = sample_mask[:, self.month_index, None]
+            elif sample_mask.dim() == 3:
+                valid = sample_mask[:, None]
+            elif sample_mask.dim() == 1:
+                valid = sample_mask[:, None, None, None].expand_as(label)
+            else:
+                raise ValueError(
+                    f"semantic label mask {task!r} 形状非法: {tuple(sample_mask.shape)}"
+                )
+            if valid.shape[-2:] != emb.shape[-2:]:
+                valid = F.interpolate(valid, size=emb.shape[-2:], mode="nearest")
+            valid = valid.expand_as(label)
             if bool((valid.sum() <= 0).item()):
                 stats[f"semantic_probe_{task}_loss"] = zero.detach()
                 stats[f"semantic_probe_{task}_positive_pixels"] = zero.detach()

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import random
 import re
 import tempfile
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 from torch import nn
 from torch.optim import Optimizer
@@ -30,6 +32,43 @@ _REQUIRED_FIELDS = {
     "scheduler",
     "metrics",
 }
+
+
+def capture_rng_state() -> dict[str, Any]:
+    numpy_state = np.random.get_state()
+    return {
+        "torch": torch.get_rng_state(),
+        "python": random.getstate(),
+        "numpy": {
+            "bit_generator": numpy_state[0],
+            "keys": torch.from_numpy(numpy_state[1].copy()),
+            "position": int(numpy_state[2]),
+            "has_gauss": int(numpy_state[3]),
+            "cached_gaussian": float(numpy_state[4]),
+        },
+        "npu": (
+            torch.npu.get_rng_state()
+            if hasattr(torch, "npu") and torch.npu.is_available()
+            else None
+        ),
+    }
+
+
+def restore_rng_state(state: dict[str, Any]) -> None:
+    torch.set_rng_state(state["torch"].cpu())
+    random.setstate(state["python"])
+    numpy_state = state["numpy"]
+    np.random.set_state(
+        (
+            numpy_state["bit_generator"],
+            numpy_state["keys"].cpu().numpy().astype(np.uint32, copy=False),
+            numpy_state["position"],
+            numpy_state["has_gauss"],
+            numpy_state["cached_gaussian"],
+        )
+    )
+    if state["npu"] is not None and hasattr(torch, "npu") and torch.npu.is_available():
+        torch.npu.set_rng_state(state["npu"])
 
 
 def _validate_metadata(
@@ -181,6 +220,8 @@ def save_v2_training_checkpoint(
     product_schema: dict[str, Any],
     temporal_contract: dict[str, Any],
     metrics: dict[str, Any] | None = None,
+    sampler_state: dict[str, int] | None = None,
+    rank_rng_states: list[dict[str, Any]] | None = None,
 ) -> None:
     """Save an explicitly V2-only checkpoint with data and interval provenance."""
     if not re.fullmatch(r"[0-9a-f]{64}", data_manifest_sha256):
@@ -194,6 +235,7 @@ def save_v2_training_checkpoint(
     )
     if not temporal_contract:
         raise CheckpointError("temporal_contract 必须是非空 mapping")
+    rng_state = capture_rng_state()
     state = {
         "format_version": V2_FORMAT_VERSION,
         "config_sha256": config_sha256,
@@ -207,7 +249,12 @@ def save_v2_training_checkpoint(
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict() if scheduler is not None else None,
         "metrics": dict(metrics or {}),
-        "rng_state": torch.get_rng_state(),
+        "rng_state": rng_state["torch"],
+        "python_rng_state": rng_state["python"],
+        "numpy_rng_state": rng_state["numpy"],
+        "npu_rng_state": rng_state["npu"],
+        "sampler_state": dict(sampler_state or {}),
+        "rank_rng_states": list(rank_rng_states or []),
     }
     _atomic_torch_save(state, Path(path))
 
@@ -225,6 +272,7 @@ def load_v2_training_checkpoint(
     expected_temporal_contract: dict[str, Any],
     device: str | torch.device = "cpu",
     restore_rng: bool = True,
+    rng_rank: int | None = None,
 ) -> dict[str, Any]:
     """Strictly load V2 state; V1 checkpoints and configs are never remapped."""
     try:
@@ -245,14 +293,19 @@ def load_v2_training_checkpoint(
         "scheduler",
         "metrics",
         "rng_state",
+        "python_rng_state",
+        "numpy_rng_state",
+        "npu_rng_state",
+        "sampler_state",
+        "rank_rng_states",
     }
     if not isinstance(state, dict):
         raise CheckpointError("V2 checkpoint 顶层必须是 mapping")
+    if state.get("format_version") != V2_FORMAT_VERSION:
+        raise CheckpointError("V2 runtime 明确拒绝 V1 checkpoint，不执行静默 remap")
     missing = sorted(required - set(state))
     if missing:
         raise CheckpointError(f"V2 checkpoint 缺少字段: {', '.join(missing)}")
-    if state["format_version"] != V2_FORMAT_VERSION:
-        raise CheckpointError("V2 runtime 明确拒绝 V1 checkpoint，不执行静默 remap")
     expected = {
         "config_sha256": expected_config_sha256,
         "data_manifest_sha256": expected_data_manifest_sha256,
@@ -276,5 +329,17 @@ def load_v2_training_checkpoint(
     except (KeyError, RuntimeError, ValueError) as exc:
         raise CheckpointError(f"V2 checkpoint 状态严格加载失败: {exc}") from exc
     if restore_rng:
-        torch.set_rng_state(state["rng_state"].cpu())
+        if rng_rank is not None and state["rank_rng_states"]:
+            if rng_rank >= len(state["rank_rng_states"]):
+                raise CheckpointError(f"checkpoint 缺少 rank {rng_rank} RNG 状态")
+            restore_rng_state(state["rank_rng_states"][rng_rank])
+        else:
+            restore_rng_state(
+                {
+                    "torch": state["rng_state"],
+                    "python": state["python_rng_state"],
+                    "numpy": state["numpy_rng_state"],
+                    "npu": state["npu_rng_state"],
+                }
+            )
     return state

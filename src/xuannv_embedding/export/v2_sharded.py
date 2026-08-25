@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import tempfile
 from datetime import UTC, datetime
@@ -101,6 +103,27 @@ class _ShardWriter:
         }
 
 
+def _directory_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    for child in sorted(item for item in path.rglob("*") if item.is_file()):
+        digest.update(child.relative_to(path).as_posix().encode("utf-8") + b"\0")
+        with child.open("rb") as handle:
+            while chunk := handle.read(8 * 1024 * 1024):
+                digest.update(chunk)
+    return digest.hexdigest()
+
+
+def model_state_sha256(model: nn.Module) -> str:
+    digest = hashlib.sha256()
+    for name, value in sorted(model.state_dict().items()):
+        tensor = value.detach().cpu().contiguous()
+        digest.update(name.encode("utf-8") + b"\0")
+        digest.update(str(tensor.dtype).encode("ascii") + b"\0")
+        digest.update(np.asarray(tensor.shape, dtype=np.int64).tobytes())
+        digest.update(tensor.numpy().tobytes())
+    return digest.hexdigest()
+
+
 def export_v2_sharded(
     model: nn.Module,
     batches: Iterable[dict[str, Any]],
@@ -111,6 +134,9 @@ def export_v2_sharded(
     data_manifest_sha256: str,
     config_sha256: str,
     git_sha: str,
+    checkpoint_sha256: str,
+    model_state_sha256: str,
+    run_id: str,
     shard_size: int = 32,
 ) -> Path:
     """Export finite V2 maps without per-patch NPZ files."""
@@ -128,6 +154,9 @@ def export_v2_sharded(
         "data_manifest_sha256": data_manifest_sha256,
         "config_sha256": config_sha256,
         "git_sha": git_sha,
+        "checkpoint_sha256": checkpoint_sha256,
+        "model_state_sha256": model_state_sha256,
+        "run_id": run_id,
     }
     writer = _ShardWriter(product_root, shard_size=shard_size, provenance=provenance)
     rows: list[dict[str, object]] = []
@@ -145,18 +174,27 @@ def export_v2_sharded(
                 raise FloatingPointError("V2 embedding 包含 NaN/Inf")
             for batch_index, patch_id in enumerate(batch["patch_ids"]):
                 for interval_index in range(embedding.shape[1]):
-                    rows.append(
-                        writer.append(
-                            embedding[batch_index, interval_index],
-                            patch_id=patch_id,
-                            macro_id=batch["macro_ids"][batch_index],
-                            split=batch["splits"][batch_index],
-                            interval_bounds=intervals[batch_index, interval_index],
-                            epsg=int(batch["grid_epsgs"][batch_index]),
-                        )
+                    row = writer.append(
+                        embedding[batch_index, interval_index],
+                        patch_id=patch_id,
+                        macro_id=batch["macro_ids"][batch_index],
+                        split=batch["splits"][batch_index],
+                        interval_bounds=intervals[batch_index, interval_index],
+                        epsg=int(batch["grid_epsgs"][batch_index]),
                     )
+                    lineage = batch.get("observation_lineage", [{}])[batch_index]
+                    row["observation_lineage_json"] = json.dumps(
+                        lineage, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                    )
+                    rows.append(row)
     if not rows:
         raise ValueError("V2 导出 batches 为空")
+    shard_digests = {
+        relative: _directory_sha256(product_root / relative)
+        for relative in sorted({str(row["shard_path"]) for row in rows})
+    }
+    for row in rows:
+        row["shard_sha256"] = shard_digests[str(row["shard_path"])]
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=".catalog.", suffix=".parquet", dir=product_root
     )

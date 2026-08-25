@@ -14,7 +14,7 @@ import pyarrow.parquet as pq
 import rasterio
 
 from xuannv_embedding.config import V2Config
-from xuannv_embedding.data.local_archives import audit_raster_member
+from xuannv_embedding.data.local_archives import audit_raster_member, verify_archive_lock
 
 
 def classify_source(
@@ -37,6 +37,109 @@ class PreflightError(ValueError):
     """Local V2 data are absent or violate their declared contract."""
 
 
+def build_highres_patch_index(
+    candidates_path: Path,
+    scenes_path: Path,
+    output_path: Path,
+) -> int:
+    """Spatially join local high-resolution scenes to frozen national patches."""
+    candidates = pq.read_table(
+        candidates_path, columns=["patch_id", "grid_epsg", "utm_bounds"]
+    ).to_pylist()
+    scenes = pq.read_table(scenes_path).to_pylist()
+    by_epsg: dict[int, list[dict[str, Any]]] = {}
+    for patch in candidates:
+        by_epsg.setdefault(int(patch["grid_epsg"]), []).append(patch)
+    rows: list[dict[str, Any]] = []
+    for scene in scenes:
+        crs = str(scene.get("crs") or "")
+        if not crs.startswith("EPSG:") or not scene.get("training_eligible"):
+            continue
+        epsg = int(crs.split(":", 1)[1])
+        scene_left, scene_bottom, scene_right, scene_top = map(float, scene["bounds"])
+        for patch in by_epsg.get(epsg, []):
+            left, bottom, right, top = map(float, patch["utm_bounds"])
+            width = max(0.0, min(right, scene_right) - max(left, scene_left))
+            height = max(0.0, min(top, scene_top) - max(bottom, scene_bottom))
+            intersection = width * height
+            if intersection <= 0:
+                continue
+            rows.append(
+                {
+                    "patch_id": str(patch["patch_id"]),
+                    "grid_epsg": epsg,
+                    "patch_bounds": [left, bottom, right, top],
+                    "product_id": str(scene["product_id"]),
+                    "scene_id": str(scene["scene_id"]),
+                    "acquired_at": str(scene["acquired_at"]),
+                    "available_at": str(scene["available_at"]),
+                    "clear_percent": int(scene.get("clear_percent") or 0),
+                    "image_path": str(scene["image_path"]),
+                    "qa_path": str(scene.get("qa_path") or ""),
+                    "qa_present": bool(scene.get("qa_present")),
+                    "scene_transform": [float(value) for value in scene["transform"]],
+                    "intersection_fraction": intersection / ((right - left) * (top - bottom)),
+                    "quality_status": str(scene.get("quality_category") or "unknown"),
+                }
+            )
+    rows.sort(key=lambda row: (row["patch_id"], row["acquired_at"], row["scene_id"]))
+    if not rows:
+        raise PreflightError(f"高分场景与全国 patch 无空间交集: {scenes_path}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(rows), output_path, compression="zstd")
+    return len(rows)
+
+
+def build_raster_label_patch_index(
+    candidates_path: Path,
+    task: str,
+    label_root: Path,
+    output_path: Path,
+) -> int:
+    """Index verified local raster labels by their real CRS and footprint."""
+    candidates = pq.read_table(
+        candidates_path, columns=["patch_id", "grid_epsg", "utm_bounds"]
+    ).to_pylist()
+    by_epsg: dict[int, list[dict[str, Any]]] = {}
+    for patch in candidates:
+        by_epsg.setdefault(int(patch["grid_epsg"]), []).append(patch)
+    rows: list[dict[str, Any]] = []
+    for label_path in sorted(label_root.rglob("*.tif")):
+        with rasterio.open(label_path) as dataset:
+            if dataset.count != 1 or dataset.crs is None:
+                raise PreflightError(f"监督标签必须是单波段且带 CRS: {label_path}")
+            epsg = dataset.crs.to_epsg()
+            if epsg is None:
+                raise PreflightError(f"监督标签 CRS 无 EPSG: {label_path}")
+            source_bounds = dataset.bounds
+            source_transform = list(dataset.transform)[:6]
+            dtype = dataset.dtypes[0]
+        for patch in by_epsg.get(epsg, []):
+            left, bottom, right, top = map(float, patch["utm_bounds"])
+            width = max(0.0, min(right, source_bounds.right) - max(left, source_bounds.left))
+            height = max(0.0, min(top, source_bounds.top) - max(bottom, source_bounds.bottom))
+            if width * height <= 0:
+                continue
+            rows.append(
+                {
+                    "patch_id": str(patch["patch_id"]),
+                    "task": task,
+                    "label_path": str(label_path.resolve()),
+                    "crs": f"EPSG:{epsg}",
+                    "transform": [float(value) for value in source_transform],
+                    "dtype": dtype,
+                    "intersection_fraction": width * height / ((right - left) * (top - bottom)),
+                    "provenance": "local_preprocessed_osm_weak_label",
+                }
+            )
+    rows.sort(key=lambda row: (row["patch_id"], row["label_path"]))
+    if not rows:
+        raise PreflightError(f"监督标签与全国 patch 无空间交集: {task}/{label_root}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pylist(rows), output_path, compression="zstd")
+    return len(rows)
+
+
 def _parse_planet_metadata(path: Path) -> dict[str, Any]:
     document = json.loads(path.read_text(encoding="utf-8"))
     properties = document.get("properties", {})
@@ -54,6 +157,7 @@ def _parse_planet_metadata(path: Path) -> dict[str, Any]:
 def index_local_highres_and_auxiliary(config: V2Config) -> dict[str, int]:
     root = config.paths.data_root
     highres_count = 0
+    highres_patch_ids: set[str] = set()
     for product_id, product_root in config.paths.product_roots.items():
         if product_id not in config.products:
             raise PreflightError(f"product_roots 引用了未知产品: {product_id}")
@@ -102,7 +206,30 @@ def index_local_highres_and_auxiliary(config: V2Config) -> dict[str, int]:
         output = root / "observations" / "highres" / product_id / "scenes.parquet"
         output.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(pa.Table.from_pylist(rows), output, compression="zstd")
+        patch_count = build_highres_patch_index(
+            root / "registry" / "candidate_62000.parquet",
+            output,
+            output.with_name("patch_observations.parquet"),
+        )
+        if patch_count <= 0:
+            raise PreflightError(f"高分 product 没有覆盖全国 1% patch: {product_id}")
+        highres_patch_ids.update(
+            str(value)
+            for value in pq.read_table(
+                output.with_name("patch_observations.parquet"), columns=["patch_id"]
+            )["patch_id"].to_pylist()
+        )
         highres_count += len(rows)
+
+    if highres_patch_ids:
+        split = pq.read_table(root / "registry" / "split_80_10_10.parquet")
+        selected = [row for row in split.to_pylist() if str(row["patch_id"]) in highres_patch_ids]
+        selected.sort(key=lambda row: str(row["patch_id"]))
+        pq.write_table(
+            pa.Table.from_pylist(selected),
+            root / "registry" / "highres_real.parquet",
+            compression="zstd",
+        )
 
     auxiliary_rows: list[dict[str, Any]] = []
     for product_id, source_root in config.paths.auxiliary_roots.items():
@@ -140,10 +267,21 @@ def index_local_highres_and_auxiliary(config: V2Config) -> dict[str, int]:
         output = root / "registry" / "legacy_unverified_inventory.parquet"
         output.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(pa.Table.from_pylist(legacy_rows), output, compression="zstd")
+    label_count = 0
+    for task, label_root in config.paths.supervised_label_roots.items():
+        if not label_root.is_dir():
+            raise PreflightError(f"监督标签目录不存在: {task}/{label_root}")
+        label_count += build_raster_label_patch_index(
+            root / "registry" / "candidate_62000.parquet",
+            task,
+            label_root,
+            root / "labels" / task / "patch_observations.parquet",
+        )
     return {
         "highres_scene_count": highres_count,
         "auxiliary_archive_count": len(auxiliary_rows),
         "legacy_file_count": len(legacy_rows),
+        "supervised_label_observation_count": label_count,
     }
 
 
@@ -168,6 +306,12 @@ def run_preflight(config: V2Config, *, max_pixel_audits: int = 96) -> dict[str, 
     archives = pq.read_table(archive_path)
     if archives.num_rows != 72:
         raise PreflightError(f"archive 清单应为 72，实际 {archives.num_rows}")
+    try:
+        archive_lock = verify_archive_lock(
+            root / "locks" / "local_archive_sha256.jsonl", expected_count=72
+        )
+    except ValueError as exc:
+        raise PreflightError(f"archive lock 校验失败: {exc}") from exc
     members = pq.read_table(
         member_path,
         columns=["product_id", "year", "month", "archive_path", "member_name"],
@@ -218,6 +362,7 @@ def run_preflight(config: V2Config, *, max_pixel_audits: int = 96) -> dict[str, 
         "created_at": datetime.now(timezone.utc).isoformat(),
         "network_requests": 0,
         "archive_count": archives.num_rows,
+        "archive_lock": archive_lock,
         "availability_count": availability,
         "pixel_audit_count": len(audits),
         "pixel_audits": audits,
@@ -303,4 +448,116 @@ def run_data_mini(config: V2Config) -> dict[str, Any]:
         "network_requests": 0,
         "passed": not failed and missing_count > 0,
         "failures": failed,
+    }
+
+
+def run_highres_mini(config: V2Config) -> dict[str, Any]:
+    """Run one real local high-resolution sample through data, losses and gradients."""
+    import torch
+    from torch.utils.data import DataLoader
+
+    from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
+    from xuannv_embedding.training.losses import V2TotalLoss
+    from xuannv_embedding.training.runtime import V2TrainingSystem
+    from xuannv_embedding.training.validation_profiles import build_profile_model
+
+    registry = config.paths.data_root / "registry" / "highres_real.parquet"
+    if not registry.is_file():
+        raise PreflightError("highres mini 需要先生成 highres_real.parquet")
+    records = pq.read_table(registry).to_pylist()
+    if not records:
+        raise PreflightError("highres mini registry 为空")
+    selected = None
+    selected_rows = None
+    for record in records:
+        patch_id = str(record["patch_id"])
+        rows = []
+        for product_id in config.paths.product_roots:
+            path = (
+                config.paths.data_root
+                / "observations"
+                / "highres"
+                / product_id
+                / "patch_observations.parquet"
+            )
+            rows.extend(pq.read_table(path, filters=[("patch_id", "=", patch_id)]).to_pylist())
+        label_available = all(
+            pq.read_table(
+                config.paths.data_root / "labels" / task / "patch_observations.parquet",
+                filters=[("patch_id", "=", patch_id)],
+            ).num_rows
+            > 0
+            for task in config.training.semantic_probe_tasks
+        )
+        if rows and label_available:
+            selected = record
+            selected_rows = rows
+            break
+    if selected is None or selected_rows is None:
+        raise PreflightError("highres mini 没有同时具备高分和监督标签的真实 patch")
+    temporary_registry = config.paths.data_root / "registry" / "highres_mini_1.parquet"
+    pq.write_table(pa.Table.from_pylist([selected]), temporary_registry, compression="zstd")
+    output_end = (
+        max(
+            datetime.fromisoformat(str(row["available_at"]).replace("Z", "+00:00"))
+            for row in selected_rows
+        ).timestamp()
+        / 86400.0
+        + 1.0
+    )
+    dataset = V2LocalZipDataset(
+        config,
+        temporary_registry,
+        spatial_size=32,
+        max_records=1,
+        output_selection="random_single",
+        context_days=config.temporal.dense_lookback_days,
+        output_intervals_override=((output_end - 1.0, output_end),),
+        allow_incomplete_statistics=True,
+    )
+    batch = next(iter(DataLoader(dataset, batch_size=1, collate_fn=collate_v2)))
+    profile = config.validation_profiles["mini-real"]
+    model = build_profile_model(config, profile)
+    criterion = V2TotalLoss(
+        embed_dim=config.model.embedding_dim,
+        reconstruction_weights={},
+        semantic_probe_weight=1.0 if config.training.semantic_probe_tasks else 0.0,
+        semantic_probe_tasks=config.training.semantic_probe_tasks,
+        semantic_probe_hidden_dim=config.training.semantic_probe_hidden_dim,
+        highres_detail_weight=1.0,
+    )
+    system = V2TrainingSystem(model, criterion)
+    result = system(batch)
+    result["total"].backward()
+    product_id = next(iter(config.paths.product_roots))
+    native_gradient = model.highres_adapters[product_id].native_stem[0].weight.grad
+    mask_pixels = int(batch["model_inputs"]["highres_masks"][product_id].sum().item())
+    detail_pixels = int(batch["detail_masks"][product_id].gt(0).sum().item())
+    semantic_pixels = sum(
+        int(mask.gt(0).sum().item()) for mask in batch["supervised_label_masks"].values()
+    )
+    passed = (
+        mask_pixels > 0
+        and detail_pixels > 0
+        and semantic_pixels > 0
+        and native_gradient is not None
+        and bool(torch.isfinite(native_gradient).all())
+        and float(native_gradient.abs().sum()) > 0
+        and bool(torch.isfinite(result["total"]))
+    )
+    return {
+        "schema_version": "xuannv_v2_highres_mini_v1",
+        "patch_id": str(selected["patch_id"]),
+        "product_id": product_id,
+        "native_shape": list(batch["model_inputs"]["highres_frames"][product_id].shape),
+        "highres_valid_pixels": mask_pixels,
+        "detail_valid_pixels": detail_pixels,
+        "semantic_valid_pixels": semantic_pixels,
+        "detail_loss": float(result["highres_detail"].detach()),
+        "semantic_loss": float(result["semantic_probe"].detach()),
+        "native_stem_gradient_l1": (
+            float(native_gradient.abs().sum()) if native_gradient is not None else 0.0
+        ),
+        "network_requests": 0,
+        "passed": passed,
     }

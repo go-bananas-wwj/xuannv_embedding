@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -17,6 +18,35 @@ from xuannv_embedding.data.contracts import ObservationRef, ProductSpec
 
 class ArchiveContractError(ValueError):
     """A local archive violates the frozen V2 product or grid contract."""
+
+
+def verify_archive_lock(lock_path: Path, *, expected_count: int = 72) -> dict[str, object]:
+    """Re-hash every current archive and require an exact, complete immutable lock."""
+    try:
+        rows = [json.loads(line) for line in lock_path.read_text(encoding="utf-8").splitlines()]
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ArchiveContractError(f"无法读取 archive lock: {lock_path}: {exc}") from exc
+    if len(rows) != expected_count:
+        raise ArchiveContractError(f"archive lock 应有 {expected_count} 条，实际 {len(rows)}")
+    seen: set[str] = set()
+    for row in rows:
+        archive_text = row.get("archive_path")
+        digest = row.get("sha256")
+        if not isinstance(archive_text, str) or not archive_text:
+            raise ArchiveContractError("archive lock 缺少 archive_path")
+        if archive_text in seen:
+            raise ArchiveContractError(f"archive lock 路径重复: {archive_text}")
+        seen.add(archive_text)
+        if not isinstance(digest, str) or len(digest) != 64:
+            raise ArchiveContractError(f"archive lock 缺少完整 SHA256: {archive_text}")
+        archive_path = Path(archive_text)
+        if not archive_path.is_file():
+            raise ArchiveContractError(f"archive lock 文件不存在: {archive_path}")
+        if archive_path.stat().st_size != row.get("size_bytes"):
+            raise ArchiveContractError(f"archive size 与 lock 不一致: {archive_path}")
+        if sha256_file(archive_path) != digest:
+            raise ArchiveContractError(f"archive SHA256 与 lock 不一致: {archive_path}")
+    return {"archive_count": len(rows), "sha256_complete": True, "verified": True}
 
 
 @dataclass(frozen=True)

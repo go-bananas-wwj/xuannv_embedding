@@ -68,11 +68,12 @@ training:
   uniformity_weight: 0.01
   uniformity_warmup_epochs: 10
   uniformity_temperature: 2.0
-  semantic_probe_weight: 0.14
+  # 全国 OSM building 尚未物化成 patch label；稠密 2020-2021 smoke 不虚构标签。
+  semantic_probe_weight: 0.0
   semantic_probe_warmup_epochs: 80
-  semantic_probe_tasks: [osm_building]
+  semantic_probe_tasks: []
   semantic_probe_hidden_dim: 64
-  highres_detail_weight: 0.1
+  highres_detail_weight: 0.0
 validation_profiles:
   mini-real:
     records: 16

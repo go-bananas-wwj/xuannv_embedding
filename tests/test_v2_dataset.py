@@ -5,11 +5,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
+import rasterio
 import torch
+from affine import Affine
 
 from xuannv_embedding.data.v2_dataset import (
     V2LocalZipDataset,
     _load_statistics,
+    _read_highres_patch,
+    _read_supervised_label,
     _stored_pixel_validity,
 )
 
@@ -106,6 +111,7 @@ def test_statistics_keep_stored_dn_contract_and_normalize_per_band(tmp_path: Pat
         "split": "train",
         "representation": "stored_dn",
         "scaling_applied": False,
+        "complete_training_split": True,
     }
     (statistics / "dense.json").write_text(json.dumps(document), encoding="utf-8")
     config = SimpleNamespace(
@@ -119,6 +125,33 @@ def test_statistics_keep_stored_dn_contract_and_normalize_per_band(tmp_path: Pat
     assert torch.equal(std[:, 0, 0], torch.tensor([100.0, 200.0]))
 
 
+def test_production_statistics_reject_incomplete_training_split(tmp_path: Path) -> None:
+    statistics = tmp_path / "statistics"
+    statistics.mkdir()
+    document = {
+        "schema_version": "xuannv_v2_band_statistics_v1",
+        "product_id": "dense",
+        "bands": ["a"],
+        "mean": [1.0],
+        "std": [1.0],
+        "split": "train",
+        "representation": "stored_dn",
+        "scaling_applied": False,
+        "complete_training_split": False,
+    }
+    (statistics / "dense.json").write_text(json.dumps(document), encoding="utf-8")
+    config = SimpleNamespace(
+        paths=SimpleNamespace(data_root=tmp_path),
+        products={"dense": SimpleNamespace(bands=("a",))},
+    )
+
+    import pytest
+
+    with pytest.raises(ValueError, match="完整训练划分"):
+        _load_statistics(config, "dense")
+    _load_statistics(config, "dense", allow_incomplete=True)
+
+
 def test_stored_pixel_validity_rejects_zero_and_minus_32768_fill() -> None:
     values = torch.tensor(
         [
@@ -128,3 +161,86 @@ def test_stored_pixel_validity_rejects_zero_and_minus_32768_fill() -> None:
     ).numpy()
 
     assert _stored_pixel_validity(values).tolist() == [[True, False, False, False]]
+
+
+def test_highres_reader_keeps_native_pixels_and_applies_udm2_clear_mask(tmp_path: Path) -> None:
+    image = tmp_path / "scene.tif"
+    qa = tmp_path / "qa.tif"
+    transform = Affine(2, 0, 0, 0, -2, 8)
+    values = np.full((4, 4, 4), 100, dtype=np.uint16)
+    with rasterio.open(
+        image,
+        "w",
+        driver="GTiff",
+        count=4,
+        width=4,
+        height=4,
+        dtype="uint16",
+        crs="EPSG:32650",
+        transform=transform,
+    ) as dataset:
+        dataset.write(values)
+    quality = np.zeros((8, 4, 4), dtype=np.uint8)
+    quality[0] = 1
+    quality[5, 0, 0] = 1
+    quality[0, 0, 0] = 0
+    with rasterio.open(
+        qa,
+        "w",
+        driver="GTiff",
+        count=8,
+        width=4,
+        height=4,
+        dtype="uint8",
+        crs="EPSG:32650",
+        transform=transform,
+    ) as dataset:
+        dataset.write(quality)
+        for index, name in enumerate(
+            ("clear", "snow", "shadow", "haze_light", "haze_heavy", "cloud", "confidence", "udm1"),
+            start=1,
+        ):
+            dataset.set_band_description(index, name)
+    row = {
+        "patch_bounds": [0, 0, 8, 8],
+        "image_path": str(image),
+        "qa_path": str(qa),
+        "qa_present": True,
+    }
+
+    frame, mask, geotransform = _read_highres_patch(row, bands=4, stored_gsd_m=2)
+
+    assert frame.shape == (4, 6, 6)
+    assert mask.shape == (1, 6, 6)
+    assert mask[0, 0, 0] == 0
+    assert mask.sum() == 15
+    assert geotransform[0] == 2
+    assert torch.equal(
+        frame[:, :4, :4], torch.from_numpy(values.astype(np.float32)) * mask[:, :4, :4]
+    )
+
+
+def test_supervised_label_reader_reprojects_real_mask_to_output_grid(tmp_path: Path) -> None:
+    label_path = tmp_path / "label.tif"
+    with rasterio.open(
+        label_path,
+        "w",
+        driver="GTiff",
+        count=1,
+        width=2,
+        height=2,
+        dtype="uint8",
+        crs="EPSG:32650",
+        transform=Affine(10, 0, 0, 0, -10, 20),
+    ) as dataset:
+        dataset.write(np.array([[[1, 0], [0, 1]]], dtype=np.uint8))
+
+    label, mask = _read_supervised_label(
+        [{"label_path": str(label_path)}],
+        epsg=32650,
+        output_transform=torch.tensor([10.0, 0.0, 0.0, 0.0, -10.0, 20.0]),
+        output_size=2,
+    )
+
+    assert label.tolist() == [[1.0, 0.0], [0.0, 1.0]]
+    assert mask.sum() == 4

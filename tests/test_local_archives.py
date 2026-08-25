@@ -17,6 +17,7 @@ from xuannv_embedding.data.local_archives import (
     index_local_archive,
     month_bounds,
     validate_archive_sidecar,
+    verify_archive_lock,
 )
 
 
@@ -130,3 +131,28 @@ def test_sidecar_locks_real_band_order_without_inventing_metadata(tmp_path: Path
     sidecar.write_text("波段/通道: vv, vh\n单张尺寸: 128 x 128 像素\n", encoding="utf-8")
     with pytest.raises(ArchiveContractError, match="波段顺序"):
         validate_archive_sidecar(LocalArchive("s1_local", 2020, 1, path), _spec())
+
+
+def test_archive_lock_recomputes_current_sha_and_rejects_incomplete_lock(tmp_path: Path) -> None:
+    path = tmp_path / "pc-s1_2020_01.zip"
+    _archive(path, {"pc-s1/2020/01/p.tif": _tiff_bytes()})
+    lock = tmp_path / "lock.jsonl"
+    lock.write_text(
+        '{"archive_path":"%s","size_bytes":%d,"sha256":null}\n' % (path, path.stat().st_size),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ArchiveContractError, match="完整 SHA256"):
+        verify_archive_lock(lock, expected_count=1)
+
+    import hashlib
+
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    lock.write_text(
+        '{"archive_path":"%s","size_bytes":%d,"sha256":"%s"}\n'
+        % (path, path.stat().st_size, digest),
+        encoding="utf-8",
+    )
+    path.write_bytes(path.read_bytes() + b"changed")
+    with pytest.raises(ArchiveContractError, match="size|SHA256"):
+        verify_archive_lock(lock, expected_count=1)

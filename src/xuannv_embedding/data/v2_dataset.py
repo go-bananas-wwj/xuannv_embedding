@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
@@ -11,10 +12,13 @@ from zipfile import ZipFile
 
 import numpy as np
 import pyarrow.parquet as pq
+import rasterio
 import torch
 import torch.nn.functional as F
 import zarr
 from rasterio.io import MemoryFile
+from rasterio.warp import Resampling, reproject
+from rasterio.windows import from_bounds
 from torch.utils.data import Dataset
 
 from xuannv_embedding.config import V2Config
@@ -26,7 +30,9 @@ _DENSE_SHAPES = {
 }
 
 
-def _load_statistics(config: V2Config, product_id: str) -> tuple[torch.Tensor, torch.Tensor]:
+def _load_statistics(
+    config: V2Config, product_id: str, *, allow_incomplete: bool = False
+) -> tuple[torch.Tensor, torch.Tensor]:
     path = config.paths.data_root / "statistics" / f"{product_id}.json"
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -44,6 +50,8 @@ def _load_statistics(config: V2Config, product_id: str) -> tuple[torch.Tensor, t
     for key, value in expected.items():
         if document.get(key) != value:
             raise ValueError(f"V2 波段统计量合同不匹配: {path}:{key}")
+    if not allow_incomplete and document.get("complete_training_split") is not True:
+        raise ValueError(f"V2 生产训练要求完整训练划分统计量: {path}")
     mean = torch.tensor(document.get("mean", []), dtype=torch.float32)
     std = torch.tensor(document.get("std", []), dtype=torch.float32)
     if mean.numel() != len(product.bands) or std.numel() != len(product.bands):
@@ -79,6 +87,118 @@ def _decode_member(archive: ZipFile, member: str) -> tuple[torch.Tensor, torch.T
     return tensor, mask
 
 
+def _parse_time_days(value: str) -> float:
+    from datetime import datetime
+
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() / 86400.0
+
+
+def _read_highres_patch(
+    row: dict[str, Any],
+    *,
+    bands: int,
+    stored_gsd_m: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Read a native-grid scene window; pad only, never resize image pixels."""
+    bounds = tuple(float(value) for value in row["patch_bounds"])
+    target_size = int(math.ceil((bounds[2] - bounds[0]) / stored_gsd_m)) + 2
+    with rasterio.open(row["image_path"]) as dataset:
+        window = from_bounds(*bounds, transform=dataset.transform).round_offsets().round_lengths()
+        values = dataset.read(window=window, boundless=True, fill_value=0)
+        transform = dataset.window_transform(window)
+    if values.shape[0] != bands:
+        raise ValueError(f"高分场景通道错误: {row['image_path']}")
+    valid = _stored_pixel_validity(values)
+    if row.get("qa_present") and row.get("qa_path"):
+        with rasterio.open(row["qa_path"]) as qa:
+            qa_window = from_bounds(*bounds, transform=qa.transform)
+            quality = qa.read(
+                window=qa_window,
+                boundless=True,
+                fill_value=0,
+                out_shape=(qa.count, values.shape[1], values.shape[2]),
+                resampling=rasterio.enums.Resampling.nearest,
+            )
+            descriptions = tuple(item or "" for item in qa.descriptions)
+        try:
+            clear = quality[descriptions.index("clear")] > 0
+        except ValueError:
+            clear = np.ones_like(valid)
+        try:
+            unusable = quality[descriptions.index("udm1")] > 0
+        except ValueError:
+            unusable = np.zeros_like(valid)
+        valid &= clear & ~unusable
+    height = min(values.shape[1], target_size)
+    width = min(values.shape[2], target_size)
+    padded = np.zeros((bands, target_size, target_size), dtype=np.float32)
+    padded_mask = np.zeros((1, target_size, target_size), dtype=np.float32)
+    padded[:, :height, :width] = values[:, :height, :width]
+    padded_mask[:, :height, :width] = valid[:height, :width]
+    padded *= padded_mask
+    return (
+        torch.from_numpy(padded),
+        torch.from_numpy(padded_mask),
+        torch.tensor(list(transform)[:6], dtype=torch.float32),
+    )
+
+
+def _detail_statistics(
+    frame: torch.Tensor, mask: torch.Tensor, size: int
+) -> tuple[torch.Tensor, torch.Tensor]:
+    gray = frame.mean(dim=0, keepdim=True)
+    local_mean = F.avg_pool2d(gray[None], 3, stride=1, padding=1)[0]
+    local_square = F.avg_pool2d((gray * gray)[None], 3, stride=1, padding=1)[0]
+    variance = (local_square - local_mean.square()).clamp_min(0)
+    gradient = torch.zeros_like(gray)
+    gradient[:, :, 1:] += (gray[:, :, 1:] - gray[:, :, :-1]).abs()
+    gradient[:, 1:, :] += (gray[:, 1:, :] - gray[:, :-1, :]).abs()
+    stats = torch.cat((gray, variance, gradient), dim=0)
+    pooled = F.adaptive_avg_pool2d((stats * mask)[None], (size, size))[0]
+    pooled_mask = F.adaptive_avg_pool2d(mask[None], (size, size))[0]
+    return pooled, pooled_mask
+
+
+def _read_supervised_label(
+    rows: list[dict[str, Any]],
+    *,
+    epsg: int,
+    output_transform: torch.Tensor,
+    output_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    merged = np.zeros((output_size, output_size), dtype=np.float32)
+    valid = np.zeros((output_size, output_size), dtype=np.uint8)
+    destination_transform = rasterio.Affine(*output_transform.tolist())
+    for row in rows:
+        with rasterio.open(row["label_path"]) as source:
+            values = source.read(1)
+            projected = np.zeros_like(merged)
+            coverage = np.zeros_like(valid)
+            reproject(
+                values,
+                projected,
+                src_transform=source.transform,
+                src_crs=source.crs,
+                dst_transform=destination_transform,
+                dst_crs=f"EPSG:{epsg}",
+                resampling=Resampling.nearest,
+                dst_nodata=0,
+            )
+            reproject(
+                np.ones(values.shape, dtype=np.uint8),
+                coverage,
+                src_transform=source.transform,
+                src_crs=source.crs,
+                dst_transform=destination_transform,
+                dst_crs=f"EPSG:{epsg}",
+                resampling=Resampling.nearest,
+                dst_nodata=0,
+            )
+        merged = np.maximum(merged, projected)
+        valid = np.maximum(valid, coverage)
+    return torch.from_numpy(merged), torch.from_numpy(valid.astype(np.float32))
+
+
 class V2LocalZipDataset(Dataset):
     """Read frozen observations directly from ZIP; missing observations stay explicit."""
 
@@ -97,6 +217,8 @@ class V2LocalZipDataset(Dataset):
         include_targets: bool = True,
         normalize: bool = True,
         zarr_cache_path: Path | None = None,
+        allow_incomplete_statistics: bool = False,
+        output_intervals_override: tuple[tuple[float, float], ...] = (),
     ) -> None:
         if output_selection == "fixed" and not fixed_output_months:
             raise ValueError("fixed output_selection 必须提供 fixed_output_months")
@@ -109,6 +231,7 @@ class V2LocalZipDataset(Dataset):
         self.random_seed = random_seed
         self.context_days = context_days
         self.include_targets = include_targets
+        self.output_intervals_override = output_intervals_override
         self._archives: dict[str, ZipFile] = {}
         registry = pq.read_table(registry_path)
         if max_records is not None:
@@ -130,7 +253,7 @@ class V2LocalZipDataset(Dataset):
                 lookup[(str(row["patch_id"]), str(row["product_id"]))].append(row)
         else:
             self._zarr = zarr.open_group(str(zarr_cache_path), mode="r")
-            if self._zarr.attrs.get("schema_version") != "xuannv_v2_smoke_dense_cache_v1":
+            if self._zarr.attrs.get("schema_version") != "xuannv_v2_smoke_dense_cache_v2":
                 raise ValueError(f"Zarr cache schema 非法: {zarr_cache_path}")
             if self._zarr.attrs.get("network_remote_pixels") is not False:
                 raise ValueError(f"Zarr cache 未证明 remote pixels 禁用: {zarr_cache_path}")
@@ -138,6 +261,28 @@ class V2LocalZipDataset(Dataset):
             lock_sha = hashlib.sha256(lock_path.read_bytes()).hexdigest()
             if self._zarr.attrs.get("source_archive_lock_sha256") != lock_sha:
                 raise ValueError(f"Zarr cache 与当前 archive lock 不一致: {zarr_cache_path}")
+            current_registry_sha = hashlib.sha256(registry_path.read_bytes()).hexdigest()
+            if self._zarr.attrs.get("registry_sha256") != current_registry_sha:
+                raise ValueError(f"Zarr cache 与当前 registry 不一致: {zarr_cache_path}")
+            availability_path = (
+                config.paths.data_root / "observations" / "index" / "availability.parquet"
+            )
+            current_availability_sha = hashlib.sha256(availability_path.read_bytes()).hexdigest()
+            if self._zarr.attrs.get("availability_sha256") != current_availability_sha:
+                raise ValueError(f"Zarr cache 与当前 availability index 不一致: {zarr_cache_path}")
+            manifest_path = zarr_cache_path / "cache_manifest.json"
+            if (
+                not manifest_path.is_file()
+                or self._zarr.attrs.get("cache_manifest_sha256")
+                != hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            ):
+                raise ValueError(f"Zarr cache manifest 缺失或摘要不匹配: {zarr_cache_path}")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest.get("zip_zarr_audit_passed") is not True:
+                raise ValueError(f"Zarr cache 未通过 ZIP↔Zarr audit: {zarr_cache_path}")
+            from xuannv_embedding.data_process.v2_zarr_cache import verify_smoke_zarr_cache
+
+            verify_smoke_zarr_cache(zarr_cache_path, full=False)
             cached_patch_ids = [str(value) for value in self._zarr.attrs["patch_ids"]]
             self._zarr_patch_index = {
                 patch_id: index for index, patch_id in enumerate(cached_patch_ids)
@@ -147,29 +292,27 @@ class V2LocalZipDataset(Dataset):
                 raise ValueError(f"Zarr cache 缺少 registry patch: {missing_patches[:5]}")
             years = self._zarr.attrs["years"]
             months = self._zarr.attrs["months"]
-            starts = self._zarr.attrs["interval_start_days"]
-            ends = self._zarr.attrs["interval_end_days"]
-            available = self._zarr.attrs["available_at_days"]
-            for patch_id in patch_ids:
-                patch_index = self._zarr_patch_index[patch_id]
-                for product_id, product in config.products.items():
-                    if product.role != "dense":
-                        continue
-                    present = self._zarr[product_id]["present"][patch_index]
-                    for month_index, (year, month) in enumerate(zip(years, months, strict=True)):
-                        if january_pair_only and not (month == 1 and year in {2020, 2021}):
-                            continue
-                        lookup[(patch_id, product_id)].append(
-                            {
-                                "year": int(year),
-                                "month": int(month),
-                                "interval_start": float(starts[month_index]),
-                                "interval_end": float(ends[month_index]),
-                                "available_at": float(available[month_index]),
-                                "present": bool(present[month_index]),
-                                "cache_month_index": month_index,
-                            }
-                        )
+            month_indices = {
+                (int(year), int(month)): index
+                for index, (year, month) in enumerate(zip(years, months, strict=True))
+            }
+            filters = [("patch_id", "in", patch_ids)]
+            if january_pair_only:
+                filters.extend([("month", "=", 1), ("year", "in", [2020, 2021])])
+            indexed = pq.read_table(availability_path, filters=filters)
+            for row in indexed.to_pylist():
+                patch_id = str(row["patch_id"])
+                product_id = str(row["product_id"])
+                month_index = month_indices[(int(row["year"]), int(row["month"]))]
+                cached_present = bool(
+                    self._zarr[product_id]["present"][self._zarr_patch_index[patch_id], month_index]
+                )
+                if cached_present != bool(row["present"]):
+                    raise ValueError(
+                        f"Zarr cache present 与 availability 不一致: {patch_id}/{product_id}"
+                    )
+                row["cache_month_index"] = month_index
+                lookup[(patch_id, product_id)].append(row)
         self.observations = {
             key: sorted(value, key=lambda row: (row["year"], row["month"]))
             for key, value in lookup.items()
@@ -177,8 +320,56 @@ class V2LocalZipDataset(Dataset):
         self.dense_products = tuple(
             product_id for product_id, product in config.products.items() if product.role == "dense"
         )
+        self.highres_products = tuple(
+            product_id
+            for product_id, product in config.products.items()
+            if product.role == "highres"
+        )
+        highres_lookup: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+        for product_id in self.highres_products:
+            path = (
+                config.paths.data_root
+                / "observations"
+                / "highres"
+                / product_id
+                / "patch_observations.parquet"
+            )
+            if not path.is_file():
+                continue
+            for row in pq.read_table(path, filters=[("patch_id", "in", patch_ids)]).to_pylist():
+                highres_lookup[(str(row["patch_id"]), product_id)].append(row)
+        self.highres_observations = {
+            key: sorted(value, key=lambda row: (row["acquired_at"], row["scene_id"]))
+            for key, value in highres_lookup.items()
+        }
+        self.highres_statistics = (
+            {
+                product_id: _load_statistics(
+                    config, product_id, allow_incomplete=allow_incomplete_statistics
+                )
+                for product_id in self.highres_products
+                if any(key[1] == product_id for key in self.highres_observations)
+            }
+            if normalize
+            else {}
+        )
+        label_lookup: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+        for task in config.training.semantic_probe_tasks:
+            path = config.paths.data_root / "labels" / task / "patch_observations.parquet"
+            if not path.is_file():
+                if config.training.semantic_probe_weight > 0:
+                    raise ValueError(f"semantic probe 缺少真实 label index: {path}")
+                continue
+            for row in pq.read_table(path, filters=[("patch_id", "in", patch_ids)]).to_pylist():
+                label_lookup[(str(row["patch_id"]), task)].append(row)
+        self.supervised_label_observations = dict(label_lookup)
         self.statistics = (
-            {product_id: _load_statistics(config, product_id) for product_id in self.dense_products}
+            {
+                product_id: _load_statistics(
+                    config, product_id, allow_incomplete=allow_incomplete_statistics
+                )
+                for product_id in self.dense_products
+            }
             if normalize
             else {}
         )
@@ -283,6 +474,7 @@ class V2LocalZipDataset(Dataset):
         available_at: dict[str, torch.Tensor] = {}
         targets: dict[str, torch.Tensor] = {}
         target_masks: dict[str, torch.Tensor] = {}
+        observation_lineage: dict[str, list[dict[str, object]]] = {}
         output_rows = self._output_rows(patch_id)
         reference_intervals = torch.tensor(
             [
@@ -291,6 +483,8 @@ class V2LocalZipDataset(Dataset):
             ],
             dtype=torch.float32,
         )
+        if self.output_intervals_override:
+            reference_intervals = torch.tensor(self.output_intervals_override, dtype=torch.float32)
         for product_id in self.dense_products:
             rows = self.observations.get((patch_id, product_id), [])
             if not rows:
@@ -305,6 +499,17 @@ class V2LocalZipDataset(Dataset):
                 target_by_key[(int(row["year"]), int(row["month"]))] for row in output_rows
             ]
             rows_with_padding = self._context_rows(rows, output_rows)
+            observation_lineage[product_id] = [
+                {
+                    "archive_path": str(row.get("archive_path", "")),
+                    "member_name": str(row.get("member_name", "")),
+                    "year": int(row["year"]),
+                    "month": int(row["month"]),
+                    "present": bool(row["present"]),
+                }
+                for row in rows_with_padding
+                if row is not None
+            ]
             frames = []
             masks = []
             present = []
@@ -363,6 +568,115 @@ class V2LocalZipDataset(Dataset):
             [pixel_size, 0.0, bounds[0], 0.0, -pixel_size, bounds[3]],
             dtype=torch.float32,
         )
+        highres_frames: dict[str, torch.Tensor] = {}
+        highres_masks: dict[str, torch.Tensor] = {}
+        highres_acquired_at: dict[str, torch.Tensor] = {}
+        highres_available_at: dict[str, torch.Tensor] = {}
+        highres_geotransforms: dict[str, torch.Tensor] = {}
+        detail_targets: dict[str, torch.Tensor] = {}
+        detail_masks: dict[str, torch.Tensor] = {}
+        max_scenes = self.config.temporal.highres_structure_max_observations
+        for product_id in self.highres_products:
+            product = self.config.products[product_id]
+            rows = list(self.highres_observations.get((patch_id, product_id), []))
+            rows.sort(
+                key=lambda row: (
+                    -float(row["intersection_fraction"]),
+                    -int(row["clear_percent"]),
+                    str(row["acquired_at"]),
+                    str(row["scene_id"]),
+                )
+            )
+            rows = sorted(rows[:max_scenes], key=lambda row: (row["acquired_at"], row["scene_id"]))
+            native_size = int(math.ceil((bounds[2] - bounds[0]) / product.stored_gsd_m)) + 2
+            frames: list[torch.Tensor] = []
+            masks: list[torch.Tensor] = []
+            transforms: list[torch.Tensor] = []
+            acquired: list[float] = []
+            available: list[float] = []
+            for row in rows:
+                frame, mask, transform = _read_highres_patch(
+                    row, bands=len(product.bands), stored_gsd_m=product.stored_gsd_m
+                )
+                if product_id in self.highres_statistics:
+                    mean, std = self.highres_statistics[product_id]
+                    frame = ((frame - mean) / std) * mask
+                frames.append(frame)
+                masks.append(mask)
+                transforms.append(transform)
+                acquired.append(_parse_time_days(row["acquired_at"]))
+                available.append(_parse_time_days(row["available_at"]))
+            while len(frames) < max_scenes:
+                frames.append(torch.zeros(len(product.bands), native_size, native_size))
+                masks.append(torch.zeros(1, native_size, native_size))
+                transforms.append(
+                    torch.tensor(
+                        [
+                            product.stored_gsd_m,
+                            0.0,
+                            bounds[0],
+                            0.0,
+                            -product.stored_gsd_m,
+                            bounds[3],
+                        ],
+                        dtype=torch.float32,
+                    )
+                )
+                acquired.append(0.0)
+                available.append(0.0)
+            highres_frames[product_id] = torch.stack(frames)
+            highres_masks[product_id] = torch.stack(masks)
+            highres_geotransforms[product_id] = torch.stack(transforms)
+            highres_acquired_at[product_id] = torch.tensor(acquired, dtype=torch.float32)
+            highres_available_at[product_id] = torch.tensor(available, dtype=torch.float32)
+            product_targets = []
+            product_masks = []
+            for interval in reference_intervals:
+                eligible = [
+                    scene_index
+                    for scene_index in range(len(rows))
+                    if available[scene_index] <= float(interval[1])
+                    and acquired[scene_index]
+                    >= float(interval[1]) - self.config.temporal.highres_structure_days
+                ]
+                if eligible:
+                    selected = max(eligible, key=lambda item: acquired[item])
+                    detail, detail_mask = _detail_statistics(
+                        frames[selected], masks[selected], self.spatial_size
+                    )
+                else:
+                    detail = torch.zeros(3, self.spatial_size, self.spatial_size)
+                    detail_mask = torch.zeros(1, self.spatial_size, self.spatial_size)
+                product_targets.append(detail)
+                product_masks.append(detail_mask)
+            detail_targets[product_id] = torch.stack(product_targets)
+            detail_masks[product_id] = torch.stack(product_masks)
+            observation_lineage[product_id] = [
+                {
+                    "scene_id": str(row["scene_id"]),
+                    "acquired_at": str(row["acquired_at"]),
+                    "available_at": str(row["available_at"]),
+                    "image_path": str(row["image_path"]),
+                    "qa_path": str(row.get("qa_path") or ""),
+                }
+                for row in rows
+            ]
+        supervised_labels: dict[str, torch.Tensor] = {}
+        supervised_label_masks: dict[str, torch.Tensor] = {}
+        for task in self.config.training.semantic_probe_tasks:
+            label_rows = self.supervised_label_observations.get((patch_id, task), [])
+            if label_rows:
+                label, label_mask = _read_supervised_label(
+                    label_rows,
+                    epsg=int(record["grid_epsg"]),
+                    output_transform=output_transform,
+                    output_size=self.spatial_size,
+                )
+            else:
+                label = torch.zeros(self.spatial_size, self.spatial_size)
+                label_mask = torch.zeros(self.spatial_size, self.spatial_size)
+            supervised_labels[task] = label[None].repeat(len(reference_intervals), 1, 1)
+            supervised_label_masks[task] = label_mask[None].repeat(len(reference_intervals), 1, 1)
         return {
             "patch_id": patch_id,
             "macro_id": str(record["macro_id"]),
@@ -377,9 +691,19 @@ class V2LocalZipDataset(Dataset):
                 "output_intervals": reference_intervals,
                 "output_geotransforms": output_transform,
                 "output_size": (self.spatial_size, self.spatial_size),
+                "highres_frames": highres_frames,
+                "highres_masks": highres_masks,
+                "highres_acquired_at": highres_acquired_at,
+                "highres_available_at": highres_available_at,
+                "highres_geotransforms": highres_geotransforms,
             },
             "targets": targets,
             "target_masks": target_masks,
+            "observation_lineage": observation_lineage,
+            "detail_targets": detail_targets,
+            "detail_masks": detail_masks,
+            "supervised_labels": supervised_labels,
+            "supervised_label_masks": supervised_label_masks,
         }
 
 
@@ -409,11 +733,26 @@ def collate_v2(samples: list[dict[str, Any]]) -> dict[str, Any]:
         [sample["model_inputs"]["output_geotransforms"] for sample in samples]
     )
     model_inputs["output_size"] = first_inputs["output_size"]
+    highres_fields = (
+        "highres_frames",
+        "highres_masks",
+        "highres_acquired_at",
+        "highres_available_at",
+        "highres_geotransforms",
+    )
+    for field in highres_fields:
+        model_inputs[field] = {
+            product_id: torch.stack(
+                [sample["model_inputs"][field][product_id] for sample in samples]
+            )
+            for product_id in first_inputs[field]
+        }
     return {
         "patch_ids": [sample["patch_id"] for sample in samples],
         "macro_ids": [sample["macro_id"] for sample in samples],
         "splits": [sample["split"] for sample in samples],
         "grid_epsgs": torch.tensor([sample["grid_epsg"] for sample in samples]),
+        "observation_lineage": [sample["observation_lineage"] for sample in samples],
         "model_inputs": model_inputs,
         "targets": {
             product_id: torch.stack([sample["targets"][product_id] for sample in samples])
@@ -422,5 +761,21 @@ def collate_v2(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "target_masks": {
             product_id: torch.stack([sample["target_masks"][product_id] for sample in samples])
             for product_id in samples[0]["target_masks"]
+        },
+        "detail_targets": {
+            product_id: torch.stack([sample["detail_targets"][product_id] for sample in samples])
+            for product_id in samples[0]["detail_targets"]
+        },
+        "detail_masks": {
+            product_id: torch.stack([sample["detail_masks"][product_id] for sample in samples])
+            for product_id in samples[0]["detail_masks"]
+        },
+        "supervised_labels": {
+            task: torch.stack([sample["supervised_labels"][task] for sample in samples])
+            for task in samples[0]["supervised_labels"]
+        },
+        "supervised_label_masks": {
+            task: torch.stack([sample["supervised_label_masks"][task] for sample in samples])
+            for task in samples[0]["supervised_label_masks"]
         },
     }

@@ -171,3 +171,51 @@ def compute_v2_archive_statistics(
         "representation": "stored_dn",
         "scaling_applied": False,
     }
+
+
+def compute_v2_highres_statistics(
+    product: ProductSpec,
+    split_path: Path,
+    patch_index_path: Path,
+    *,
+    max_observations: int | None = None,
+) -> dict[str, object]:
+    """Compute train-patch high-resolution statistics without downloading or inventing QA."""
+    from xuannv_embedding.data.v2_dataset import _read_highres_patch
+
+    split = pq.read_table(split_path, columns=["patch_id", "split"])
+    train_ids = {str(row["patch_id"]) for row in split.to_pylist() if row["split"] == "train"}
+    rows = [
+        row
+        for row in pq.read_table(patch_index_path).to_pylist()
+        if str(row["patch_id"]) in train_ids
+    ]
+    rows.sort(key=lambda row: (row["patch_id"], row["acquired_at"], row["scene_id"]))
+    if max_observations is not None:
+        rows = rows[:max_observations]
+    accumulators = [_WelfordAccumulator() for _ in product.bands]
+    for row in rows:
+        frame, mask, _ = _read_highres_patch(
+            row, bands=len(product.bands), stored_gsd_m=product.stored_gsd_m
+        )
+        valid = mask[0].numpy() > 0
+        for accumulator, band in zip(accumulators, frame.numpy(), strict=True):
+            accumulator.update(band[valid])
+    if not rows or any(item.count == 0 for item in accumulators):
+        raise ValueError(
+            f"V2 highres statistics 未找到有效 train observations: {product.product_id}"
+        )
+    return {
+        "schema_version": "xuannv_v2_band_statistics_v1",
+        "product_id": product.product_id,
+        "bands": list(product.bands),
+        "mean": [item.mean for item in accumulators],
+        "std": [item.std() for item in accumulators],
+        "band_counts": [item.count for item in accumulators],
+        "num_observations": len(rows),
+        "max_observations": max_observations,
+        "complete_training_split": max_observations is None,
+        "split": "train",
+        "representation": "stored_dn",
+        "scaling_applied": False,
+    }

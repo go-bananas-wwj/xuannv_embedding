@@ -817,6 +817,7 @@ class V2PathsConfig:
     product_roots: dict[str, Path] = field(default_factory=dict)
     auxiliary_roots: dict[str, Path] = field(default_factory=dict)
     legacy_unverified_roots: dict[str, Path] = field(default_factory=dict)
+    supervised_label_roots: dict[str, Path] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -976,6 +977,7 @@ def _parse_v2_paths(value: Any) -> V2PathsConfig:
             "product_roots",
             "auxiliary_roots",
             "legacy_unverified_roots",
+            "supervised_label_roots",
         },
         required={"data_root", "source_root", "grid_package"},
     )
@@ -989,6 +991,9 @@ def _parse_v2_paths(value: Any) -> V2PathsConfig:
         ),
         legacy_unverified_roots=_parse_path_mapping(
             raw.get("legacy_unverified_roots", {}), "paths.legacy_unverified_roots"
+        ),
+        supervised_label_roots=_parse_path_mapping(
+            raw.get("supervised_label_roots", {}), "paths.supervised_label_roots"
         ),
     )
 

@@ -10,6 +10,8 @@ paths:
     static: /data2/china_xuannv_embedding/data/static
   legacy_unverified_roots:
     harbin_0_5m: /data/xuannv_embedding/processed/harbin/patches/highres_optical
+  supervised_label_roots:
+    osm_building: /data/xuannv_embedding/processed/haidian/labels/osm_building/masks
 network_policy:
   allow_remote_metadata: false
   allow_remote_pixels: false

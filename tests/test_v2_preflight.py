@@ -11,7 +11,7 @@ from xuannv_embedding.data_process.local_inventory import (
     build_grouped_split,
     read_sampled_grid,
 )
-from xuannv_embedding.data_process.preflight import classify_source
+from xuannv_embedding.data_process.preflight import build_highres_patch_index, classify_source
 
 
 def _write_grid(root: Path) -> None:
@@ -89,3 +89,58 @@ def test_preflight_classifies_processing_state(
     expected: str,
 ) -> None:
     assert classify_source(role, time_precision, already_resampled, provenance) == expected
+
+
+def test_highres_scene_patch_join_preserves_time_quality_and_partial_coverage(
+    tmp_path: Path,
+) -> None:
+    candidates = tmp_path / "candidate.parquet"
+    scenes = tmp_path / "scenes.parquet"
+    output = tmp_path / "patch_observations.parquet"
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "patch_id": "p1",
+                    "grid_epsg": 32650,
+                    "utm_bounds": [0.0, 0.0, 100.0, 100.0],
+                },
+                {
+                    "patch_id": "p2",
+                    "grid_epsg": 32649,
+                    "utm_bounds": [0.0, 0.0, 100.0, 100.0],
+                },
+            ]
+        ),
+        candidates,
+    )
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "product_id": "hr",
+                    "scene_id": "s1",
+                    "crs": "EPSG:32650",
+                    "bounds": [50.0, 0.0, 150.0, 100.0],
+                    "acquired_at": "2025-01-01T00:00:00Z",
+                    "available_at": "2025-01-03T00:00:00Z",
+                    "clear_percent": 80,
+                    "image_path": "/local/image.tif",
+                    "qa_path": "/local/qa.tif",
+                    "qa_present": True,
+                    "transform": [2.0, 0.0, 50.0, 0.0, -2.0, 100.0],
+                    "training_eligible": True,
+                }
+            ]
+        ),
+        scenes,
+    )
+
+    count = build_highres_patch_index(candidates, scenes, output)
+
+    assert count == 1
+    row = pq.read_table(output).to_pylist()[0]
+    assert row["patch_id"] == "p1"
+    assert row["scene_id"] == "s1"
+    assert row["intersection_fraction"] == 0.5
+    assert row["available_at"] == "2025-01-03T00:00:00Z"
