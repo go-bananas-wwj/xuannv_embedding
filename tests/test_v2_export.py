@@ -15,7 +15,16 @@ class _Model(nn.Module):
     def forward(self, **inputs):
         intervals = inputs["output_intervals"]
         batch, outputs = intervals.shape[:2]
-        return SimpleNamespace(embedding_map=torch.ones(batch, outputs, 4, 3, 3))
+        selection = torch.tensor(
+            [
+                [[True, False], [True, True]],
+                [[False, False], [False, True]],
+            ]
+        )
+        return SimpleNamespace(
+            embedding_map=torch.ones(batch, outputs, 4, 3, 3),
+            observation_selection={"s2_local": selection},
+        )
 
 
 def _batch() -> dict[str, object]:
@@ -24,9 +33,9 @@ def _batch() -> dict[str, object]:
         "macro_ids": ["m1", "m2"],
         "splits": ["train", "test"],
         "grid_epsgs": torch.tensor([32649, 32649]),
-        "observation_lineage": [
-            {"s2_local": ["s2:2020-01"], "s1_local": []},
-            {"s2_local": [], "s1_local": ["s1:2020-01"]},
+        "observation_candidates": [
+            {"s2_local": ["s2:2020-01", "s2:2021-01"]},
+            {"s2_local": ["s2:2020-01", "s2:2021-01"]},
         ],
         "model_inputs": {
             "output_intervals": torch.tensor(
@@ -69,6 +78,15 @@ def test_v2_export_writes_interval_utm_zarr_and_lineage_catalog(tmp_path: Path) 
     assert group["embedding"].shape == (2, 4, 3, 3)
     assert table["observation_lineage_json"][0].as_py()
     assert table["shard_sha256"][0].as_py()
+    by_patch_interval = {(row["patch_id"], row["interval_id"]): row for row in table.to_pylist()}
+    assert (
+        by_patch_interval[("p1", "20200101-20200201")]["observation_lineage_json"]
+        == '{"s2_local":["s2:2020-01"]}'
+    )
+    assert (
+        by_patch_interval[("p1", "20210101-20210201")]["observation_lineage_json"]
+        == '{"s2_local":["s2:2020-01","s2:2021-01"]}'
+    )
 
 
 def test_v2_export_refuses_to_overwrite_catalog(tmp_path: Path) -> None:

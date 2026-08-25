@@ -22,7 +22,10 @@ from xuannv_embedding.training.runtime import (
     train_v2_accumulation_steps,
     train_v2_steps,
 )
-from xuannv_embedding.training.validation_profiles import assert_macro_disjoint
+from xuannv_embedding.training.validation_profiles import (
+    assert_macro_disjoint,
+    data_manifest_sha256,
+)
 
 
 def _system() -> V2TrainingSystem:
@@ -85,6 +88,58 @@ def _checkpoint_contract() -> dict[str, object]:
         "product_schema": {"dense": {"bands": ["a", "b"]}},
         "temporal_contract": {"mode": "causal_window"},
     }
+
+
+def test_data_manifest_rejects_changed_indexed_highres_content(tmp_path: Path) -> None:
+    required = (
+        "locks/local_archive_sha256.jsonl",
+        "registry/local_archive_inventory.parquet",
+        "registry/split_80_10_10.parquet",
+        "observations/index/availability.parquet",
+    )
+    for relative in required:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"locked")
+    statistics = tmp_path / "statistics" / "dense.json"
+    statistics.parent.mkdir(parents=True)
+    statistics.write_text("{}", encoding="utf-8")
+    image = tmp_path / "scene.tif"
+    image.write_bytes(b"original pixels")
+    import hashlib
+
+    scenes = tmp_path / "observations" / "highres" / "hr" / "scenes.parquet"
+    scenes.parent.mkdir(parents=True)
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "product_id": "hr",
+                    "image_path": str(image),
+                    "image_size_bytes": image.stat().st_size,
+                    "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
+                    "qa_path": None,
+                    "qa_present": False,
+                    "qa_size_bytes": None,
+                    "qa_sha256": None,
+                }
+            ]
+        ),
+        scenes,
+    )
+    pq.write_table(
+        pa.Table.from_pylist([{"patch_id": "p1", "scene_id": "s1"}]),
+        scenes.with_name("patch_observations.parquet"),
+    )
+
+    first = data_manifest_sha256(tmp_path)
+    image.write_bytes(b"modified pixels")
+
+    assert len(first) == 64
+    import pytest
+
+    with pytest.raises(ValueError, match="内容.*变化"):
+        data_manifest_sha256(tmp_path)
 
 
 def test_v2_training_updates_parameters_and_optimizer() -> None:

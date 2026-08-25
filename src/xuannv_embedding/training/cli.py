@@ -496,7 +496,7 @@ def _run_v2_smoke(
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
     amp = config.training.amp and not args.no_amp and device.type != "cpu"
     config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
-    manifest_sha = data_manifest_sha256(config.paths.data_root)
+    manifest_sha = data_manifest_sha256(config.paths.data_root, config=config)
     product_schema = v2_product_schema(config)
     temporal_contract = v2_temporal_contract(config)
     git_sha = _git_sha()
@@ -775,7 +775,7 @@ def _run_v2_npu_smoke(
     )
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
     config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
-    manifest_sha = data_manifest_sha256(config.paths.data_root)
+    manifest_sha = data_manifest_sha256(config.paths.data_root, config=config)
     product_schema = v2_product_schema(config)
     temporal_contract = v2_temporal_contract(config)
     git_sha = _git_sha()
@@ -1143,7 +1143,7 @@ def _run_v2_training(args: argparse.Namespace) -> int:
     )
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
     config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
-    manifest_sha = data_manifest_sha256(config.paths.data_root)
+    manifest_sha = data_manifest_sha256(config.paths.data_root, config=config)
     product_schema = v2_product_schema(config)
     temporal_contract = v2_temporal_contract(config)
     if args.resume is not None:

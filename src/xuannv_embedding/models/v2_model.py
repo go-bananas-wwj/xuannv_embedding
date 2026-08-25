@@ -35,6 +35,7 @@ class XuannvV2Output:
     embedding: torch.Tensor
     reconstructions: dict[str, torch.Tensor]
     highres_detail_stats: dict[str, torch.Tensor]
+    observation_selection: dict[str, torch.Tensor]
 
 
 class _TransformerCore(nn.Module):
@@ -248,9 +249,10 @@ class XuannvV2Model(nn.Module):
         source_available_at: dict[str, torch.Tensor],
         output_intervals: torch.Tensor,
         output_size: tuple[int, int],
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         summaries: dict[str, torch.Tensor] = {}
         availability: dict[str, torch.Tensor] = {}
+        selections: dict[str, torch.Tensor] = {}
         for product_id, adapter in self.dense_adapters.items():
             required = (
                 source_frames,
@@ -275,13 +277,14 @@ class XuannvV2Model(nn.Module):
                 mode=self.temporal_mode,
                 window_days=self.dense_lookback_days,
             )
+            selections[product_id] = selected
             summaries[product_id], availability[product_id] = self.dense_attention[product_id](
                 encoded,
                 source_time_bounds[product_id],
                 output_intervals,
                 selected,
             )
-        return self.dense_fusion(summaries, availability)
+        return self.dense_fusion(summaries, availability), selections
 
     def _highres_features(
         self,
@@ -293,7 +296,7 @@ class XuannvV2Model(nn.Module):
         output_geotransforms: torch.Tensor | None,
         output_intervals: torch.Tensor,
         output_size: tuple[int, int],
-    ) -> tuple[torch.Tensor, torch.Tensor] | None:
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]] | None:
         if not highres_frames:
             return None
         if any(
@@ -314,6 +317,7 @@ class XuannvV2Model(nn.Module):
         appearance_maps: dict[str, torch.Tensor] = {}
         structure_available: dict[str, torch.Tensor] = {}
         appearance_available: dict[str, torch.Tensor] = {}
+        selections: dict[str, torch.Tensor] = {}
         for product_id, frames in highres_frames.items():
             if product_id not in self.highres_adapters:
                 raise KeyError(f"未知 highres product: {product_id}")
@@ -357,6 +361,7 @@ class XuannvV2Model(nn.Module):
                 quality,
                 self.highres_appearance_max_observations,
             )
+            selections[product_id] = structure_selected | appearance_selected
             structure_maps[product_id], structure_available[product_id] = (
                 self.highres_structure_attention[product_id](
                     encoded, bounds, output_intervals, structure_selected
@@ -372,6 +377,7 @@ class XuannvV2Model(nn.Module):
         return (
             self.highres_structure_fusion(structure_maps, structure_available),
             self.highres_appearance_fusion(appearance_maps, appearance_available),
+            selections,
         )
 
     def forward(
@@ -395,7 +401,7 @@ class XuannvV2Model(nn.Module):
         if output_size is None:
             first = next(iter(source_frames.values()))
             output_size = (first.shape[-2], first.shape[-1])
-        fused = self._dense_features(
+        fused, observation_selection = self._dense_features(
             source_frames,
             source_pixel_masks,
             source_observation_masks,
@@ -416,7 +422,8 @@ class XuannvV2Model(nn.Module):
         )
         batch, outputs, channels, height, width = fused.shape
         if highres is not None:
-            structure, appearance = highres
+            structure, appearance, highres_selection = highres
+            observation_selection.update(highres_selection)
             combined = torch.cat(
                 (fused, structure, appearance, (structure - appearance).abs()), dim=2
             )
@@ -456,4 +463,5 @@ class XuannvV2Model(nn.Module):
             embedding=embedding_map.mean(dim=(-2, -1)),
             reconstructions=reconstructions,
             highres_detail_stats=detail,
+            observation_selection=observation_selection,
         )

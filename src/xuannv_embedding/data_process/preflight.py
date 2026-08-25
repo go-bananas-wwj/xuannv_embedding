@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -15,6 +16,14 @@ import rasterio
 
 from xuannv_embedding.config import V2Config
 from xuannv_embedding.data.local_archives import audit_raster_member, verify_archive_lock
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(8 * 1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def classify_source(
@@ -75,8 +84,12 @@ def build_highres_patch_index(
                     "available_at": str(scene["available_at"]),
                     "clear_percent": int(scene.get("clear_percent") or 0),
                     "image_path": str(scene["image_path"]),
+                    "image_size_bytes": int(scene["image_size_bytes"]),
+                    "image_sha256": str(scene["image_sha256"]),
                     "qa_path": str(scene.get("qa_path") or ""),
                     "qa_present": bool(scene.get("qa_present")),
+                    "qa_size_bytes": scene.get("qa_size_bytes"),
+                    "qa_sha256": scene.get("qa_sha256"),
                     "scene_transform": [float(value) for value in scene["transform"]],
                     "intersection_fraction": intersection / ((right - left) * (top - bottom)),
                     "quality_status": str(scene.get("quality_category") or "unknown"),
@@ -114,6 +127,8 @@ def build_raster_label_patch_index(
             source_bounds = dataset.bounds
             source_transform = list(dataset.transform)[:6]
             dtype = dataset.dtypes[0]
+        label_size = label_path.stat().st_size
+        label_sha256 = _file_sha256(label_path)
         for patch in by_epsg.get(epsg, []):
             left, bottom, right, top = map(float, patch["utm_bounds"])
             width = max(0.0, min(right, source_bounds.right) - max(left, source_bounds.left))
@@ -125,6 +140,8 @@ def build_raster_label_patch_index(
                     "patch_id": str(patch["patch_id"]),
                     "task": task,
                     "label_path": str(label_path.resolve()),
+                    "label_size_bytes": label_size,
+                    "label_sha256": label_sha256,
                     "crs": f"EPSG:{epsg}",
                     "transform": [float(value) for value in source_transform],
                     "dtype": dtype,
@@ -175,14 +192,23 @@ def index_local_highres_and_auxiliary(config: V2Config) -> dict[str, int]:
             udm2_path = image_path.with_name(
                 image_path.name.replace("_3B_AnalyticMS_SR_clip.tif", "_3B_udm2_clip.tif")
             )
+            image_size = image_path.stat().st_size
+            image_sha256 = _file_sha256(image_path)
+            qa_present = udm2_path.is_file()
+            qa_size = udm2_path.stat().st_size if qa_present else None
+            qa_sha256 = _file_sha256(udm2_path) if qa_present else None
             with rasterio.open(image_path) as dataset:
                 bounds = dataset.bounds
                 row = {
                     "product_id": product_id,
                     **metadata,
                     "image_path": str(image_path.resolve()),
-                    "qa_path": str(udm2_path.resolve()) if udm2_path.is_file() else None,
-                    "qa_present": udm2_path.is_file(),
+                    "image_size_bytes": image_size,
+                    "image_sha256": image_sha256,
+                    "qa_path": str(udm2_path.resolve()) if qa_present else None,
+                    "qa_present": qa_present,
+                    "qa_size_bytes": qa_size,
+                    "qa_sha256": qa_sha256,
                     "channels": dataset.count,
                     "height": dataset.height,
                     "width": dataset.width,

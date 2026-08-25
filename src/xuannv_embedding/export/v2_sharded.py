@@ -172,6 +172,12 @@ def export_v2_sharded(
                 )
             if not np.isfinite(embedding).all():
                 raise FloatingPointError("V2 embedding 包含 NaN/Inf")
+            if not hasattr(output, "observation_selection"):
+                raise ValueError("V2 导出要求模型返回逐区间 observation selection")
+            selections = {
+                product_id: selected.detach().cpu().bool()
+                for product_id, selected in output.observation_selection.items()
+            }
             for batch_index, patch_id in enumerate(batch["patch_ids"]):
                 for interval_index in range(embedding.shape[1]):
                     row = writer.append(
@@ -182,7 +188,18 @@ def export_v2_sharded(
                         interval_bounds=intervals[batch_index, interval_index],
                         epsg=int(batch["grid_epsgs"][batch_index]),
                     )
-                    lineage = batch.get("observation_lineage", [{}])[batch_index]
+                    candidates = batch.get("observation_candidates", [{}])[batch_index]
+                    lineage = {}
+                    for product_id, selected in selections.items():
+                        refs = candidates.get(product_id, [])
+                        indices = torch.nonzero(
+                            selected[batch_index, interval_index], as_tuple=False
+                        ).flatten()
+                        lineage[product_id] = [
+                            refs[int(index)]
+                            for index in indices
+                            if int(index) < len(refs) and refs[int(index)] is not None
+                        ]
                     row["observation_lineage_json"] = json.dumps(
                         lineage, ensure_ascii=False, sort_keys=True, separators=(",", ":")
                     )

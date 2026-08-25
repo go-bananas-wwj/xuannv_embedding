@@ -93,6 +93,62 @@ def _parse_time_days(value: str) -> float:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() / 86400.0
 
 
+def _select_highres_candidates(
+    rows: list[dict[str, Any]],
+    output_intervals: torch.Tensor,
+    *,
+    mode: Literal["within_period", "causal_window", "centered_window"],
+    structure_days: int,
+    appearance_days: int,
+    structure_max: int,
+    appearance_max: int,
+) -> list[dict[str, Any]]:
+    """Return the union of per-interval memory candidates before pixel decoding."""
+    selected_ids: set[str] = set()
+    parsed = [
+        (
+            row,
+            _parse_time_days(str(row["acquired_at"])),
+            _parse_time_days(str(row["available_at"])),
+        )
+        for row in rows
+    ]
+    for interval in output_intervals:
+        start, end = (float(interval[0]), float(interval[1]))
+        center = (start + end) * 0.5
+        for window_days, maximum in (
+            (structure_days, structure_max),
+            (appearance_days, appearance_max),
+        ):
+            eligible: list[tuple[dict[str, Any], float]] = []
+            for row, acquired, available in parsed:
+                if mode == "causal_window":
+                    keep = available <= end and acquired < end and acquired > end - window_days
+                elif mode == "within_period":
+                    keep = acquired < end and acquired > start
+                elif mode == "centered_window":
+                    keep = abs(acquired - center) <= window_days
+                else:
+                    raise ValueError(f"未知 temporal mode: {mode}")
+                if keep:
+                    eligible.append((row, acquired))
+            ranked = sorted(
+                eligible,
+                key=lambda item: (
+                    -float(item[0].get("intersection_fraction") or 0.0)
+                    * float(item[0].get("clear_percent") or 0.0),
+                    abs(item[1] - center),
+                    item[1],
+                    str(item[0]["scene_id"]),
+                ),
+            )
+            selected_ids.update(str(row["scene_id"]) for row, _ in ranked[:maximum])
+    return sorted(
+        [row for row in rows if str(row["scene_id"]) in selected_ids],
+        key=lambda row: (row["acquired_at"], row["scene_id"]),
+    )
+
+
 def _read_highres_patch(
     row: dict[str, Any],
     *,
@@ -474,7 +530,7 @@ class V2LocalZipDataset(Dataset):
         available_at: dict[str, torch.Tensor] = {}
         targets: dict[str, torch.Tensor] = {}
         target_masks: dict[str, torch.Tensor] = {}
-        observation_lineage: dict[str, list[dict[str, object]]] = {}
+        observation_candidates: dict[str, list[dict[str, object] | None]] = {}
         output_rows = self._output_rows(patch_id)
         reference_intervals = torch.tensor(
             [
@@ -499,16 +555,19 @@ class V2LocalZipDataset(Dataset):
                 target_by_key[(int(row["year"]), int(row["month"]))] for row in output_rows
             ]
             rows_with_padding = self._context_rows(rows, output_rows)
-            observation_lineage[product_id] = [
-                {
-                    "archive_path": str(row.get("archive_path", "")),
-                    "member_name": str(row.get("member_name", "")),
-                    "year": int(row["year"]),
-                    "month": int(row["month"]),
-                    "present": bool(row["present"]),
-                }
+            observation_candidates[product_id] = [
+                (
+                    None
+                    if row is None
+                    else {
+                        "archive_path": str(row.get("archive_path", "")),
+                        "member_name": str(row.get("member_name", "")),
+                        "year": int(row["year"]),
+                        "month": int(row["month"]),
+                        "present": bool(row["present"]),
+                    }
+                )
                 for row in rows_with_padding
-                if row is not None
             ]
             frames = []
             masks = []
@@ -579,15 +638,15 @@ class V2LocalZipDataset(Dataset):
         for product_id in self.highres_products:
             product = self.config.products[product_id]
             rows = list(self.highres_observations.get((patch_id, product_id), []))
-            rows.sort(
-                key=lambda row: (
-                    -float(row["intersection_fraction"]),
-                    -int(row["clear_percent"]),
-                    str(row["acquired_at"]),
-                    str(row["scene_id"]),
-                )
+            rows = _select_highres_candidates(
+                rows,
+                reference_intervals,
+                mode=self.config.temporal.mode,
+                structure_days=self.config.temporal.highres_structure_days,
+                appearance_days=self.config.temporal.highres_appearance_days,
+                structure_max=max_scenes,
+                appearance_max=self.config.temporal.highres_appearance_max_observations,
             )
-            rows = sorted(rows[:max_scenes], key=lambda row: (row["acquired_at"], row["scene_id"]))
             native_size = int(math.ceil((bounds[2] - bounds[0]) / product.stored_gsd_m)) + 2
             frames: list[torch.Tensor] = []
             masks: list[torch.Tensor] = []
@@ -606,7 +665,7 @@ class V2LocalZipDataset(Dataset):
                 transforms.append(transform)
                 acquired.append(_parse_time_days(row["acquired_at"]))
                 available.append(_parse_time_days(row["available_at"]))
-            while len(frames) < max_scenes:
+            while not frames:
                 frames.append(torch.zeros(len(product.bands), native_size, native_size))
                 masks.append(torch.zeros(1, native_size, native_size))
                 transforms.append(
@@ -632,15 +691,34 @@ class V2LocalZipDataset(Dataset):
             product_targets = []
             product_masks = []
             for interval in reference_intervals:
+                interval_start = float(interval[0])
+                interval_end = float(interval[1])
+                interval_center = (interval_start + interval_end) * 0.5
                 eligible = [
                     scene_index
                     for scene_index in range(len(rows))
-                    if available[scene_index] <= float(interval[1])
-                    and acquired[scene_index]
-                    >= float(interval[1]) - self.config.temporal.highres_structure_days
+                    if (
+                        self.config.temporal.mode == "causal_window"
+                        and available[scene_index] <= interval_end
+                        and acquired[scene_index] < interval_end
+                        and acquired[scene_index]
+                        > interval_end - self.config.temporal.highres_structure_days
+                    )
+                    or (
+                        self.config.temporal.mode == "within_period"
+                        and interval_start < acquired[scene_index] < interval_end
+                    )
+                    or (
+                        self.config.temporal.mode == "centered_window"
+                        and abs(acquired[scene_index] - interval_center)
+                        <= self.config.temporal.highres_structure_days
+                    )
                 ]
                 if eligible:
-                    selected = max(eligible, key=lambda item: acquired[item])
+                    selected = max(
+                        eligible,
+                        key=lambda item: (float(masks[item].sum()), acquired[item], -item),
+                    )
                     detail, detail_mask = _detail_statistics(
                         frames[selected], masks[selected], self.spatial_size
                     )
@@ -651,7 +729,7 @@ class V2LocalZipDataset(Dataset):
                 product_masks.append(detail_mask)
             detail_targets[product_id] = torch.stack(product_targets)
             detail_masks[product_id] = torch.stack(product_masks)
-            observation_lineage[product_id] = [
+            observation_candidates[product_id] = [
                 {
                     "scene_id": str(row["scene_id"]),
                     "acquired_at": str(row["acquired_at"]),
@@ -661,6 +739,8 @@ class V2LocalZipDataset(Dataset):
                 }
                 for row in rows
             ]
+            while len(observation_candidates[product_id]) < len(frames):
+                observation_candidates[product_id].append(None)
         supervised_labels: dict[str, torch.Tensor] = {}
         supervised_label_masks: dict[str, torch.Tensor] = {}
         for task in self.config.training.semantic_probe_tasks:
@@ -699,7 +779,7 @@ class V2LocalZipDataset(Dataset):
             },
             "targets": targets,
             "target_masks": target_masks,
-            "observation_lineage": observation_lineage,
+            "observation_candidates": observation_candidates,
             "detail_targets": detail_targets,
             "detail_masks": detail_masks,
             "supervised_labels": supervised_labels,
@@ -741,18 +821,43 @@ def collate_v2(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "highres_geotransforms",
     )
     for field in highres_fields:
-        model_inputs[field] = {
-            product_id: torch.stack(
-                [sample["model_inputs"][field][product_id] for sample in samples]
-            )
-            for product_id in first_inputs[field]
-        }
+        model_inputs[field] = {}
+        for product_id in first_inputs[field]:
+            tensors = [sample["model_inputs"][field][product_id] for sample in samples]
+            maximum = max(tensor.shape[0] for tensor in tensors)
+            padded = []
+            for tensor in tensors:
+                if tensor.shape[0] < maximum:
+                    shape = (maximum - tensor.shape[0], *tensor.shape[1:])
+                    padding = torch.zeros(shape, dtype=tensor.dtype)
+                    if field == "highres_geotransforms":
+                        padding[:] = tensor[-1]
+                    tensor = torch.cat((tensor, padding), dim=0)
+                padded.append(tensor)
+            model_inputs[field][product_id] = torch.stack(padded)
     return {
         "patch_ids": [sample["patch_id"] for sample in samples],
         "macro_ids": [sample["macro_id"] for sample in samples],
         "splits": [sample["split"] for sample in samples],
         "grid_epsgs": torch.tensor([sample["grid_epsg"] for sample in samples]),
-        "observation_lineage": [sample["observation_lineage"] for sample in samples],
+        "observation_candidates": [
+            {
+                product_id: candidates
+                + [None]
+                * (
+                    model_inputs[
+                        (
+                            "highres_frames"
+                            if product_id in first_inputs["highres_frames"]
+                            else "source_frames"
+                        )
+                    ][product_id].shape[1]
+                    - len(candidates)
+                )
+                for product_id, candidates in sample["observation_candidates"].items()
+            }
+            for sample in samples
+        ],
         "model_inputs": model_inputs,
         "targets": {
             product_id: torch.stack([sample["targets"][product_id] for sample in samples])

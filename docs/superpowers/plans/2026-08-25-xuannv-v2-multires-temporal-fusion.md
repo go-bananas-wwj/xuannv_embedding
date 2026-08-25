@@ -16,7 +16,7 @@
 
 ## 实施状态（2026-08-25）
 
-Stage 01—06 已完成并分别推送 annotated tag。最终门禁为 `307 passed`，Black、Ruff、
+Stage 01—06 已完成并分别推送 annotated tag。最终门禁为 `309 passed`，Black、Ruff、
 仓库内容检查和发行包构建全部通过。真实 8×Ascend 910B smoke 使用两个独立 `torchrun`
 进程完成 100 optimizer step，在第 50 step 跨进程恢复；8 个 rank 同步，恢复首批 loss
 差值为 0，峰值显存约 3.35GB，吞吐约 21.08 sample/s。
@@ -33,6 +33,11 @@ Stage 01—06 已完成并分别推送 annotated tag。最终门禁为 `307 pass
 由于 ZIP 直接读取的数据等待比例超过 10%，已按计划生成并校验本地 Zarr cache 后重跑；
 最终数据等待比例约 19.9%，因此后续全国长训仍需继续做 I/O profiling，但不影响本轮
 正确性 smoke 的通过结论。全程没有下载像元。
+
+最终复审又补齐三项 provenance/causal 门禁：高分 TIFF、UDM2 和监督标签都记录并在
+训练前复验 size/SHA256；高分候选按每个输出区间先做时间过滤再取双记忆选择结果的并集；
+导出使用模型实际 observation selection，逐 interval 写入贡献观测，不再把未来候选景
+列入较早 causal 输出的 lineage。
 
 ## Global Constraints
 

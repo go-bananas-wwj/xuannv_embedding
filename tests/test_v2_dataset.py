@@ -15,6 +15,7 @@ from xuannv_embedding.data.v2_dataset import (
     _load_statistics,
     _read_highres_patch,
     _read_supervised_label,
+    _select_highres_candidates,
     _stored_pixel_validity,
 )
 
@@ -244,3 +245,49 @@ def test_supervised_label_reader_reprojects_real_mask_to_output_grid(tmp_path: P
 
     assert label.tolist() == [[1.0, 0.0], [0.0, 1.0]]
     assert mask.sum() == 4
+
+
+def test_highres_candidate_union_keeps_causal_history_before_scene_limit() -> None:
+    rows = [
+        {
+            "scene_id": "history",
+            "acquired_at": "2020-01-15T00:00:00Z",
+            "available_at": "2020-01-16T00:00:00Z",
+            "intersection_fraction": 0.5,
+            "clear_percent": 50,
+        }
+    ]
+    rows.extend(
+        {
+            "scene_id": f"future-{index:02d}",
+            "acquired_at": f"2021-01-{index + 1:02d}T00:00:00Z",
+            "available_at": f"2021-01-{index + 2:02d}T00:00:00Z",
+            "intersection_fraction": 1.0,
+            "clear_percent": 100,
+        }
+        for index in range(9)
+    )
+    intervals = torch.tensor(
+        [
+            [
+                datetime(2020, 2, 1, tzinfo=UTC).timestamp() / 86400,
+                datetime(2020, 3, 1, tzinfo=UTC).timestamp() / 86400,
+            ],
+            [
+                datetime(2021, 2, 1, tzinfo=UTC).timestamp() / 86400,
+                datetime(2021, 3, 1, tzinfo=UTC).timestamp() / 86400,
+            ],
+        ]
+    )
+
+    selected = _select_highres_candidates(
+        rows,
+        intervals,
+        mode="causal_window",
+        structure_days=730,
+        appearance_days=90,
+        structure_max=8,
+        appearance_max=4,
+    )
+
+    assert "history" in {row["scene_id"] for row in selected}

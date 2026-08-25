@@ -126,8 +126,12 @@ def test_highres_scene_patch_join_preserves_time_quality_and_partial_coverage(
                     "available_at": "2025-01-03T00:00:00Z",
                     "clear_percent": 80,
                     "image_path": "/local/image.tif",
+                    "image_size_bytes": 123,
+                    "image_sha256": "a" * 64,
                     "qa_path": "/local/qa.tif",
                     "qa_present": True,
+                    "qa_size_bytes": 45,
+                    "qa_sha256": "b" * 64,
                     "transform": [2.0, 0.0, 50.0, 0.0, -2.0, 100.0],
                     "training_eligible": True,
                 }
@@ -144,3 +148,7 @@ def test_highres_scene_patch_join_preserves_time_quality_and_partial_coverage(
     assert row["scene_id"] == "s1"
     assert row["intersection_fraction"] == 0.5
     assert row["available_at"] == "2025-01-03T00:00:00Z"
+    assert row["image_size_bytes"] == 123
+    assert row["image_sha256"] == "a" * 64
+    assert row["qa_size_bytes"] == 45
+    assert row["qa_sha256"] == "b" * 64

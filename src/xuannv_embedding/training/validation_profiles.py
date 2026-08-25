@@ -14,7 +14,46 @@ from xuannv_embedding.models.v2_model import XuannvV2Model
 from xuannv_embedding.training.losses import V2TotalLoss
 
 
-def data_manifest_sha256(root: Path) -> str:
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(8 * 1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_indexed_content(
+    index_path: Path,
+    content_fields: tuple[tuple[str, str, str], ...],
+) -> None:
+    table = pq.read_table(index_path)
+    names = set(table.column_names)
+    required = {field for fields in content_fields for field in fields}
+    missing = sorted(required - names)
+    if missing:
+        raise ValueError(f"内容索引缺少锁定字段: {index_path}:{missing}")
+    verified: set[tuple[str, int, str]] = set()
+    for row in table.to_pylist():
+        for path_field, size_field, sha_field in content_fields:
+            raw_path = row.get(path_field)
+            if not raw_path:
+                continue
+            path = Path(str(raw_path))
+            size = row.get(size_field)
+            sha256 = row.get(sha_field)
+            if size is None or not sha256:
+                raise ValueError(f"内容索引缺少文件摘要: {index_path}:{path}")
+            key = (str(path), int(size), str(sha256))
+            if key in verified:
+                continue
+            if not path.is_file() or path.stat().st_size != int(size):
+                raise ValueError(f"索引文件内容大小已变化: {path}")
+            if _file_sha256(path) != str(sha256):
+                raise ValueError(f"索引文件内容 SHA256 已变化: {path}")
+            verified.add(key)
+
+
+def data_manifest_sha256(root: Path, *, config: V2Config | None = None) -> str:
     paths = [
         root / "locks" / "local_archive_sha256.jsonl",
         root / "registry" / "local_archive_inventory.parquet",
@@ -22,9 +61,34 @@ def data_manifest_sha256(root: Path) -> str:
         root / "observations" / "index" / "availability.parquet",
     ]
     paths.extend(sorted((root / "statistics").glob("*.json")))
-    paths.extend(sorted((root / "observations" / "highres").glob("*/scenes.parquet")))
-    paths.extend(sorted((root / "observations" / "highres").glob("*/patch_observations.parquet")))
-    paths.extend(sorted((root / "labels").glob("*/patch_observations.parquet")))
+    if config is None:
+        highres_ids = None
+        label_tasks = None
+    else:
+        highres_ids = {
+            product_id
+            for product_id, product in config.products.items()
+            if product.role == "highres"
+        }
+        label_tasks = set(config.training.semantic_probe_tasks)
+    highres_scenes = sorted((root / "observations" / "highres").glob("*/scenes.parquet"))
+    if highres_ids is not None:
+        highres_scenes = [path for path in highres_scenes if path.parent.name in highres_ids]
+    label_indexes = sorted((root / "labels").glob("*/patch_observations.parquet"))
+    if label_tasks is not None:
+        label_indexes = [path for path in label_indexes if path.parent.name in label_tasks]
+    for path in highres_scenes:
+        _verify_indexed_content(
+            path,
+            (
+                ("image_path", "image_size_bytes", "image_sha256"),
+                ("qa_path", "qa_size_bytes", "qa_sha256"),
+            ),
+        )
+        paths.extend((path, path.with_name("patch_observations.parquet")))
+    for path in label_indexes:
+        _verify_indexed_content(path, (("label_path", "label_size_bytes", "label_sha256"),))
+        paths.append(path)
     if not any(path.parent.name == "statistics" for path in paths):
         raise FileNotFoundError(f"数据 manifest 缺少训练波段统计量: {root / 'statistics'}")
     digest = hashlib.sha256()
