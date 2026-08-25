@@ -798,6 +798,7 @@ def _run_v2_npu_smoke(
             amp=config.training.amp and not args.no_amp,
             scheduler=scheduler,
         )
+        first["wall_seconds"] = time.perf_counter() - wall_start
         probe_stream = iter(
             _CyclingLoader(loader, sampler, start_micro_batches=start_micro_batches)
         )
@@ -839,13 +840,31 @@ def _run_v2_npu_smoke(
             )
         dist.barrier()
         if rank == 0:
+            phase_report = {
+                "schema_version": "xuannv_v2_npu_phase_v1",
+                "phase": "first",
+                "process_id": os.getpid(),
+                "git_sha": git_sha,
+                "config_sha256": config_sha,
+                "data_manifest_sha256": manifest_sha,
+                "boundary_step": boundary_step,
+                "checkpoint": str(boundary_path),
+                "checkpoint_sha256": _sha256_file(boundary_path),
+                "checkpoint_seconds": time.perf_counter() - checkpoint_start,
+            }
+            phase_report_path = config.paths.data_root / "runs" / "npu-smoke" / "phase-first.json"
+            phase_report_path.parent.mkdir(parents=True, exist_ok=True)
+            phase_report_path.write_text(
+                json.dumps(phase_report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
             print(
                 json.dumps(
                     {
                         "profile": "npu-smoke",
                         "phase": "first",
                         "checkpoint": str(boundary_path),
-                        "checkpoint_seconds": time.perf_counter() - checkpoint_start,
+                        "checkpoint_seconds": phase_report["checkpoint_seconds"],
                         "process_exit_required": True,
                     },
                     ensure_ascii=False,
@@ -857,6 +876,20 @@ def _run_v2_npu_smoke(
     if args.npu_phase != "resume":
         raise ValueError("npu-smoke 必须由 first、resume 两个独立 torchrun 阶段执行")
     checkpoint_start = time.perf_counter()
+    phase_report_path = config.paths.data_root / "runs" / "npu-smoke" / "phase-first.json"
+    phase_report = json.loads(phase_report_path.read_text(encoding="utf-8"))
+    expected_phase = {
+        "git_sha": git_sha,
+        "config_sha256": config_sha,
+        "data_manifest_sha256": manifest_sha,
+        "boundary_step": boundary_step,
+        "checkpoint_sha256": _sha256_file(boundary_path),
+    }
+    for name, expected in expected_phase.items():
+        if phase_report.get(name) != expected:
+            raise RuntimeError(f"npu-smoke first phase report {name} 不匹配")
+    if int(phase_report["process_id"]) == os.getpid():
+        raise RuntimeError("npu-smoke resume 必须来自新的 launcher 进程")
     state = load_v2_training_checkpoint(
         boundary_path,
         model=system.model,
@@ -887,7 +920,9 @@ def _run_v2_npu_smoke(
         raise RuntimeError(
             f"跨进程恢复首 batch loss 不一致: {resumed_probe_loss}/{expected_probe_loss}"
         )
-    checkpoint_seconds = time.perf_counter() - checkpoint_start
+    checkpoint_seconds = float(phase_report["checkpoint_seconds"]) + (
+        time.perf_counter() - checkpoint_start
+    )
     second = train_v2_accumulation_steps(
         distributed_system,
         itertools.chain((first_resumed_batch,), stream),
@@ -916,7 +951,7 @@ def _run_v2_npu_smoke(
             first["data_seconds"] + second["data_seconds"],
             first["compute_seconds"] + second["compute_seconds"],
             float(torch.npu.max_memory_allocated(device)),
-            wall_seconds,
+            float(first["wall_seconds"]) + wall_seconds,
             checkpoint_seconds,
             abs(resumed_probe_loss - expected_probe_loss),
         ],
@@ -947,6 +982,8 @@ def _run_v2_npu_smoke(
         "checkpoint_seconds_max": float(matrix[:, 8].max()),
         "checkpoint_restore_step": boundary_step,
         "process_restart_verified": True,
+        "first_process_id": int(phase_report["process_id"]),
+        "resume_process_id": os.getpid(),
         "resume_probe_loss_delta_max": float(matrix[:, 9].max()),
         "rank_sync_verified": True,
         "split_counts": split_counts,
