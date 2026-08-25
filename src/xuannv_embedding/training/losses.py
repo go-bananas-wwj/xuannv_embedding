@@ -54,6 +54,9 @@ def reconstruction_loss(
             # (B, T) 时间掩码，应用到所有空间位置。
             mask = mask.reshape(B * T, 1, 1).expand(B * T, H, W)
 
+        if mask.dim() == 4 and mask.shape[1] == 1:
+            mask = mask[:, 0]
+
     if loss_type == "l1":
         # 逐元素 L1，然后在通道维度取平均，得到 [B, H, W]。
         loss = F.l1_loss(pred, target, reduction="none").mean(dim=1)
@@ -424,4 +427,131 @@ class TotalLoss(nn.Module):
         for name, value in semantic_stats.items():
             if name.startswith("semantic_probe_"):
                 result[name] = value
+        return result
+
+
+class V2TotalLoss(nn.Module):
+    """V2 reconstruction, uniformity, semantic-probe, and highres-detail objective."""
+
+    def __init__(
+        self,
+        *,
+        embed_dim: int,
+        reconstruction_weights: dict[str, float],
+        uniformity_weight: float = 0.0,
+        uniformity_warmup_epochs: int = 0,
+        uniformity_temperature: float = 2.0,
+        semantic_probe_weight: float = 0.0,
+        semantic_probe_warmup_epochs: int = 0,
+        semantic_probe_tasks: tuple[str, ...] = (),
+        semantic_probe_hidden_dim: int = 64,
+        highres_detail_weight: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.reconstruction_weights = dict(reconstruction_weights)
+        self.uniformity_weight = float(uniformity_weight)
+        self.uniformity_warmup_epochs = int(uniformity_warmup_epochs)
+        self.uniformity_temperature = float(uniformity_temperature)
+        self.semantic_probe_weight = float(semantic_probe_weight)
+        self.semantic_probe_warmup_epochs = int(semantic_probe_warmup_epochs)
+        self.highres_detail_weight = float(highres_detail_weight)
+        self.semantic_probe = (
+            SemanticProbeLoss(embed_dim, semantic_probe_tasks, semantic_probe_hidden_dim)
+            if semantic_probe_tasks
+            else None
+        )
+        self.current_epoch = 0
+
+    def set_epoch(self, epoch: int) -> None:
+        self.current_epoch = int(epoch)
+        if self.semantic_probe is not None:
+            self.semantic_probe.set_epoch(epoch)
+
+    @staticmethod
+    def _warmup(weight: float, epochs: int, epoch: int) -> float:
+        if not weight or epochs <= 0:
+            return weight
+        return weight * min(1.0, float(epoch + 1) / epochs)
+
+    def forward(
+        self,
+        output,
+        targets: dict[str, torch.Tensor],
+        target_masks: dict[str, torch.Tensor],
+        *,
+        detail_targets: dict[str, torch.Tensor] | None = None,
+        detail_masks: dict[str, torch.Tensor] | None = None,
+        supervised_labels: dict[str, torch.Tensor] | None = None,
+        supervised_label_masks: dict[str, torch.Tensor] | None = None,
+    ) -> dict[str, torch.Tensor]:
+        zero = output.embedding_map.sum() * 0.0
+        reconstruction = zero
+        result: dict[str, torch.Tensor] = {}
+        for product_id, weight in self.reconstruction_weights.items():
+            if product_id not in output.reconstructions:
+                raise KeyError(f"V2 reconstruction head 不存在: {product_id}")
+            if product_id not in targets or product_id not in target_masks:
+                raise KeyError(f"V2 reconstruction target/mask 不存在: {product_id}")
+            loss = reconstruction_loss(
+                output.reconstructions[product_id],
+                targets[product_id],
+                target_masks[product_id],
+                loss_type="l1",
+            )
+            reconstruction = reconstruction + float(weight) * loss
+            result[f"recon_{product_id}"] = loss
+
+        detail = zero
+        if detail_targets is not None:
+            for product_id, target in detail_targets.items():
+                if product_id not in output.highres_detail_stats:
+                    raise KeyError(f"V2 highres detail head 不存在: {product_id}")
+                mask = (
+                    detail_masks[product_id]
+                    if detail_masks is not None and product_id in detail_masks
+                    else torch.ones_like(target[:, :, :1])
+                )
+                loss = reconstruction_loss(
+                    output.highres_detail_stats[product_id], target, mask, loss_type="l1"
+                )
+                detail = detail + loss
+                result[f"detail_{product_id}"] = loss
+
+        uniformity = batch_uniformity_loss(
+            output.embedding, temperature=self.uniformity_temperature
+        )
+        uniformity_weight = self._warmup(
+            self.uniformity_weight, self.uniformity_warmup_epochs, self.current_epoch
+        )
+        if self.semantic_probe is None:
+            semantic = zero
+            semantic_stats: dict[str, torch.Tensor] = {}
+        else:
+            semantic, semantic_stats = self.semantic_probe(
+                output.embedding_map, supervised_labels, supervised_label_masks
+            )
+        semantic_weight = self._warmup(
+            self.semantic_probe_weight,
+            self.semantic_probe_warmup_epochs,
+            self.current_epoch,
+        )
+        total = (
+            reconstruction
+            + uniformity_weight * uniformity
+            + semantic_weight * semantic
+            + self.highres_detail_weight * detail
+        )
+        result.update(
+            {
+                "total": total,
+                "recon": reconstruction,
+                "uniformity": uniformity,
+                "uniformity_weighted": uniformity_weight * uniformity,
+                "semantic_probe": semantic,
+                "semantic_probe_weighted": semantic_weight * semantic,
+                "highres_detail": detail,
+                "highres_detail_weighted": self.highres_detail_weight * detail,
+            }
+        )
+        result.update(semantic_stats)
         return result

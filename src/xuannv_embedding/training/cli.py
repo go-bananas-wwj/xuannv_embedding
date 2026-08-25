@@ -16,19 +16,27 @@ from urllib.parse import unquote, urlparse
 
 import torch
 import torch.distributed as dist
+import yaml
 from torch import nn
 from torch.utils.data import DataLoader, DistributedSampler
 
-from xuannv_embedding.config import Config
+from xuannv_embedding.config import Config, V2Config
 from xuannv_embedding.models.model import AEFModel
 from xuannv_embedding.training.checkpoint import (
     load_training_checkpoint,
+    load_v2_training_checkpoint,
     save_training_checkpoint,
+    save_v2_training_checkpoint,
 )
 from xuannv_embedding.training.losses import TotalLoss
 from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.optimizer import build_optimizer, build_scheduler
-from xuannv_embedding.training.runtime import TrainingSystem, train_steps
+from xuannv_embedding.training.runtime import (
+    TrainingSystem,
+    V2TrainingSystem,
+    train_steps,
+    train_v2_steps,
+)
 
 
 def build_training_system(config: Config) -> TrainingSystem:
@@ -340,11 +348,202 @@ def _periodic_checkpoint_path(final_path: Path, completed_epoch: int) -> Path:
     return final_path.with_name(f"{stem}.epoch-{completed_epoch:04d}{suffix}")
 
 
+def _v2_registry(config: V2Config, profile_name: str) -> Path:
+    names = {
+        "mini-real": "mini_16.parquet",
+        "smoke": "smoke_620_plus_32.parquet",
+        "npu-smoke": "smoke_620_plus_32.parquet",
+    }
+    if profile_name not in names:
+        raise ValueError(f"未知 V2 validation profile: {profile_name}")
+    return config.paths.data_root / "registry" / names[profile_name]
+
+
+def _run_v2_training(args: argparse.Namespace) -> int:
+    from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
+    from xuannv_embedding.training.validation_profiles import (
+        build_profile_model,
+        build_v2_criterion,
+        data_manifest_sha256,
+        v2_product_schema,
+        v2_temporal_contract,
+    )
+
+    if args.profile is None:
+        raise ValueError("V2 训练必须显式提供 --profile")
+    config = V2Config.from_yaml(args.config)
+    if args.profile not in config.validation_profiles:
+        raise ValueError(f"配置中不存在 validation profile: {args.profile}")
+    profile = config.validation_profiles[args.profile]
+    if args.profile != "mini-real":
+        raise ValueError("Stage 04 仅执行 mini-real；smoke profile 由后续阶段入口执行")
+    device, distributed, _ = _setup_device(args.device)
+    if distributed:
+        raise ValueError("mini-real 是单进程恢复门禁，不接受分布式环境")
+    torch.manual_seed(42)
+    dataset = V2LocalZipDataset(
+        config,
+        _v2_registry(config, args.profile),
+        spatial_size=profile.spatial_size,
+        max_records=profile.records,
+        january_pair_only=True,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=profile.batch_size,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=collate_v2,
+    )
+    model = build_profile_model(config, profile)
+    criterion = build_v2_criterion(config)
+    system = V2TrainingSystem(model, criterion)
+    effective_lr = (
+        max(config.training.lr, 1.0e-3) if profile.model_profile == "mini" else config.training.lr
+    )
+    optimizer = torch.optim.AdamW(
+        system.parameters(), lr=effective_lr, weight_decay=config.training.weight_decay
+    )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+    config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
+    manifest_sha = data_manifest_sha256(config.paths.data_root)
+    product_schema = v2_product_schema(config)
+    temporal_contract = v2_temporal_contract(config)
+    if args.resume is not None:
+        state = load_v2_training_checkpoint(
+            args.resume,
+            model=model,
+            criterion=criterion,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            expected_config_sha256=config_sha,
+            expected_data_manifest_sha256=manifest_sha,
+            expected_product_schema=product_schema,
+            expected_temporal_contract=temporal_contract,
+            device=device,
+        )
+        start_step = int(state["step"])
+    else:
+        start_step = 0
+    first_parameter = next(model.parameters())
+    parameter_before = first_parameter.detach().clone()
+    summary = train_v2_steps(
+        system,
+        loader,
+        optimizer,
+        device=device,
+        max_steps=profile.steps,
+        amp=config.training.amp and not args.no_amp and device.type != "cpu",
+        scheduler=scheduler,
+    )
+    if torch.equal(parameter_before, first_parameter.detach()):
+        raise RuntimeError("mini-real 模型参数未发生变化")
+    if not optimizer.state:
+        raise RuntimeError("mini-real optimizer 状态为空")
+    completed_step = start_step + profile.steps
+    summary.update(
+        {
+            "profile": args.profile,
+            "records": len(dataset),
+            "effective_lr": effective_lr,
+            "data_manifest_sha256": manifest_sha,
+            "config_sha256": config_sha,
+            "git_sha": _git_sha(),
+            "checkpoint_restore_verified": False,
+        }
+    )
+    save_v2_training_checkpoint(
+        args.output,
+        model=model,
+        criterion=criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        step=completed_step,
+        config_sha256=config_sha,
+        git_sha=summary["git_sha"],
+        data_manifest_sha256=manifest_sha,
+        product_schema=product_schema,
+        temporal_contract=temporal_contract,
+        metrics=summary,
+    )
+
+    restored_model = build_profile_model(config, profile)
+    restored_criterion = build_v2_criterion(config)
+    restored = V2TrainingSystem(restored_model, restored_criterion)
+    restored_optimizer = torch.optim.AdamW(
+        restored.parameters(), lr=effective_lr, weight_decay=config.training.weight_decay
+    )
+    restored_scheduler = torch.optim.lr_scheduler.LambdaLR(restored_optimizer, lambda _: 1.0)
+    load_v2_training_checkpoint(
+        args.output,
+        model=restored_model,
+        criterion=restored_criterion,
+        optimizer=restored_optimizer,
+        scheduler=restored_scheduler,
+        expected_config_sha256=config_sha,
+        expected_data_manifest_sha256=manifest_sha,
+        expected_product_schema=product_schema,
+        expected_temporal_contract=temporal_contract,
+        device=device,
+    )
+    resume_summary = train_v2_steps(
+        restored,
+        loader,
+        restored_optimizer,
+        device=device,
+        max_steps=profile.resume_steps,
+        amp=False,
+        scheduler=restored_scheduler,
+    )
+    completed_step += profile.resume_steps
+    summary["checkpoint_restore_verified"] = True
+    summary["resume_loss"] = resume_summary["loss"]
+
+    if profile.overfit_steps:
+        overfit_model = build_profile_model(config, profile)
+        overfit_criterion = build_v2_criterion(config)
+        overfit_system = V2TrainingSystem(overfit_model, overfit_criterion)
+        overfit_optimizer = torch.optim.AdamW(overfit_system.parameters(), lr=5.0e-3)
+        fixed_batch = next(iter(loader))
+        overfit = train_v2_steps(
+            overfit_system,
+            [fixed_batch],
+            overfit_optimizer,
+            device=device,
+            max_steps=profile.overfit_steps,
+            amp=False,
+        )
+        decline = (overfit["first_loss"] - overfit["last_loss"]) / max(
+            abs(overfit["first_loss"]), 1.0e-8
+        )
+        if decline < 0.05:
+            raise RuntimeError(f"mini-real 单 batch 过拟合下降不足 5%: {decline:.3%}")
+        summary["overfit_loss_decline"] = decline
+
+    save_v2_training_checkpoint(
+        args.output,
+        model=restored_model,
+        criterion=restored_criterion,
+        optimizer=restored_optimizer,
+        scheduler=restored_scheduler,
+        step=completed_step,
+        config_sha256=config_sha,
+        git_sha=summary["git_sha"],
+        data_manifest_sha256=manifest_sha,
+        product_schema=product_schema,
+        temporal_contract=temporal_contract,
+        metrics=summary,
+    )
+    print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv train")
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", type=Path)
+    parser.add_argument("--profile")
     parser.add_argument("--device")
     parser.add_argument("--synthetic", action="store_true")
     parser.add_argument("--steps", type=int, default=0)
@@ -360,6 +559,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.synthetic and args.steps == 0:
         parser.error("--synthetic 需要显式提供正数 --steps")
 
+    document = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    if isinstance(document, dict) and document.get("schema_version") == "2":
+        return _run_v2_training(args)
     config = Config.from_yaml(args.config)
     git_sha = _git_sha()
     device, distributed, local_rank = _setup_device(args.device)

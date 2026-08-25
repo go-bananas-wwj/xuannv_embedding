@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.optim import Optimizer
 
-from xuannv_embedding.training.losses import TotalLoss
+from xuannv_embedding.training.losses import TotalLoss, V2TotalLoss
 
 
 def _move(value: Any, device: torch.device) -> Any:
@@ -73,6 +73,27 @@ class TrainingSystem(nn.Module):
             batch["target_masks"],
             batch.get("supervised_labels"),
             batch.get("supervised_label_masks"),
+        )
+
+
+class V2TrainingSystem(nn.Module):
+    """Keep the V2 model and training-only semantic probes in one optimizer boundary."""
+
+    def __init__(self, model: nn.Module, criterion: V2TotalLoss) -> None:
+        super().__init__()
+        self.model = model
+        self.criterion = criterion
+
+    def forward(self, batch: dict[str, Any]) -> dict[str, torch.Tensor]:
+        output = self.model(**batch["model_inputs"])
+        return self.criterion(
+            output,
+            batch["targets"],
+            batch["target_masks"],
+            detail_targets=batch.get("detail_targets"),
+            detail_masks=batch.get("detail_masks"),
+            supervised_labels=batch.get("supervised_labels"),
+            supervised_label_masks=batch.get("supervised_label_masks"),
         )
 
 
@@ -158,4 +179,57 @@ def train_steps(
         "batches": batch_count,
         "optimizer_steps": optimizer_steps,
         "loss": loss_sum / batch_count,
+    }
+
+
+def train_v2_steps(
+    system: V2TrainingSystem,
+    batches: Iterable[dict[str, Any]],
+    optimizer: Optimizer,
+    *,
+    device: torch.device,
+    max_steps: int,
+    amp: bool,
+    scheduler: Any | None = None,
+) -> dict[str, Any]:
+    if max_steps <= 0:
+        raise ValueError("max_steps 必须是正整数")
+    system.to(device)
+    system.train()
+    scaler = _grad_scaler(device, amp)
+    iterator = iter(batches)
+    losses: list[float] = []
+    optimizer.zero_grad(set_to_none=True)
+    for _ in range(max_steps):
+        try:
+            raw_batch = next(iterator)
+        except StopIteration:
+            iterator = iter(batches)
+            try:
+                raw_batch = next(iterator)
+            except StopIteration as exc:
+                raise ValueError("V2 训练 batches 为空") from exc
+        batch = _move(raw_batch, device)
+        with _autocast(device, amp):
+            result = system(batch)
+            loss = result["total"]
+        if not bool(torch.isfinite(loss).item()):
+            raise FloatingPointError(f"V2 训练 loss 非有限值: {float(loss.detach().cpu())}")
+        if scaler is None:
+            loss.backward()
+            optimizer.step()
+        else:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        optimizer.zero_grad(set_to_none=True)
+        if scheduler is not None:
+            scheduler.step()
+        losses.append(float(loss.detach().float().cpu()))
+    return {
+        "steps": max_steps,
+        "loss": sum(losses) / len(losses),
+        "losses": losses,
+        "first_loss": losses[0],
+        "last_loss": losses[-1],
     }

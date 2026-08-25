@@ -61,16 +61,40 @@ training:
   batch_size: 2
   gradient_accumulation_steps: 8
   amp: true
+  reconstruction_weights:
+    s2_local: 1.0
+    s1_local: 0.5
+    landsat_local: 0.5
+  uniformity_weight: 0.01
+  uniformity_warmup_epochs: 10
+  uniformity_temperature: 2.0
+  semantic_probe_weight: 0.14
+  semantic_probe_warmup_epochs: 80
+  semantic_probe_tasks: [osm_building]
+  semantic_probe_hidden_dim: 64
+  highres_detail_weight: 0.1
 validation_profiles:
   mini-real:
     records: 16
     steps: 2
     batch_size: 2
+    spatial_size: 32
+    model_profile: mini
+    resume_steps: 1
+    overfit_steps: 20
   smoke:
     records: 652
     steps: 50
     batch_size: 1
+    spatial_size: 128
+    model_profile: production
+    resume_steps: 1
+    overfit_steps: 0
   npu-smoke:
     records: 652
     steps: 100
     batch_size: 1
+    spatial_size: 128
+    model_profile: production
+    resume_steps: 1
+    overfit_steps: 0

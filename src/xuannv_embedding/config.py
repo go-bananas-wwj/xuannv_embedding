@@ -98,6 +98,12 @@ def _string(value: Any, field_name: str) -> str:
     return value
 
 
+def _string_list(value: Any, field_name: str) -> list[str]:
+    if not isinstance(value, list):
+        raise ConfigError(f"{field_name} 必须是列表")
+    return [_string(item, field_name) for item in value]
+
+
 def _finite_float(value: Any, field_name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ConfigError(f"{field_name} 必须是数值")
@@ -877,6 +883,15 @@ class V2TrainingConfig:
     batch_size: int
     gradient_accumulation_steps: int
     amp: bool
+    reconstruction_weights: dict[str, float] = field(default_factory=dict)
+    uniformity_weight: float = 0.0
+    uniformity_warmup_epochs: int = 0
+    uniformity_temperature: float = 2.0
+    semantic_probe_weight: float = 0.0
+    semantic_probe_warmup_epochs: int = 0
+    semantic_probe_tasks: tuple[str, ...] = ()
+    semantic_probe_hidden_dim: int = 64
+    highres_detail_weight: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -884,6 +899,10 @@ class ValidationProfileConfig:
     records: int
     steps: int
     batch_size: int
+    spatial_size: int = 128
+    model_profile: Literal["production", "mini"] = "production"
+    resume_steps: int = 1
+    overfit_steps: int = 0
 
 
 @dataclass(frozen=True)
@@ -1167,6 +1186,15 @@ def _parse_v2_training(value: Any) -> V2TrainingConfig:
             "batch_size",
             "gradient_accumulation_steps",
             "amp",
+            "reconstruction_weights",
+            "uniformity_weight",
+            "uniformity_warmup_epochs",
+            "uniformity_temperature",
+            "semantic_probe_weight",
+            "semantic_probe_warmup_epochs",
+            "semantic_probe_tasks",
+            "semantic_probe_hidden_dim",
+            "highres_detail_weight",
         },
         required={
             "epochs",
@@ -1186,6 +1214,42 @@ def _parse_v2_training(value: Any) -> V2TrainingConfig:
             raw["gradient_accumulation_steps"], "training.gradient_accumulation_steps"
         ),
         amp=_boolean(raw["amp"], "training.amp"),
+        reconstruction_weights={
+            _string(name, "training.reconstruction_weights.key"): _non_negative_float(
+                weight, f"training.reconstruction_weights.{name}"
+            )
+            for name, weight in _mapping(
+                raw.get("reconstruction_weights", {}), "training.reconstruction_weights"
+            ).items()
+        },
+        uniformity_weight=_non_negative_float(
+            raw.get("uniformity_weight", 0.0), "training.uniformity_weight"
+        ),
+        uniformity_warmup_epochs=_non_negative_int(
+            raw.get("uniformity_warmup_epochs", 0), "training.uniformity_warmup_epochs"
+        ),
+        uniformity_temperature=_positive_float(
+            raw.get("uniformity_temperature", 2.0), "training.uniformity_temperature"
+        ),
+        semantic_probe_weight=_non_negative_float(
+            raw.get("semantic_probe_weight", 0.0), "training.semantic_probe_weight"
+        ),
+        semantic_probe_warmup_epochs=_non_negative_int(
+            raw.get("semantic_probe_warmup_epochs", 0),
+            "training.semantic_probe_warmup_epochs",
+        ),
+        semantic_probe_tasks=tuple(
+            _string(task, "training.semantic_probe_tasks")
+            for task in _string_list(
+                raw.get("semantic_probe_tasks", []), "training.semantic_probe_tasks"
+            )
+        ),
+        semantic_probe_hidden_dim=_non_negative_int(
+            raw.get("semantic_probe_hidden_dim", 64), "training.semantic_probe_hidden_dim"
+        ),
+        highres_detail_weight=_non_negative_float(
+            raw.get("highres_detail_weight", 0.0), "training.highres_detail_weight"
+        ),
     )
 
 
@@ -1199,12 +1263,29 @@ def _parse_validation_profiles(value: Any) -> dict[str, ValidationProfileConfig]
         raw = _strict(
             profile_value,
             section,
-            allowed={"records", "steps", "batch_size"},
+            allowed={
+                "records",
+                "steps",
+                "batch_size",
+                "spatial_size",
+                "model_profile",
+                "resume_steps",
+                "overfit_steps",
+            },
             required={"records", "steps", "batch_size"},
         )
+        model_profile = _string(raw.get("model_profile", "production"), f"{section}.model_profile")
+        if model_profile not in {"production", "mini"}:
+            raise ConfigError(f"{section}.model_profile 非法: {model_profile!r}")
         result[name] = ValidationProfileConfig(
             records=_positive_int(raw["records"], f"{section}.records"),
             steps=_positive_int(raw["steps"], f"{section}.steps"),
             batch_size=_positive_int(raw["batch_size"], f"{section}.batch_size"),
+            spatial_size=_positive_int(raw.get("spatial_size", 128), f"{section}.spatial_size"),
+            model_profile=model_profile,
+            resume_steps=_positive_int(raw.get("resume_steps", 1), f"{section}.resume_steps"),
+            overfit_steps=_non_negative_int(
+                raw.get("overfit_steps", 0), f"{section}.overfit_steps"
+            ),
         )
     return result

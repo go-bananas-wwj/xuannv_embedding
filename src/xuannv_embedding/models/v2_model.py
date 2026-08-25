@@ -33,6 +33,7 @@ def _compatible_heads(dim: int, requested: int) -> int:
 class XuannvV2Output:
     embedding_map: torch.Tensor
     embedding: torch.Tensor
+    reconstructions: dict[str, torch.Tensor]
     highres_detail_stats: dict[str, torch.Tensor]
 
 
@@ -201,6 +202,12 @@ class XuannvV2Model(nn.Module):
             nn.GELU(),
         )
         self.bottleneck = VMFBottleneck(precision_dim, embedding_dim)
+        self.reconstruction_heads = nn.ModuleDict(
+            {
+                name: nn.Conv2d(precision_dim, len(spec.bands), kernel_size=1)
+                for name, spec in dense.items()
+            }
+        )
         self.detail_heads = nn.ModuleDict(
             {name: nn.Conv2d(precision_dim, 3, kernel_size=1) for name in highres}
         )
@@ -438,8 +445,15 @@ class XuannvV2Model(nn.Module):
             product_id: head(flat_precision).view(batch, outputs, 3, height, width)
             for product_id, head in self.detail_heads.items()
         }
+        reconstructions = {
+            product_id: head(flat_precision).view(
+                batch, outputs, len(self.products[product_id].bands), height, width
+            )
+            for product_id, head in self.reconstruction_heads.items()
+        }
         return XuannvV2Output(
             embedding_map=embedding_map,
             embedding=embedding_map.mean(dim=(-2, -1)),
+            reconstructions=reconstructions,
             highres_detail_stats=detail,
         )

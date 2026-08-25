@@ -16,6 +16,7 @@ class CheckpointError(ValueError):
 
 
 FORMAT_VERSION = "1"
+V2_FORMAT_VERSION = "2"
 _REQUIRED_FIELDS = {
     "format_version",
     "config_sha256",
@@ -163,4 +164,112 @@ def load_training_checkpoint(
             scheduler.load_state_dict(state["scheduler"])
     except (KeyError, RuntimeError, ValueError) as exc:
         raise CheckpointError(f"checkpoint 状态严格加载失败: {exc}") from exc
+    return state
+
+
+def save_v2_training_checkpoint(
+    path: str | Path,
+    *,
+    model: nn.Module,
+    criterion: nn.Module,
+    optimizer: Optimizer,
+    scheduler: Any | None,
+    step: int,
+    config_sha256: str,
+    git_sha: str,
+    data_manifest_sha256: str,
+    product_schema: dict[str, Any],
+    temporal_contract: dict[str, Any],
+    metrics: dict[str, Any] | None = None,
+) -> None:
+    """Save an explicitly V2-only checkpoint with data and interval provenance."""
+    if not re.fullmatch(r"[0-9a-f]{64}", data_manifest_sha256):
+        raise CheckpointError("data_manifest_sha256 必须是 64 位小写十六进制摘要")
+    _validate_metadata(
+        config_sha256=config_sha256,
+        git_sha=git_sha,
+        source_schema=product_schema,
+        regions=["china-national-local-v2"],
+        epoch=step,
+    )
+    if not temporal_contract:
+        raise CheckpointError("temporal_contract 必须是非空 mapping")
+    state = {
+        "format_version": V2_FORMAT_VERSION,
+        "config_sha256": config_sha256,
+        "git_sha": git_sha,
+        "data_manifest_sha256": data_manifest_sha256,
+        "product_schema": product_schema,
+        "temporal_contract": temporal_contract,
+        "step": step,
+        "model": model.state_dict(),
+        "criterion": criterion.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict() if scheduler is not None else None,
+        "metrics": dict(metrics or {}),
+        "rng_state": torch.get_rng_state(),
+    }
+    _atomic_torch_save(state, Path(path))
+
+
+def load_v2_training_checkpoint(
+    path: str | Path,
+    *,
+    model: nn.Module,
+    criterion: nn.Module,
+    optimizer: Optimizer,
+    scheduler: Any | None,
+    expected_config_sha256: str,
+    expected_data_manifest_sha256: str,
+    expected_product_schema: dict[str, Any],
+    expected_temporal_contract: dict[str, Any],
+    device: str | torch.device = "cpu",
+    restore_rng: bool = True,
+) -> dict[str, Any]:
+    """Strictly load V2 state; V1 checkpoints and configs are never remapped."""
+    try:
+        state = torch.load(Path(path), map_location=device, weights_only=True)
+    except (OSError, RuntimeError) as exc:
+        raise CheckpointError(f"无法加载 V2 checkpoint: {exc}") from exc
+    required = {
+        "format_version",
+        "config_sha256",
+        "git_sha",
+        "data_manifest_sha256",
+        "product_schema",
+        "temporal_contract",
+        "step",
+        "model",
+        "criterion",
+        "optimizer",
+        "scheduler",
+        "metrics",
+        "rng_state",
+    }
+    if not isinstance(state, dict):
+        raise CheckpointError("V2 checkpoint 顶层必须是 mapping")
+    missing = sorted(required - set(state))
+    if missing:
+        raise CheckpointError(f"V2 checkpoint 缺少字段: {', '.join(missing)}")
+    if state["format_version"] != V2_FORMAT_VERSION:
+        raise CheckpointError("V2 runtime 明确拒绝 V1 checkpoint，不执行静默 remap")
+    expected = {
+        "config_sha256": expected_config_sha256,
+        "data_manifest_sha256": expected_data_manifest_sha256,
+        "product_schema": expected_product_schema,
+        "temporal_contract": expected_temporal_contract,
+    }
+    for name, value in expected.items():
+        if state[name] != value:
+            raise CheckpointError(f"V2 checkpoint {name} 与当前运行合同不一致")
+    try:
+        model.load_state_dict(state["model"], strict=True)
+        criterion.load_state_dict(state["criterion"], strict=True)
+        optimizer.load_state_dict(state["optimizer"])
+        if scheduler is not None and state["scheduler"] is not None:
+            scheduler.load_state_dict(state["scheduler"])
+    except (KeyError, RuntimeError, ValueError) as exc:
+        raise CheckpointError(f"V2 checkpoint 状态严格加载失败: {exc}") from exc
+    if restore_rng:
+        torch.set_rng_state(state["rng_state"].cpu())
     return state

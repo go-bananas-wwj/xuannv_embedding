@@ -133,6 +133,8 @@ def test_v2_model_accepts_independent_timelines_and_multires_scenes() -> None:
         output = model(**_batch())
 
     assert output.embedding_map.shape == (2, 2, 64, 32, 32)
+    assert output.reconstructions["s2"].shape == (2, 2, 10, 32, 32)
+    assert output.highres_detail_stats["optical_2m"].shape == (2, 2, 3, 32, 32)
     assert not torch.isnan(output.embedding_map).any()
     norms = torch.linalg.vector_norm(output.embedding_map, dim=2)
     assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
