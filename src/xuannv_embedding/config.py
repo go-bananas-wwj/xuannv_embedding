@@ -98,6 +98,12 @@ def _string(value: Any, field_name: str) -> str:
     return value
 
 
+def _string_list(value: Any, field_name: str) -> list[str]:
+    if not isinstance(value, list):
+        raise ConfigError(f"{field_name} 必须是列表")
+    return [_string(item, field_name) for item in value]
+
+
 def _finite_float(value: Any, field_name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ConfigError(f"{field_name} 必须是数值")
@@ -797,3 +803,494 @@ def _validate_cross_contracts(
         raise ConfigError(
             f"semantic probe 缺少 supervised_label_roots: {', '.join(missing_labels)}"
         )
+
+
+# V2 is intentionally a separate contract.  Existing V1 parsing remains available for
+# frozen release artifacts, while every V2 entrypoint accepts only this schema.
+
+
+@dataclass(frozen=True)
+class V2PathsConfig:
+    data_root: Path
+    source_root: Path
+    grid_package: Path
+    product_roots: dict[str, Path] = field(default_factory=dict)
+    auxiliary_roots: dict[str, Path] = field(default_factory=dict)
+    legacy_unverified_roots: dict[str, Path] = field(default_factory=dict)
+    supervised_label_roots: dict[str, Path] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class NetworkPolicyConfig:
+    allow_remote_metadata: bool = False
+    allow_remote_pixels: bool = False
+    missing_local_observation: Literal["mask"] = "mask"
+
+
+@dataclass(frozen=True)
+class V2ProductConfig:
+    role: Literal["dense", "highres", "target"]
+    bands: tuple[str, ...]
+    native_gsd_m: tuple[float, ...]
+    stored_gsd_m: float
+    dtype: str
+    time_precision: Literal["exact", "day", "month", "static"]
+    already_resampled: bool
+    qa_available: bool
+
+    def to_product_spec(self, product_id: str):
+        from xuannv_embedding.data.contracts import ProductSpec
+
+        return ProductSpec(
+            product_id=product_id,
+            role=self.role,
+            bands=self.bands,
+            native_gsd_m=self.native_gsd_m,
+            stored_gsd_m=self.stored_gsd_m,
+            dtype=self.dtype,
+            time_precision=self.time_precision,
+            already_resampled=self.already_resampled,
+            qa_available=self.qa_available,
+        )
+
+
+@dataclass(frozen=True)
+class V2TemporalConfig:
+    mode: Literal["within_period", "causal_window", "centered_window"]
+    dense_lookback_days: int
+    highres_structure_days: int
+    highres_appearance_days: int
+    highres_structure_max_observations: int
+    highres_appearance_max_observations: int
+
+
+@dataclass(frozen=True)
+class V2ModelConfig:
+    embedding_dim: int
+    stem_dim: int
+    spatial_dim: int
+    temporal_dim: int
+    precision_dim: int
+    num_blocks: int
+    num_heads: int
+    gradient_checkpointing: bool
+
+
+@dataclass(frozen=True)
+class V2TrainingConfig:
+    epochs: int
+    lr: float
+    weight_decay: float
+    batch_size: int
+    gradient_accumulation_steps: int
+    amp: bool
+    reconstruction_weights: dict[str, float] = field(default_factory=dict)
+    uniformity_weight: float = 0.0
+    uniformity_warmup_epochs: int = 0
+    uniformity_temperature: float = 2.0
+    semantic_probe_weight: float = 0.0
+    semantic_probe_warmup_epochs: int = 0
+    semantic_probe_tasks: tuple[str, ...] = ()
+    semantic_probe_hidden_dim: int = 64
+    highres_detail_weight: float = 0.0
+
+
+@dataclass(frozen=True)
+class ValidationProfileConfig:
+    records: int
+    steps: int
+    batch_size: int
+    spatial_size: int = 128
+    model_profile: Literal["production", "mini"] = "production"
+    resume_steps: int = 1
+    overfit_steps: int = 0
+
+
+@dataclass(frozen=True)
+class V2Config:
+    schema_version: str
+    paths: V2PathsConfig
+    network_policy: NetworkPolicyConfig
+    products: dict[str, V2ProductConfig]
+    temporal: V2TemporalConfig
+    model: V2ModelConfig
+    training: V2TrainingConfig
+    validation_profiles: dict[str, ValidationProfileConfig]
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> "V2Config":
+        config_path = Path(path)
+        try:
+            raw = yaml.load(config_path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)
+        except ConfigError:
+            raise
+        except (OSError, yaml.YAMLError) as exc:
+            raise ConfigError(f"无法读取 V2 配置 {config_path}: {exc}") from exc
+        top = _strict(
+            raw,
+            "config",
+            allowed={
+                "schema_version",
+                "paths",
+                "network_policy",
+                "products",
+                "temporal",
+                "model",
+                "training",
+                "validation_profiles",
+            },
+            required={
+                "schema_version",
+                "paths",
+                "network_policy",
+                "products",
+                "temporal",
+                "model",
+                "training",
+                "validation_profiles",
+            },
+        )
+        _reject_base(top)
+        schema_version = _string(top["schema_version"], "schema_version")
+        if schema_version != "2":
+            raise ConfigError("V2 runtime 要求 schema_version 为 '2'")
+        return cls(
+            schema_version=schema_version,
+            paths=_parse_v2_paths(top["paths"]),
+            network_policy=_parse_network_policy(top["network_policy"]),
+            products=_parse_v2_products(top["products"]),
+            temporal=_parse_v2_temporal(top["temporal"]),
+            model=_parse_v2_model(top["model"]),
+            training=_parse_v2_training(top["training"]),
+            validation_profiles=_parse_validation_profiles(top["validation_profiles"]),
+        )
+
+
+def _parse_v2_paths(value: Any) -> V2PathsConfig:
+    raw = _strict(
+        value,
+        "paths",
+        allowed={
+            "data_root",
+            "source_root",
+            "grid_package",
+            "product_roots",
+            "auxiliary_roots",
+            "legacy_unverified_roots",
+            "supervised_label_roots",
+        },
+        required={"data_root", "source_root", "grid_package"},
+    )
+    return V2PathsConfig(
+        data_root=Path(_string(raw["data_root"], "paths.data_root")),
+        source_root=Path(_string(raw["source_root"], "paths.source_root")),
+        grid_package=Path(_string(raw["grid_package"], "paths.grid_package")),
+        product_roots=_parse_path_mapping(raw.get("product_roots", {}), "paths.product_roots"),
+        auxiliary_roots=_parse_path_mapping(
+            raw.get("auxiliary_roots", {}), "paths.auxiliary_roots"
+        ),
+        legacy_unverified_roots=_parse_path_mapping(
+            raw.get("legacy_unverified_roots", {}), "paths.legacy_unverified_roots"
+        ),
+        supervised_label_roots=_parse_path_mapping(
+            raw.get("supervised_label_roots", {}), "paths.supervised_label_roots"
+        ),
+    )
+
+
+def _parse_path_mapping(value: Any, section: str) -> dict[str, Path]:
+    raw = _mapping(value, section)
+    return {
+        _string(name, f"{section}.key"): Path(_string(path, f"{section}.{name}"))
+        for name, path in raw.items()
+    }
+
+
+def _parse_network_policy(value: Any) -> NetworkPolicyConfig:
+    raw = _strict(
+        value,
+        "network_policy",
+        allowed={"allow_remote_metadata", "allow_remote_pixels", "missing_local_observation"},
+        required={"allow_remote_metadata", "allow_remote_pixels", "missing_local_observation"},
+    )
+    allow_metadata = _boolean(raw["allow_remote_metadata"], "network_policy.allow_remote_metadata")
+    allow_pixels = _boolean(raw["allow_remote_pixels"], "network_policy.allow_remote_pixels")
+    if allow_pixels:
+        raise ConfigError("全国本地 V2 配置禁止远程像元下载")
+    missing = _string(raw["missing_local_observation"], "network_policy.missing_local_observation")
+    if missing != "mask":
+        raise ConfigError("network_policy.missing_local_observation 仅支持 'mask'")
+    return NetworkPolicyConfig(allow_metadata, allow_pixels, "mask")
+
+
+def _parse_v2_products(value: Any) -> dict[str, V2ProductConfig]:
+    products = _mapping(value, "products")
+    if not products:
+        raise ConfigError("products 必须是非空 mapping")
+    parsed: dict[str, V2ProductConfig] = {}
+    for product_id, value in products.items():
+        section = f"products.{product_id}"
+        raw = _strict(
+            value,
+            section,
+            allowed={
+                "role",
+                "bands",
+                "native_gsd_m",
+                "stored_gsd_m",
+                "dtype",
+                "time_precision",
+                "already_resampled",
+                "qa_available",
+            },
+            required={
+                "role",
+                "bands",
+                "native_gsd_m",
+                "stored_gsd_m",
+                "dtype",
+                "time_precision",
+                "already_resampled",
+                "qa_available",
+            },
+        )
+        bands_raw = raw["bands"]
+        gsd_raw = raw["native_gsd_m"]
+        if not isinstance(bands_raw, list) or not bands_raw:
+            raise ConfigError(f"{section}.bands 必须是非空列表")
+        if not isinstance(gsd_raw, list) or not gsd_raw:
+            raise ConfigError(f"{section}.native_gsd_m 必须是非空列表")
+        bands = tuple(_string(band, f"{section}.bands") for band in bands_raw)
+        native_gsd = tuple(_positive_float(gsd, f"{section}.native_gsd_m") for gsd in gsd_raw)
+        if len(bands) != len(native_gsd):
+            raise ConfigError(f"{section}.bands 与 native_gsd_m 数量必须一致")
+        role = _string(raw["role"], f"{section}.role")
+        if role not in {"dense", "highres", "target"}:
+            raise ConfigError(f"{section}.role 非法: {role!r}")
+        precision = _string(raw["time_precision"], f"{section}.time_precision")
+        if precision not in {"exact", "day", "month", "static"}:
+            raise ConfigError(f"{section}.time_precision 非法: {precision!r}")
+        product = V2ProductConfig(
+            role=role,
+            bands=bands,
+            native_gsd_m=native_gsd,
+            stored_gsd_m=_positive_float(raw["stored_gsd_m"], f"{section}.stored_gsd_m"),
+            dtype=_string(raw["dtype"], f"{section}.dtype"),
+            time_precision=precision,
+            already_resampled=_boolean(raw["already_resampled"], f"{section}.already_resampled"),
+            qa_available=_boolean(raw["qa_available"], f"{section}.qa_available"),
+        )
+        product.to_product_spec(product_id)
+        parsed[product_id] = product
+    return parsed
+
+
+def _parse_v2_temporal(value: Any) -> V2TemporalConfig:
+    raw = _strict(
+        value,
+        "temporal",
+        allowed={
+            "mode",
+            "dense_lookback_days",
+            "highres_structure_days",
+            "highres_appearance_days",
+            "highres_structure_max_observations",
+            "highres_appearance_max_observations",
+        },
+        required={
+            "mode",
+            "dense_lookback_days",
+            "highres_structure_days",
+            "highres_appearance_days",
+            "highres_structure_max_observations",
+            "highres_appearance_max_observations",
+        },
+    )
+    mode = _string(raw["mode"], "temporal.mode")
+    if mode not in {"within_period", "causal_window", "centered_window"}:
+        raise ConfigError(f"temporal.mode 非法: {mode!r}")
+    structure_days = _positive_int(raw["highres_structure_days"], "temporal.highres_structure_days")
+    appearance_days = _positive_int(
+        raw["highres_appearance_days"], "temporal.highres_appearance_days"
+    )
+    if appearance_days > structure_days:
+        raise ConfigError("highres appearance 窗口不得超过 structure 窗口")
+    return V2TemporalConfig(
+        mode=mode,
+        dense_lookback_days=_positive_int(
+            raw["dense_lookback_days"], "temporal.dense_lookback_days"
+        ),
+        highres_structure_days=structure_days,
+        highres_appearance_days=appearance_days,
+        highres_structure_max_observations=_positive_int(
+            raw["highres_structure_max_observations"],
+            "temporal.highres_structure_max_observations",
+        ),
+        highres_appearance_max_observations=_positive_int(
+            raw["highres_appearance_max_observations"],
+            "temporal.highres_appearance_max_observations",
+        ),
+    )
+
+
+def _parse_v2_model(value: Any) -> V2ModelConfig:
+    raw = _strict(
+        value,
+        "model",
+        allowed={
+            "embedding_dim",
+            "stem_dim",
+            "spatial_dim",
+            "temporal_dim",
+            "precision_dim",
+            "num_blocks",
+            "num_heads",
+            "gradient_checkpointing",
+        },
+        required={
+            "embedding_dim",
+            "stem_dim",
+            "spatial_dim",
+            "temporal_dim",
+            "precision_dim",
+            "num_blocks",
+            "num_heads",
+            "gradient_checkpointing",
+        },
+    )
+    config = V2ModelConfig(
+        embedding_dim=_positive_int(raw["embedding_dim"], "model.embedding_dim"),
+        stem_dim=_positive_int(raw["stem_dim"], "model.stem_dim"),
+        spatial_dim=_positive_int(raw["spatial_dim"], "model.spatial_dim"),
+        temporal_dim=_positive_int(raw["temporal_dim"], "model.temporal_dim"),
+        precision_dim=_positive_int(raw["precision_dim"], "model.precision_dim"),
+        num_blocks=_positive_int(raw["num_blocks"], "model.num_blocks"),
+        num_heads=_positive_int(raw["num_heads"], "model.num_heads"),
+        gradient_checkpointing=_boolean(
+            raw["gradient_checkpointing"], "model.gradient_checkpointing"
+        ),
+    )
+    for name, dim in (
+        ("spatial_dim", config.spatial_dim),
+        ("temporal_dim", config.temporal_dim),
+        ("precision_dim", config.precision_dim),
+    ):
+        if dim % config.num_heads != 0:
+            raise ConfigError(f"model.{name} 必须能被 num_heads 整除")
+    return config
+
+
+def _parse_v2_training(value: Any) -> V2TrainingConfig:
+    raw = _strict(
+        value,
+        "training",
+        allowed={
+            "epochs",
+            "lr",
+            "weight_decay",
+            "batch_size",
+            "gradient_accumulation_steps",
+            "amp",
+            "reconstruction_weights",
+            "uniformity_weight",
+            "uniformity_warmup_epochs",
+            "uniformity_temperature",
+            "semantic_probe_weight",
+            "semantic_probe_warmup_epochs",
+            "semantic_probe_tasks",
+            "semantic_probe_hidden_dim",
+            "highres_detail_weight",
+        },
+        required={
+            "epochs",
+            "lr",
+            "weight_decay",
+            "batch_size",
+            "gradient_accumulation_steps",
+            "amp",
+        },
+    )
+    return V2TrainingConfig(
+        epochs=_positive_int(raw["epochs"], "training.epochs"),
+        lr=_positive_float(raw["lr"], "training.lr"),
+        weight_decay=_non_negative_float(raw["weight_decay"], "training.weight_decay"),
+        batch_size=_positive_int(raw["batch_size"], "training.batch_size"),
+        gradient_accumulation_steps=_positive_int(
+            raw["gradient_accumulation_steps"], "training.gradient_accumulation_steps"
+        ),
+        amp=_boolean(raw["amp"], "training.amp"),
+        reconstruction_weights={
+            _string(name, "training.reconstruction_weights.key"): _non_negative_float(
+                weight, f"training.reconstruction_weights.{name}"
+            )
+            for name, weight in _mapping(
+                raw.get("reconstruction_weights", {}), "training.reconstruction_weights"
+            ).items()
+        },
+        uniformity_weight=_non_negative_float(
+            raw.get("uniformity_weight", 0.0), "training.uniformity_weight"
+        ),
+        uniformity_warmup_epochs=_non_negative_int(
+            raw.get("uniformity_warmup_epochs", 0), "training.uniformity_warmup_epochs"
+        ),
+        uniformity_temperature=_positive_float(
+            raw.get("uniformity_temperature", 2.0), "training.uniformity_temperature"
+        ),
+        semantic_probe_weight=_non_negative_float(
+            raw.get("semantic_probe_weight", 0.0), "training.semantic_probe_weight"
+        ),
+        semantic_probe_warmup_epochs=_non_negative_int(
+            raw.get("semantic_probe_warmup_epochs", 0),
+            "training.semantic_probe_warmup_epochs",
+        ),
+        semantic_probe_tasks=tuple(
+            _string(task, "training.semantic_probe_tasks")
+            for task in _string_list(
+                raw.get("semantic_probe_tasks", []), "training.semantic_probe_tasks"
+            )
+        ),
+        semantic_probe_hidden_dim=_non_negative_int(
+            raw.get("semantic_probe_hidden_dim", 64), "training.semantic_probe_hidden_dim"
+        ),
+        highres_detail_weight=_non_negative_float(
+            raw.get("highres_detail_weight", 0.0), "training.highres_detail_weight"
+        ),
+    )
+
+
+def _parse_validation_profiles(value: Any) -> dict[str, ValidationProfileConfig]:
+    profiles = _mapping(value, "validation_profiles")
+    if not profiles:
+        raise ConfigError("validation_profiles 必须是非空 mapping")
+    result: dict[str, ValidationProfileConfig] = {}
+    for name, profile_value in profiles.items():
+        section = f"validation_profiles.{name}"
+        raw = _strict(
+            profile_value,
+            section,
+            allowed={
+                "records",
+                "steps",
+                "batch_size",
+                "spatial_size",
+                "model_profile",
+                "resume_steps",
+                "overfit_steps",
+            },
+            required={"records", "steps", "batch_size"},
+        )
+        model_profile = _string(raw.get("model_profile", "production"), f"{section}.model_profile")
+        if model_profile not in {"production", "mini"}:
+            raise ConfigError(f"{section}.model_profile 非法: {model_profile!r}")
+        result[name] = ValidationProfileConfig(
+            records=_positive_int(raw["records"], f"{section}.records"),
+            steps=_positive_int(raw["steps"], f"{section}.steps"),
+            batch_size=_positive_int(raw["batch_size"], f"{section}.batch_size"),
+            spatial_size=_positive_int(raw.get("spatial_size", 128), f"{section}.spatial_size"),
+            model_profile=model_profile,
+            resume_steps=_positive_int(raw.get("resume_steps", 1), f"{section}.resume_steps"),
+            overfit_steps=_non_negative_int(
+                raw.get("overfit_steps", 0), f"{section}.overfit_steps"
+            ),
+        )
+    return result

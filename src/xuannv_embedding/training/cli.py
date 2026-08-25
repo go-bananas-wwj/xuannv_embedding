@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import gc
 import hashlib
 import importlib.metadata
+import itertools
 import json
+import math
 import os
 import re
 import subprocess
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Sequence
@@ -16,19 +21,65 @@ from urllib.parse import unquote, urlparse
 
 import torch
 import torch.distributed as dist
+import yaml
 from torch import nn
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler, Subset
 
-from xuannv_embedding.config import Config
+from xuannv_embedding.config import Config, V2Config
 from xuannv_embedding.models.model import AEFModel
 from xuannv_embedding.training.checkpoint import (
+    capture_rng_state,
     load_training_checkpoint,
+    load_v2_training_checkpoint,
     save_training_checkpoint,
+    save_v2_training_checkpoint,
 )
 from xuannv_embedding.training.losses import TotalLoss
 from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.optimizer import build_optimizer, build_scheduler
-from xuannv_embedding.training.runtime import TrainingSystem, train_steps
+from xuannv_embedding.training.runtime import (
+    TrainingSystem,
+    V2TrainingSystem,
+    train_steps,
+    train_v2_accumulation_steps,
+    train_v2_steps,
+)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(8 * 1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_v2_archives(config: V2Config, distributed: bool) -> None:
+    from xuannv_embedding.data.local_archives import verify_archive_lock
+
+    rank = dist.get_rank() if distributed else 0
+    result: list[str | None] = [None]
+    if rank == 0:
+        try:
+            verify_archive_lock(
+                config.paths.data_root / "locks" / "local_archive_sha256.jsonl",
+                expected_count=72,
+            )
+            cache_path = (
+                config.paths.data_root / "observations" / "dense_2020_2021" / "smoke_652.zarr"
+            )
+            if cache_path.is_dir():
+                from xuannv_embedding.data_process.v2_zarr_cache import (
+                    verify_smoke_zarr_cache,
+                )
+
+                verify_smoke_zarr_cache(cache_path, full=True)
+        except ValueError as exc:
+            result[0] = str(exc)
+    if distributed:
+        dist.broadcast_object_list(result, src=0)
+    if result[0] is not None:
+        raise ValueError(f"V2 训练前 archive lock 校验失败: {result[0]}")
 
 
 def build_training_system(config: Config) -> TrainingSystem:
@@ -340,11 +391,896 @@ def _periodic_checkpoint_path(final_path: Path, completed_epoch: int) -> Path:
     return final_path.with_name(f"{stem}.epoch-{completed_epoch:04d}{suffix}")
 
 
+def _v2_registry(config: V2Config, profile_name: str) -> Path:
+    names = {
+        "mini-real": "mini_16.parquet",
+        "smoke": "smoke_620_plus_32.parquet",
+        "npu-smoke": "smoke_620_plus_32.parquet",
+    }
+    if profile_name not in names:
+        raise ValueError(f"未知 V2 validation profile: {profile_name}")
+    return config.paths.data_root / "registry" / names[profile_name]
+
+
+def _v2_subset_loader(dataset, start: int, stop: int, batch_size: int = 1) -> DataLoader:
+    from xuannv_embedding.data.v2_dataset import collate_v2
+
+    return DataLoader(
+        Subset(dataset, range(start, stop)),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=collate_v2,
+    )
+
+
+def _move_nested(value: Any, device: torch.device) -> Any:
+    if isinstance(value, torch.Tensor):
+        return value.to(device)
+    if isinstance(value, dict):
+        return {key: _move_nested(child, device) for key, child in value.items()}
+    return value
+
+
+def _validate_missing_dense_products(
+    system: V2TrainingSystem,
+    raw_batch: dict[str, Any],
+    products: Sequence[str],
+    device: torch.device,
+) -> list[str]:
+    verified = []
+    system.train()
+    for product_id in products:
+        candidate = copy.deepcopy(raw_batch)
+        inputs = candidate["model_inputs"]
+        inputs["source_frames"][product_id].zero_()
+        inputs["source_pixel_masks"][product_id].zero_()
+        inputs["source_observation_masks"][product_id].zero_()
+        candidate["targets"][product_id].zero_()
+        candidate["target_masks"][product_id].zero_()
+        system.zero_grad(set_to_none=True)
+        result = system(_move_nested(candidate, device))
+        if not bool(torch.isfinite(result["total"]).item()):
+            raise FloatingPointError(f"缺失 {product_id} 时 loss 非有限值")
+        result["total"].backward()
+        if not any(
+            parameter.grad is not None and bool(torch.isfinite(parameter.grad).all().item())
+            for parameter in system.parameters()
+        ):
+            raise RuntimeError(f"缺失 {product_id} 时没有有限梯度")
+        verified.append(product_id)
+    system.zero_grad(set_to_none=True)
+    return verified
+
+
+def _run_v2_smoke(
+    args: argparse.Namespace,
+    config: V2Config,
+    profile,
+    device: torch.device,
+) -> int:
+    from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
+    from xuannv_embedding.export.v2_sharded import export_v2_sharded, model_state_sha256
+    from xuannv_embedding.training.validation_profiles import (
+        assert_macro_disjoint,
+        build_profile_model,
+        build_v2_criterion,
+        data_manifest_sha256,
+        v2_product_schema,
+        v2_temporal_contract,
+    )
+
+    if args.resume is not None:
+        raise ValueError("smoke 自带中断恢复对照，不接受外部 --resume")
+    registry_path = _v2_registry(config, "smoke")
+    split_counts = assert_macro_disjoint(registry_path)
+    dataset = V2LocalZipDataset(
+        config,
+        registry_path,
+        spatial_size=profile.spatial_size,
+        max_records=profile.records,
+        output_selection="random_single",
+        random_seed=42,
+        context_days=config.temporal.dense_lookback_days,
+        allow_incomplete_statistics=True,
+    )
+    if len(dataset) != 652:
+        raise RuntimeError(f"smoke registry 必须为 652 条，实际 {len(dataset)}")
+    torch.manual_seed(42)
+    model = build_profile_model(config, profile)
+    criterion = build_v2_criterion(config)
+    system = V2TrainingSystem(model, criterion)
+    optimizer = torch.optim.AdamW(
+        system.parameters(), lr=config.training.lr, weight_decay=config.training.weight_decay
+    )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+    amp = config.training.amp and not args.no_amp and device.type != "cpu"
+    config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
+    manifest_sha = data_manifest_sha256(config.paths.data_root, config=config)
+    product_schema = v2_product_schema(config)
+    temporal_contract = v2_temporal_contract(config)
+    git_sha = _git_sha()
+    boundary_step = profile.steps // 2
+    boundary_path = args.output.with_name(
+        f"{args.output.stem}.step-{boundary_step:04d}{args.output.suffix or '.pt'}"
+    )
+    first = train_v2_steps(
+        system,
+        _v2_subset_loader(dataset, 0, boundary_step),
+        optimizer,
+        device=device,
+        max_steps=boundary_step,
+        amp=amp,
+        scheduler=scheduler,
+    )
+    save_v2_training_checkpoint(
+        boundary_path,
+        model=model,
+        criterion=criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        step=boundary_step,
+        config_sha256=config_sha,
+        git_sha=git_sha,
+        data_manifest_sha256=manifest_sha,
+        product_schema=product_schema,
+        temporal_contract=temporal_contract,
+        metrics=first,
+    )
+    next_loader = _v2_subset_loader(dataset, boundary_step, boundary_step + 1)
+    uninterrupted = train_v2_steps(
+        system,
+        next_loader,
+        optimizer,
+        device=device,
+        max_steps=1,
+        amp=amp,
+        scheduler=scheduler,
+    )
+    expected_probe = next(model.parameters()).detach().float().cpu().clone()
+    del system, model, criterion, optimizer, scheduler
+    gc.collect()
+    if device.type == "npu":
+        torch.npu.empty_cache()
+
+    restored_model = build_profile_model(config, profile)
+    restored_criterion = build_v2_criterion(config)
+    restored = V2TrainingSystem(restored_model, restored_criterion)
+    restored_optimizer = torch.optim.AdamW(
+        restored.parameters(), lr=config.training.lr, weight_decay=config.training.weight_decay
+    )
+    restored_scheduler = torch.optim.lr_scheduler.LambdaLR(restored_optimizer, lambda _: 1.0)
+    load_v2_training_checkpoint(
+        boundary_path,
+        model=restored_model,
+        criterion=restored_criterion,
+        optimizer=restored_optimizer,
+        scheduler=restored_scheduler,
+        expected_config_sha256=config_sha,
+        expected_data_manifest_sha256=manifest_sha,
+        expected_product_schema=product_schema,
+        expected_temporal_contract=temporal_contract,
+        device=device,
+    )
+    resumed = train_v2_steps(
+        restored,
+        _v2_subset_loader(dataset, boundary_step, boundary_step + 1),
+        restored_optimizer,
+        device=device,
+        max_steps=1,
+        amp=amp,
+        scheduler=restored_scheduler,
+    )
+    loss_close = math.isclose(
+        uninterrupted["loss"], resumed["loss"], rel_tol=1.0e-4, abs_tol=1.0e-3
+    )
+    parameter_close = torch.allclose(
+        expected_probe,
+        next(restored_model.parameters()).detach().float().cpu(),
+        rtol=1.0e-4,
+        atol=1.0e-5,
+    )
+    if not loss_close or not parameter_close:
+        raise RuntimeError(
+            "checkpoint 恢复后的下一 step 与未中断运行不一致: "
+            f"loss={uninterrupted['loss']}/{resumed['loss']}, parameter={parameter_close}"
+        )
+    remaining = profile.steps - boundary_step - 1
+    tail = train_v2_steps(
+        restored,
+        _v2_subset_loader(dataset, boundary_step + 1, profile.steps),
+        restored_optimizer,
+        device=device,
+        max_steps=remaining,
+        amp=amp,
+        scheduler=restored_scheduler,
+    )
+    missing_verified = _validate_missing_dense_products(
+        restored,
+        next(iter(_v2_subset_loader(dataset, 0, 1))),
+        dataset.dense_products,
+        device,
+    )
+    all_losses = first["losses"] + resumed["losses"] + tail["losses"]
+    summary = {
+        "profile": "smoke",
+        "records": len(dataset),
+        "steps": profile.steps,
+        "loss": sum(all_losses) / len(all_losses),
+        "first_loss": all_losses[0],
+        "last_loss": all_losses[-1],
+        "checkpoint_restore_verified": True,
+        "checkpoint_loss_delta": abs(uninterrupted["loss"] - resumed["loss"]),
+        "checkpoint_parameter_close": parameter_close,
+        "missing_products_verified": missing_verified,
+        "split_counts": split_counts,
+        "network_remote_pixels": config.network_policy.allow_remote_pixels,
+        "data_manifest_sha256": manifest_sha,
+        "config_sha256": config_sha,
+        "git_sha": git_sha,
+    }
+    save_v2_training_checkpoint(
+        args.output,
+        model=restored_model,
+        criterion=restored_criterion,
+        optimizer=restored_optimizer,
+        scheduler=restored_scheduler,
+        step=profile.steps,
+        config_sha256=config_sha,
+        git_sha=git_sha,
+        data_manifest_sha256=manifest_sha,
+        product_schema=product_schema,
+        temporal_contract=temporal_contract,
+        metrics=summary,
+    )
+    export_dataset = V2LocalZipDataset(
+        config,
+        registry_path,
+        spatial_size=profile.spatial_size,
+        max_records=profile.records,
+        output_selection="fixed",
+        fixed_output_months=((2020, 12), (2021, 12)),
+        context_days=config.temporal.dense_lookback_days,
+        include_targets=False,
+        allow_incomplete_statistics=True,
+    )
+    export_loader = DataLoader(
+        export_dataset,
+        batch_size=profile.batch_size,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=collate_v2,
+    )
+    product_version = f"xuannv-v2-smoke-{git_sha[:12]}"
+    catalog = export_v2_sharded(
+        restored_model,
+        export_loader,
+        config.paths.data_root / "products",
+        device=device,
+        product_version=product_version,
+        data_manifest_sha256=manifest_sha,
+        config_sha256=config_sha,
+        git_sha=git_sha,
+        checkpoint_sha256=_sha256_file(args.output),
+        model_state_sha256=model_state_sha256(restored_model),
+        run_id="smoke",
+    )
+    import pyarrow.parquet as pq
+
+    catalog_rows = pq.read_metadata(catalog).num_rows
+    if catalog_rows != len(export_dataset) * 2:
+        raise RuntimeError(f"V2 导出 catalog 行数错误: {catalog_rows}")
+    summary["catalog"] = str(catalog)
+    summary["catalog_rows"] = catalog_rows
+    print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+class _CyclingLoader:
+    def __init__(
+        self,
+        loader: DataLoader,
+        sampler: DistributedSampler,
+        *,
+        start_micro_batches: int = 0,
+    ) -> None:
+        self.loader = loader
+        self.sampler = sampler
+        self.start_micro_batches = start_micro_batches
+
+    def __iter__(self):
+        batches_per_epoch = len(self.loader)
+        epoch, offset = divmod(self.start_micro_batches, batches_per_epoch)
+        while True:
+            self.sampler.set_epoch(epoch)
+            for batch_index, batch in enumerate(self.loader):
+                if batch_index >= offset:
+                    yield batch
+            offset = 0
+            epoch += 1
+
+
+def _run_v2_npu_smoke(
+    args: argparse.Namespace,
+    config: V2Config,
+    profile,
+    device: torch.device,
+    local_rank: int,
+) -> int:
+    import pyarrow.parquet as pq
+    from torch.nn.parallel import DistributedDataParallel
+
+    from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
+    from xuannv_embedding.export.v2_sharded import export_v2_sharded, model_state_sha256
+    from xuannv_embedding.training.validation_profiles import (
+        assert_macro_disjoint,
+        build_profile_model,
+        build_v2_criterion,
+        data_manifest_sha256,
+        v2_product_schema,
+        v2_temporal_contract,
+    )
+
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    if world_size != 8 or device.type != "npu":
+        raise ValueError(f"npu-smoke 必须使用 8×NPU，实际 world_size={world_size}, device={device}")
+    effective_batch = world_size * profile.batch_size * config.training.gradient_accumulation_steps
+    if effective_batch != 64:
+        raise ValueError(f"npu-smoke 等效全局 batch 必须为 64，实际 {effective_batch}")
+    registry_path = _v2_registry(config, "npu-smoke")
+    split_counts = assert_macro_disjoint(registry_path)
+    cache_path = config.paths.data_root / "observations" / "dense_2020_2021" / "smoke_652.zarr"
+    active_cache = cache_path if cache_path.is_dir() else None
+    input_backend = "zarr" if active_cache is not None else "zip"
+    dataset = V2LocalZipDataset(
+        config,
+        registry_path,
+        spatial_size=profile.spatial_size,
+        max_records=profile.records,
+        output_selection="random_single",
+        random_seed=42,
+        context_days=config.temporal.dense_lookback_days,
+        zarr_cache_path=active_cache,
+        allow_incomplete_statistics=True,
+    )
+    sampler = DistributedSampler(
+        dataset,
+        num_replicas=world_size,
+        rank=rank,
+        shuffle=False,
+        drop_last=False,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=profile.batch_size,
+        sampler=sampler,
+        num_workers=0,
+        collate_fn=collate_v2,
+    )
+    torch.manual_seed(42)
+    model = build_profile_model(config, profile)
+    criterion = build_v2_criterion(config)
+    system = V2TrainingSystem(model, criterion).to(device)
+    distributed_system = DistributedDataParallel(
+        system,
+        device_ids=[local_rank],
+        broadcast_buffers=False,
+        find_unused_parameters=True,
+    )
+    optimizer = torch.optim.AdamW(
+        distributed_system.parameters(),
+        lr=config.training.lr,
+        weight_decay=config.training.weight_decay,
+    )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+    config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
+    manifest_sha = data_manifest_sha256(config.paths.data_root, config=config)
+    product_schema = v2_product_schema(config)
+    temporal_contract = v2_temporal_contract(config)
+    git_sha = _git_sha()
+    boundary_step = profile.steps // 2
+    boundary_path = args.output.with_name(
+        f"{args.output.stem}.step-{boundary_step:04d}{args.output.suffix or '.pt'}"
+    )
+    torch.npu.reset_peak_memory_stats(device)
+    wall_start = time.perf_counter()
+    start_micro_batches = boundary_step * config.training.gradient_accumulation_steps
+    if args.npu_phase == "first":
+        first_stream = iter(_CyclingLoader(loader, sampler))
+        first = train_v2_accumulation_steps(
+            distributed_system,
+            first_stream,
+            optimizer,
+            device=device,
+            optimizer_steps=boundary_step,
+            gradient_accumulation_steps=config.training.gradient_accumulation_steps,
+            amp=config.training.amp and not args.no_amp,
+            scheduler=scheduler,
+        )
+        first["wall_seconds"] = time.perf_counter() - wall_start
+        probe_stream = iter(
+            _CyclingLoader(loader, sampler, start_micro_batches=start_micro_batches)
+        )
+        probe_batch = next(probe_stream)
+        distributed_system.eval()
+        with torch.inference_mode():
+            resume_probe_loss = float(
+                distributed_system(_move_nested(probe_batch, device))["total"].float().item()
+            )
+        distributed_system.train()
+        rank_metrics: list[dict[str, Any] | None] = [None] * world_size
+        rank_rng_states: list[dict[str, Any] | None] = [None] * world_size
+        dist.all_gather_object(rank_metrics, first)
+        dist.all_gather_object(rank_rng_states, capture_rng_state())
+        probe_losses: list[float | None] = [None] * world_size
+        dist.all_gather_object(probe_losses, resume_probe_loss)
+        dist.barrier()
+        checkpoint_start = time.perf_counter()
+        if rank == 0:
+            save_v2_training_checkpoint(
+                boundary_path,
+                model=system.model,
+                criterion=system.criterion,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                step=boundary_step,
+                config_sha256=config_sha,
+                git_sha=git_sha,
+                data_manifest_sha256=manifest_sha,
+                product_schema=product_schema,
+                temporal_contract=temporal_contract,
+                metrics={
+                    "phase": "first",
+                    "rank_metrics": rank_metrics,
+                    "resume_probe_losses": probe_losses,
+                },
+                sampler_state={"micro_batches_per_rank": start_micro_batches},
+                rank_rng_states=[state for state in rank_rng_states if state is not None],
+            )
+        dist.barrier()
+        if rank == 0:
+            phase_report = {
+                "schema_version": "xuannv_v2_npu_phase_v1",
+                "phase": "first",
+                "process_id": os.getpid(),
+                "git_sha": git_sha,
+                "config_sha256": config_sha,
+                "data_manifest_sha256": manifest_sha,
+                "boundary_step": boundary_step,
+                "checkpoint": str(boundary_path),
+                "checkpoint_sha256": _sha256_file(boundary_path),
+                "checkpoint_seconds": time.perf_counter() - checkpoint_start,
+            }
+            phase_report_path = config.paths.data_root / "runs" / "npu-smoke" / "phase-first.json"
+            phase_report_path.parent.mkdir(parents=True, exist_ok=True)
+            phase_report_path.write_text(
+                json.dumps(phase_report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            print(
+                json.dumps(
+                    {
+                        "profile": "npu-smoke",
+                        "phase": "first",
+                        "checkpoint": str(boundary_path),
+                        "checkpoint_seconds": phase_report["checkpoint_seconds"],
+                        "process_exit_required": True,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+        dist.destroy_process_group()
+        return 0
+    if args.npu_phase != "resume":
+        raise ValueError("npu-smoke 必须由 first、resume 两个独立 torchrun 阶段执行")
+    checkpoint_start = time.perf_counter()
+    phase_report_path = config.paths.data_root / "runs" / "npu-smoke" / "phase-first.json"
+    phase_report = json.loads(phase_report_path.read_text(encoding="utf-8"))
+    expected_phase = {
+        "git_sha": git_sha,
+        "config_sha256": config_sha,
+        "data_manifest_sha256": manifest_sha,
+        "boundary_step": boundary_step,
+        "checkpoint_sha256": _sha256_file(boundary_path),
+    }
+    for name, expected in expected_phase.items():
+        if phase_report.get(name) != expected:
+            raise RuntimeError(f"npu-smoke first phase report {name} 不匹配")
+    if int(phase_report["process_id"]) == os.getpid():
+        raise RuntimeError("npu-smoke resume 必须来自新的 launcher 进程")
+    state = load_v2_training_checkpoint(
+        boundary_path,
+        model=system.model,
+        criterion=system.criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        expected_config_sha256=config_sha,
+        expected_data_manifest_sha256=manifest_sha,
+        expected_product_schema=product_schema,
+        expected_temporal_contract=temporal_contract,
+        device=device,
+        rng_rank=rank,
+    )
+    if int(state["step"]) != boundary_step:
+        raise RuntimeError(f"npu-smoke 恢复 step 错误: {state['step']}")
+    start_micro_batches = int(state["sampler_state"]["micro_batches_per_rank"])
+    first = state["metrics"]["rank_metrics"][rank]
+    stream = iter(_CyclingLoader(loader, sampler, start_micro_batches=start_micro_batches))
+    first_resumed_batch = next(stream)
+    distributed_system.eval()
+    with torch.inference_mode():
+        resumed_probe_loss = float(
+            distributed_system(_move_nested(first_resumed_batch, device))["total"].float().item()
+        )
+    distributed_system.train()
+    expected_probe_loss = float(state["metrics"]["resume_probe_losses"][rank])
+    if not math.isclose(resumed_probe_loss, expected_probe_loss, rel_tol=1.0e-4, abs_tol=1.0e-3):
+        raise RuntimeError(
+            f"跨进程恢复首 batch loss 不一致: {resumed_probe_loss}/{expected_probe_loss}"
+        )
+    checkpoint_seconds = float(phase_report["checkpoint_seconds"]) + (
+        time.perf_counter() - checkpoint_start
+    )
+    second = train_v2_accumulation_steps(
+        distributed_system,
+        itertools.chain((first_resumed_batch,), stream),
+        optimizer,
+        device=device,
+        optimizer_steps=profile.steps - boundary_step,
+        gradient_accumulation_steps=config.training.gradient_accumulation_steps,
+        amp=config.training.amp and not args.no_amp,
+        scheduler=scheduler,
+    )
+    dist.barrier()
+    wall_seconds = time.perf_counter() - wall_start
+    probe = next(system.model.parameters()).detach().float().sum()
+    minimum = probe.clone()
+    maximum = probe.clone()
+    dist.all_reduce(minimum, op=dist.ReduceOp.MIN)
+    dist.all_reduce(maximum, op=dist.ReduceOp.MAX)
+    if not bool(torch.isclose(minimum, maximum, rtol=1.0e-5, atol=1.0e-6).item()):
+        raise RuntimeError(f"DDP 参数不同步: min={minimum.item()}, max={maximum.item()}")
+    local = torch.tensor(
+        [
+            profile.steps,
+            first["micro_batches"] + second["micro_batches"],
+            first["samples"] + second["samples"],
+            first["loss"] * boundary_step + second["loss"] * (profile.steps - boundary_step),
+            first["data_seconds"] + second["data_seconds"],
+            first["compute_seconds"] + second["compute_seconds"],
+            float(torch.npu.max_memory_allocated(device)),
+            float(first["wall_seconds"]) + wall_seconds,
+            checkpoint_seconds,
+            abs(resumed_probe_loss - expected_probe_loss),
+        ],
+        dtype=torch.float32,
+        device=device,
+    )
+    gathered = [torch.zeros_like(local) for _ in range(world_size)]
+    dist.all_gather(gathered, local)
+    matrix = torch.stack(gathered).cpu()
+    if not bool((matrix[:, :3] == matrix[0, :3]).all()):
+        raise RuntimeError(f"DDP rank step/样本计数不一致: {matrix[:, :3].tolist()}")
+    summary = {
+        "profile": "npu-smoke",
+        "world_size": world_size,
+        "device_name": torch.npu.get_device_name(device),
+        "optimizer_steps": profile.steps,
+        "micro_batches_per_rank": int(matrix[0, 1]),
+        "samples_per_rank": int(matrix[0, 2]),
+        "effective_global_batch": effective_batch,
+        "global_samples": int(matrix[:, 2].sum()),
+        "loss": float(matrix[:, 3].sum() / (world_size * profile.steps)),
+        "data_seconds_sum": float(matrix[:, 4].sum()),
+        "compute_seconds_sum": float(matrix[:, 5].sum()),
+        "data_wait_fraction": float(matrix[:, 4].sum() / (matrix[:, 4].sum() + matrix[:, 5].sum())),
+        "wall_seconds_max": float(matrix[:, 7].max()),
+        "throughput_samples_per_second": float(matrix[:, 2].sum() / matrix[:, 7].max()),
+        "peak_memory_bytes_max": int(matrix[:, 6].max()),
+        "checkpoint_seconds_max": float(matrix[:, 8].max()),
+        "checkpoint_restore_step": boundary_step,
+        "process_restart_verified": True,
+        "first_process_id": int(phase_report["process_id"]),
+        "resume_process_id": os.getpid(),
+        "resume_probe_loss_delta_max": float(matrix[:, 9].max()),
+        "rank_sync_verified": True,
+        "split_counts": split_counts,
+        "config_sha256": config_sha,
+        "data_manifest_sha256": manifest_sha,
+        "git_sha": git_sha,
+        "network_remote_pixels": config.network_policy.allow_remote_pixels,
+        "input_backend": input_backend,
+        "zarr_metadata_sha256": (
+            hashlib.sha256((active_cache / ".zmetadata").read_bytes()).hexdigest()
+            if active_cache is not None
+            else None
+        ),
+        "zarr_repack_required": input_backend == "zip"
+        and float(matrix[:, 4].sum() / (matrix[:, 4].sum() + matrix[:, 5].sum())) > 0.1,
+    }
+    final_rank_rng_states: list[dict[str, Any] | None] = [None] * world_size
+    dist.all_gather_object(final_rank_rng_states, capture_rng_state())
+    if rank == 0:
+        save_v2_training_checkpoint(
+            args.output,
+            model=system.model,
+            criterion=system.criterion,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            step=profile.steps,
+            config_sha256=config_sha,
+            git_sha=git_sha,
+            data_manifest_sha256=manifest_sha,
+            product_schema=product_schema,
+            temporal_contract=temporal_contract,
+            metrics=summary,
+            sampler_state={
+                "micro_batches_per_rank": profile.steps
+                * config.training.gradient_accumulation_steps
+            },
+            rank_rng_states=[state for state in final_rank_rng_states if state is not None],
+        )
+    dist.barrier()
+    free_memory = torch.tensor(
+        [float(torch.npu.mem_get_info(device)[0])], dtype=torch.float32, device=device
+    )
+    free_by_rank = [torch.zeros_like(free_memory) for _ in range(world_size)]
+    dist.all_gather(free_by_rank, free_memory)
+    export_rank = int(torch.stack(free_by_rank).cpu().argmax().item())
+    product_version = f"xuannv-v2-npu-smoke-{git_sha[:12]}"
+    catalog = config.paths.data_root / "products" / product_version / "catalog.parquet"
+    export_metrics = torch.zeros(2, dtype=torch.float32, device=device)
+    if rank == export_rank:
+        export_start = time.perf_counter()
+        export_dataset = V2LocalZipDataset(
+            config,
+            registry_path,
+            spatial_size=profile.spatial_size,
+            max_records=profile.records,
+            output_selection="fixed",
+            fixed_output_months=((2020, 12), (2021, 12)),
+            context_days=config.temporal.dense_lookback_days,
+            include_targets=False,
+            zarr_cache_path=active_cache,
+            allow_incomplete_statistics=True,
+        )
+        export_loader = DataLoader(
+            export_dataset,
+            batch_size=profile.batch_size,
+            shuffle=False,
+            num_workers=0,
+            collate_fn=collate_v2,
+        )
+        written_catalog = export_v2_sharded(
+            system.model,
+            export_loader,
+            config.paths.data_root / "products",
+            device=device,
+            product_version=product_version,
+            data_manifest_sha256=manifest_sha,
+            config_sha256=config_sha,
+            git_sha=git_sha,
+            checkpoint_sha256=_sha256_file(args.output),
+            model_state_sha256=model_state_sha256(system.model),
+            run_id="npu-smoke",
+        )
+        export_metrics[0] = time.perf_counter() - export_start
+        export_metrics[1] = pq.read_metadata(written_catalog).num_rows
+    dist.broadcast(export_metrics, src=export_rank)
+    if rank == 0:
+        summary["export_seconds"] = float(export_metrics[0].cpu())
+        summary["export_rank"] = export_rank
+        summary["catalog"] = str(catalog)
+        summary["catalog_rows"] = int(export_metrics[1].cpu())
+        report_path = config.paths.data_root / "runs" / "npu-smoke" / "metrics.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+    dist.barrier()
+    dist.destroy_process_group()
+    return 0
+
+
+def _run_v2_training(args: argparse.Namespace) -> int:
+    from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
+    from xuannv_embedding.training.validation_profiles import (
+        build_profile_model,
+        build_v2_criterion,
+        data_manifest_sha256,
+        v2_product_schema,
+        v2_temporal_contract,
+    )
+
+    if args.profile is None:
+        raise ValueError("V2 训练必须显式提供 --profile")
+    config = V2Config.from_yaml(args.config)
+    if args.profile not in config.validation_profiles:
+        raise ValueError(f"配置中不存在 validation profile: {args.profile}")
+    profile = config.validation_profiles[args.profile]
+    device, distributed, local_rank = _setup_device(args.device)
+    _verify_v2_archives(config, distributed)
+    if args.profile == "smoke":
+        if distributed:
+            raise ValueError("smoke 是单卡门禁；8 卡请使用 npu-smoke")
+        return _run_v2_smoke(args, config, profile, device)
+    if args.profile == "npu-smoke":
+        if not distributed:
+            raise ValueError("npu-smoke 必须由 torchrun 启动")
+        return _run_v2_npu_smoke(args, config, profile, device, local_rank)
+    if args.profile != "mini-real":
+        raise ValueError(f"未知 V2 profile: {args.profile}")
+    if distributed:
+        raise ValueError("mini-real 是单进程恢复门禁，不接受分布式环境")
+    torch.manual_seed(42)
+    dataset = V2LocalZipDataset(
+        config,
+        _v2_registry(config, args.profile),
+        spatial_size=profile.spatial_size,
+        max_records=profile.records,
+        january_pair_only=True,
+        allow_incomplete_statistics=True,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=profile.batch_size,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=collate_v2,
+    )
+    model = build_profile_model(config, profile)
+    criterion = build_v2_criterion(config)
+    system = V2TrainingSystem(model, criterion)
+    effective_lr = (
+        max(config.training.lr, 1.0e-3) if profile.model_profile == "mini" else config.training.lr
+    )
+    optimizer = torch.optim.AdamW(
+        system.parameters(), lr=effective_lr, weight_decay=config.training.weight_decay
+    )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+    config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
+    manifest_sha = data_manifest_sha256(config.paths.data_root, config=config)
+    product_schema = v2_product_schema(config)
+    temporal_contract = v2_temporal_contract(config)
+    if args.resume is not None:
+        state = load_v2_training_checkpoint(
+            args.resume,
+            model=model,
+            criterion=criterion,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            expected_config_sha256=config_sha,
+            expected_data_manifest_sha256=manifest_sha,
+            expected_product_schema=product_schema,
+            expected_temporal_contract=temporal_contract,
+            device=device,
+        )
+        start_step = int(state["step"])
+    else:
+        start_step = 0
+    first_parameter = next(model.parameters())
+    parameter_before = first_parameter.detach().clone()
+    summary = train_v2_steps(
+        system,
+        loader,
+        optimizer,
+        device=device,
+        max_steps=profile.steps,
+        amp=config.training.amp and not args.no_amp and device.type != "cpu",
+        scheduler=scheduler,
+    )
+    if torch.equal(parameter_before, first_parameter.detach()):
+        raise RuntimeError("mini-real 模型参数未发生变化")
+    if not optimizer.state:
+        raise RuntimeError("mini-real optimizer 状态为空")
+    completed_step = start_step + profile.steps
+    summary.update(
+        {
+            "profile": args.profile,
+            "records": len(dataset),
+            "effective_lr": effective_lr,
+            "data_manifest_sha256": manifest_sha,
+            "config_sha256": config_sha,
+            "git_sha": _git_sha(),
+            "checkpoint_restore_verified": False,
+        }
+    )
+    save_v2_training_checkpoint(
+        args.output,
+        model=model,
+        criterion=criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        step=completed_step,
+        config_sha256=config_sha,
+        git_sha=summary["git_sha"],
+        data_manifest_sha256=manifest_sha,
+        product_schema=product_schema,
+        temporal_contract=temporal_contract,
+        metrics=summary,
+    )
+
+    restored_model = build_profile_model(config, profile)
+    restored_criterion = build_v2_criterion(config)
+    restored = V2TrainingSystem(restored_model, restored_criterion)
+    restored_optimizer = torch.optim.AdamW(
+        restored.parameters(), lr=effective_lr, weight_decay=config.training.weight_decay
+    )
+    restored_scheduler = torch.optim.lr_scheduler.LambdaLR(restored_optimizer, lambda _: 1.0)
+    load_v2_training_checkpoint(
+        args.output,
+        model=restored_model,
+        criterion=restored_criterion,
+        optimizer=restored_optimizer,
+        scheduler=restored_scheduler,
+        expected_config_sha256=config_sha,
+        expected_data_manifest_sha256=manifest_sha,
+        expected_product_schema=product_schema,
+        expected_temporal_contract=temporal_contract,
+        device=device,
+    )
+    resume_summary = train_v2_steps(
+        restored,
+        loader,
+        restored_optimizer,
+        device=device,
+        max_steps=profile.resume_steps,
+        amp=False,
+        scheduler=restored_scheduler,
+    )
+    completed_step += profile.resume_steps
+    summary["checkpoint_restore_verified"] = True
+    summary["resume_loss"] = resume_summary["loss"]
+
+    if profile.overfit_steps:
+        overfit_model = build_profile_model(config, profile)
+        overfit_criterion = build_v2_criterion(config)
+        overfit_system = V2TrainingSystem(overfit_model, overfit_criterion)
+        overfit_optimizer = torch.optim.AdamW(overfit_system.parameters(), lr=5.0e-3)
+        fixed_batch = next(iter(loader))
+        overfit = train_v2_steps(
+            overfit_system,
+            [fixed_batch],
+            overfit_optimizer,
+            device=device,
+            max_steps=profile.overfit_steps,
+            amp=False,
+        )
+        decline = (overfit["first_loss"] - overfit["last_loss"]) / max(
+            abs(overfit["first_loss"]), 1.0e-8
+        )
+        if decline < 0.05:
+            raise RuntimeError(f"mini-real 单 batch 过拟合下降不足 5%: {decline:.3%}")
+        summary["overfit_loss_decline"] = decline
+
+    save_v2_training_checkpoint(
+        args.output,
+        model=restored_model,
+        criterion=restored_criterion,
+        optimizer=restored_optimizer,
+        scheduler=restored_scheduler,
+        step=completed_step,
+        config_sha256=config_sha,
+        git_sha=summary["git_sha"],
+        data_manifest_sha256=manifest_sha,
+        product_schema=product_schema,
+        temporal_contract=temporal_contract,
+        metrics=summary,
+    )
+    print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv train")
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", type=Path)
+    parser.add_argument("--profile")
     parser.add_argument("--device")
     parser.add_argument("--synthetic", action="store_true")
     parser.add_argument("--steps", type=int, default=0)
@@ -354,12 +1290,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--spatial-size", type=int, default=128)
     parser.add_argument("--missing-source", action="append", default=[])
     parser.add_argument("--no-amp", action="store_true")
+    parser.add_argument("--npu-phase", choices=("first", "resume"))
     args = parser.parse_args(argv)
     if args.steps < 0:
         parser.error("--steps 不得为负")
     if args.synthetic and args.steps == 0:
         parser.error("--synthetic 需要显式提供正数 --steps")
 
+    document = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    if isinstance(document, dict) and document.get("schema_version") == "2":
+        return _run_v2_training(args)
     config = Config.from_yaml(args.config)
     git_sha = _git_sha()
     device, distributed, local_rank = _setup_device(args.device)

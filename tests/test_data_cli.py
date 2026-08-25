@@ -14,7 +14,17 @@ from xuannv_embedding.utils.manifest import load_manifest
 
 @pytest.mark.parametrize(
     "command",
-    ["grid", "registry", "partition", "materialize", "preprocess", "manifest", "validate"],
+    [
+        "grid",
+        "registry",
+        "partition",
+        "materialize",
+        "preprocess",
+        "manifest",
+        "validate",
+        "local-index",
+        "preflight",
+    ],
 )
 def test_data_commands_expose_their_real_help(command: str) -> None:
     with pytest.raises(SystemExit) as raised:
