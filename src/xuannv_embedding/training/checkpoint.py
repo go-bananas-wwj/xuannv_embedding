@@ -68,7 +68,8 @@ def restore_rng_state(state: dict[str, Any]) -> None:
         )
     )
     if state["npu"] is not None and hasattr(torch, "npu") and torch.npu.is_available():
-        torch.npu.set_rng_state(state["npu"])
+        npu_state = state["npu"].detach().cpu().to(dtype=torch.uint8).contiguous()
+        torch.npu.set_rng_state(npu_state)
 
 
 def _validate_metadata(
