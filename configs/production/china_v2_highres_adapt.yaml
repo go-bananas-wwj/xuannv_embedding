@@ -1,0 +1,100 @@
+schema_version: "2"
+paths:
+  data_root: /data2/xuannv_embedding/v2
+  source_root: /data2/china_xuannv_embedding/data
+  grid_package: /data/xuannv_embedding/outputs/china_full_1280m_grid_package_v1_20260805
+network_policy:
+  allow_remote_metadata: false
+  allow_remote_pixels: false
+  missing_local_observation: mask
+products:
+  s2_local:
+    role: dense
+    bands: [B02, B03, B04, B05, B06, B07, B08, B8A, B11, B12]
+    native_gsd_m: [10, 10, 10, 20, 20, 20, 10, 20, 20, 20]
+    stored_gsd_m: 10
+    dtype: uint16
+    time_precision: month
+    already_resampled: true
+    qa_available: false
+  s1_local:
+    role: dense
+    bands: [vh, vv]
+    native_gsd_m: [20, 20]
+    stored_gsd_m: 10
+    dtype: float32
+    time_precision: month
+    already_resampled: true
+    qa_available: false
+  landsat_local:
+    role: dense
+    bands: [red, green, blue, nir08, swir16, swir22]
+    native_gsd_m: [30, 30, 30, 30, 30, 30]
+    stored_gsd_m: 29.76744186
+    dtype: uint16
+    time_precision: month
+    already_resampled: false
+    qa_available: false
+  planetscope_3m_sr:
+    role: highres
+    bands: [blue, green, red, nir]
+    native_gsd_m: [3, 3, 3, 3]
+    stored_gsd_m: 3
+    dtype: uint16
+    time_precision: exact
+    already_resampled: false
+    qa_available: true
+  optical_2m:
+    role: highres
+    bands: [blue, green, red, nir]
+    native_gsd_m: [2, 2, 2, 2]
+    stored_gsd_m: 2
+    dtype: uint16
+    time_precision: exact
+    already_resampled: false
+    qa_available: true
+  optical_5m:
+    role: highres
+    bands: [blue, green, red, nir]
+    native_gsd_m: [5, 5, 5, 5]
+    stored_gsd_m: 5
+    dtype: uint16
+    time_precision: exact
+    already_resampled: false
+    qa_available: true
+temporal:
+  mode: causal_window
+  dense_lookback_days: 365
+  highres_structure_days: 730
+  highres_appearance_days: 90
+  highres_structure_max_observations: 8
+  highres_appearance_max_observations: 4
+model:
+  embedding_dim: 64
+  stem_dim: 64
+  spatial_dim: 768
+  temporal_dim: 384
+  precision_dim: 192
+  num_blocks: 8
+  num_heads: 12
+  gradient_checkpointing: true
+training:
+  epochs: 200
+  lr: 2.0e-5
+  weight_decay: 0.05
+  batch_size: 2
+  gradient_accumulation_steps: 8
+  amp: true
+validation_profiles:
+  mini-real:
+    records: 16
+    steps: 2
+    batch_size: 2
+  smoke:
+    records: 652
+    steps: 50
+    batch_size: 1
+  npu-smoke:
+    records: 652
+    steps: 100
+    batch_size: 1
