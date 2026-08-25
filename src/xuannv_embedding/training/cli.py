@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import gc
 import hashlib
 import importlib.metadata
 import json
+import math
 import os
 import re
 import subprocess
@@ -18,7 +21,7 @@ import torch
 import torch.distributed as dist
 import yaml
 from torch import nn
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler, Subset
 
 from xuannv_embedding.config import Config, V2Config
 from xuannv_embedding.models.model import AEFModel
@@ -359,6 +362,275 @@ def _v2_registry(config: V2Config, profile_name: str) -> Path:
     return config.paths.data_root / "registry" / names[profile_name]
 
 
+def _v2_subset_loader(dataset, start: int, stop: int, batch_size: int = 1) -> DataLoader:
+    from xuannv_embedding.data.v2_dataset import collate_v2
+
+    return DataLoader(
+        Subset(dataset, range(start, stop)),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=collate_v2,
+    )
+
+
+def _move_nested(value: Any, device: torch.device) -> Any:
+    if isinstance(value, torch.Tensor):
+        return value.to(device)
+    if isinstance(value, dict):
+        return {key: _move_nested(child, device) for key, child in value.items()}
+    return value
+
+
+def _validate_missing_dense_products(
+    system: V2TrainingSystem,
+    raw_batch: dict[str, Any],
+    products: Sequence[str],
+    device: torch.device,
+) -> list[str]:
+    verified = []
+    system.train()
+    for product_id in products:
+        candidate = copy.deepcopy(raw_batch)
+        inputs = candidate["model_inputs"]
+        inputs["source_frames"][product_id].zero_()
+        inputs["source_pixel_masks"][product_id].zero_()
+        inputs["source_observation_masks"][product_id].zero_()
+        candidate["targets"][product_id].zero_()
+        candidate["target_masks"][product_id].zero_()
+        system.zero_grad(set_to_none=True)
+        result = system(_move_nested(candidate, device))
+        if not bool(torch.isfinite(result["total"]).item()):
+            raise FloatingPointError(f"缺失 {product_id} 时 loss 非有限值")
+        result["total"].backward()
+        if not any(
+            parameter.grad is not None and bool(torch.isfinite(parameter.grad).all().item())
+            for parameter in system.parameters()
+        ):
+            raise RuntimeError(f"缺失 {product_id} 时没有有限梯度")
+        verified.append(product_id)
+    system.zero_grad(set_to_none=True)
+    return verified
+
+
+def _run_v2_smoke(
+    args: argparse.Namespace,
+    config: V2Config,
+    profile,
+    device: torch.device,
+) -> int:
+    from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
+    from xuannv_embedding.export.v2_sharded import export_v2_sharded
+    from xuannv_embedding.training.validation_profiles import (
+        assert_macro_disjoint,
+        build_profile_model,
+        build_v2_criterion,
+        data_manifest_sha256,
+        v2_product_schema,
+        v2_temporal_contract,
+    )
+
+    if args.resume is not None:
+        raise ValueError("smoke 自带中断恢复对照，不接受外部 --resume")
+    registry_path = _v2_registry(config, "smoke")
+    split_counts = assert_macro_disjoint(registry_path)
+    dataset = V2LocalZipDataset(
+        config,
+        registry_path,
+        spatial_size=profile.spatial_size,
+        max_records=profile.records,
+        output_selection="random_single",
+        random_seed=42,
+        context_days=config.temporal.dense_lookback_days,
+    )
+    if len(dataset) != 652:
+        raise RuntimeError(f"smoke registry 必须为 652 条，实际 {len(dataset)}")
+    torch.manual_seed(42)
+    model = build_profile_model(config, profile)
+    criterion = build_v2_criterion(config)
+    system = V2TrainingSystem(model, criterion)
+    optimizer = torch.optim.AdamW(
+        system.parameters(), lr=config.training.lr, weight_decay=config.training.weight_decay
+    )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+    amp = config.training.amp and not args.no_amp and device.type != "cpu"
+    config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
+    manifest_sha = data_manifest_sha256(config.paths.data_root)
+    product_schema = v2_product_schema(config)
+    temporal_contract = v2_temporal_contract(config)
+    git_sha = _git_sha()
+    boundary_step = profile.steps // 2
+    boundary_path = args.output.with_name(
+        f"{args.output.stem}.step-{boundary_step:04d}{args.output.suffix or '.pt'}"
+    )
+    first = train_v2_steps(
+        system,
+        _v2_subset_loader(dataset, 0, boundary_step),
+        optimizer,
+        device=device,
+        max_steps=boundary_step,
+        amp=amp,
+        scheduler=scheduler,
+    )
+    save_v2_training_checkpoint(
+        boundary_path,
+        model=model,
+        criterion=criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        step=boundary_step,
+        config_sha256=config_sha,
+        git_sha=git_sha,
+        data_manifest_sha256=manifest_sha,
+        product_schema=product_schema,
+        temporal_contract=temporal_contract,
+        metrics=first,
+    )
+    next_loader = _v2_subset_loader(dataset, boundary_step, boundary_step + 1)
+    uninterrupted = train_v2_steps(
+        system,
+        next_loader,
+        optimizer,
+        device=device,
+        max_steps=1,
+        amp=amp,
+        scheduler=scheduler,
+    )
+    expected_probe = next(model.parameters()).detach().float().cpu().clone()
+    del system, model, criterion, optimizer, scheduler
+    gc.collect()
+    if device.type == "npu":
+        torch.npu.empty_cache()
+
+    restored_model = build_profile_model(config, profile)
+    restored_criterion = build_v2_criterion(config)
+    restored = V2TrainingSystem(restored_model, restored_criterion)
+    restored_optimizer = torch.optim.AdamW(
+        restored.parameters(), lr=config.training.lr, weight_decay=config.training.weight_decay
+    )
+    restored_scheduler = torch.optim.lr_scheduler.LambdaLR(restored_optimizer, lambda _: 1.0)
+    load_v2_training_checkpoint(
+        boundary_path,
+        model=restored_model,
+        criterion=restored_criterion,
+        optimizer=restored_optimizer,
+        scheduler=restored_scheduler,
+        expected_config_sha256=config_sha,
+        expected_data_manifest_sha256=manifest_sha,
+        expected_product_schema=product_schema,
+        expected_temporal_contract=temporal_contract,
+        device=device,
+    )
+    resumed = train_v2_steps(
+        restored,
+        _v2_subset_loader(dataset, boundary_step, boundary_step + 1),
+        restored_optimizer,
+        device=device,
+        max_steps=1,
+        amp=amp,
+        scheduler=restored_scheduler,
+    )
+    loss_close = math.isclose(
+        uninterrupted["loss"], resumed["loss"], rel_tol=1.0e-4, abs_tol=1.0e-3
+    )
+    parameter_close = torch.allclose(
+        expected_probe,
+        next(restored_model.parameters()).detach().float().cpu(),
+        rtol=1.0e-4,
+        atol=1.0e-5,
+    )
+    if not loss_close or not parameter_close:
+        raise RuntimeError(
+            "checkpoint 恢复后的下一 step 与未中断运行不一致: "
+            f"loss={uninterrupted['loss']}/{resumed['loss']}, parameter={parameter_close}"
+        )
+    remaining = profile.steps - boundary_step - 1
+    tail = train_v2_steps(
+        restored,
+        _v2_subset_loader(dataset, boundary_step + 1, profile.steps),
+        restored_optimizer,
+        device=device,
+        max_steps=remaining,
+        amp=amp,
+        scheduler=restored_scheduler,
+    )
+    missing_verified = _validate_missing_dense_products(
+        restored,
+        next(iter(_v2_subset_loader(dataset, 0, 1))),
+        dataset.dense_products,
+        device,
+    )
+    all_losses = first["losses"] + resumed["losses"] + tail["losses"]
+    summary = {
+        "profile": "smoke",
+        "records": len(dataset),
+        "steps": profile.steps,
+        "loss": sum(all_losses) / len(all_losses),
+        "first_loss": all_losses[0],
+        "last_loss": all_losses[-1],
+        "checkpoint_restore_verified": True,
+        "checkpoint_loss_delta": abs(uninterrupted["loss"] - resumed["loss"]),
+        "checkpoint_parameter_close": parameter_close,
+        "missing_products_verified": missing_verified,
+        "split_counts": split_counts,
+        "network_remote_pixels": config.network_policy.allow_remote_pixels,
+        "data_manifest_sha256": manifest_sha,
+        "config_sha256": config_sha,
+        "git_sha": git_sha,
+    }
+    save_v2_training_checkpoint(
+        args.output,
+        model=restored_model,
+        criterion=restored_criterion,
+        optimizer=restored_optimizer,
+        scheduler=restored_scheduler,
+        step=profile.steps,
+        config_sha256=config_sha,
+        git_sha=git_sha,
+        data_manifest_sha256=manifest_sha,
+        product_schema=product_schema,
+        temporal_contract=temporal_contract,
+        metrics=summary,
+    )
+    export_dataset = V2LocalZipDataset(
+        config,
+        registry_path,
+        spatial_size=profile.spatial_size,
+        max_records=profile.records,
+        output_selection="fixed",
+        fixed_output_months=((2020, 12), (2021, 12)),
+        context_days=config.temporal.dense_lookback_days,
+        include_targets=False,
+    )
+    export_loader = DataLoader(
+        export_dataset,
+        batch_size=profile.batch_size,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=collate_v2,
+    )
+    product_version = f"xuannv-v2-smoke-{git_sha[:12]}"
+    catalog = export_v2_sharded(
+        restored_model,
+        export_loader,
+        config.paths.data_root / "products",
+        device=device,
+        product_version=product_version,
+        data_manifest_sha256=manifest_sha,
+        config_sha256=config_sha,
+        git_sha=git_sha,
+    )
+    import pyarrow.parquet as pq
+
+    catalog_rows = pq.read_metadata(catalog).num_rows
+    if catalog_rows != len(export_dataset) * 2:
+        raise RuntimeError(f"V2 导出 catalog 行数错误: {catalog_rows}")
+    summary["catalog"] = str(catalog)
+    summary["catalog_rows"] = catalog_rows
+    print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def _run_v2_training(args: argparse.Namespace) -> int:
     from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
     from xuannv_embedding.training.validation_profiles import (
@@ -375,9 +647,13 @@ def _run_v2_training(args: argparse.Namespace) -> int:
     if args.profile not in config.validation_profiles:
         raise ValueError(f"配置中不存在 validation profile: {args.profile}")
     profile = config.validation_profiles[args.profile]
-    if args.profile != "mini-real":
-        raise ValueError("Stage 04 仅执行 mini-real；smoke profile 由后续阶段入口执行")
     device, distributed, _ = _setup_device(args.device)
+    if args.profile == "smoke":
+        if distributed:
+            raise ValueError("smoke 是单卡门禁；8 卡请使用 npu-smoke")
+        return _run_v2_smoke(args, config, profile, device)
+    if args.profile != "mini-real":
+        raise ValueError("npu-smoke 需要 Stage 06 分布式入口")
     if distributed:
         raise ValueError("mini-real 是单进程恢复门禁，不接受分布式环境")
     torch.manual_seed(42)

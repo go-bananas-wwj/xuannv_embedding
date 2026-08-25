@@ -6,6 +6,9 @@ import hashlib
 from dataclasses import asdict
 from pathlib import Path
 
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
+
 from xuannv_embedding.config import V2Config, ValidationProfileConfig
 from xuannv_embedding.models.v2_model import XuannvV2Model
 from xuannv_embedding.training.losses import V2TotalLoss
@@ -81,3 +84,23 @@ def v2_product_schema(config: V2Config) -> dict[str, object]:
 
 def v2_temporal_contract(config: V2Config) -> dict[str, object]:
     return asdict(config.temporal)
+
+
+def assert_macro_disjoint(registry_path: Path) -> dict[str, int]:
+    table = pq.read_table(registry_path, columns=["macro_id", "split"])
+    counts: dict[str, int] = {}
+    seen: dict[str, set[str]] = {}
+    for split in ("train", "val", "test"):
+        selected = table.filter(pc.equal(table["split"], split))
+        values = {str(value) for value in selected["macro_id"].to_pylist()}
+        seen[split] = values
+        counts[split] = selected.num_rows
+    overlaps = {
+        f"{left}/{right}": sorted(seen[left] & seen[right])
+        for index, left in enumerate(seen)
+        for right in list(seen)[index + 1 :]
+        if seen[left] & seen[right]
+    }
+    if overlaps:
+        raise ValueError(f"smoke registry 存在跨 split macro_id: {overlaps}")
+    return counts

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import torch
 
 from xuannv_embedding.data.contracts import ProductSpec
@@ -13,6 +15,7 @@ from xuannv_embedding.training.checkpoint import (
 )
 from xuannv_embedding.training.losses import V2TotalLoss
 from xuannv_embedding.training.runtime import V2TrainingSystem, train_v2_steps
+from xuannv_embedding.training.validation_profiles import assert_macro_disjoint
 
 
 def _system() -> V2TrainingSystem:
@@ -181,3 +184,23 @@ def test_v2_checkpoint_loader_explicitly_rejects_v1(tmp_path: Path) -> None:
         assert "拒绝 V1" in str(exc)
     else:
         raise AssertionError("V2 loader 不得接受 V1 checkpoint")
+
+
+def test_smoke_registry_rejects_macro_cross_split_leakage(tmp_path: Path) -> None:
+    path = tmp_path / "registry.parquet"
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {"macro_id": "shared", "split": "train"},
+                {"macro_id": "shared", "split": "test"},
+            ]
+        ),
+        path,
+    )
+
+    try:
+        assert_macro_disjoint(path)
+    except ValueError as exc:
+        assert "跨 split" in str(exc)
+    else:
+        raise AssertionError("应拒绝跨 split macro_id")
