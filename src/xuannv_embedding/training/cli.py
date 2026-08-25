@@ -12,6 +12,7 @@ import math
 import os
 import re
 import subprocess
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Sequence
@@ -38,6 +39,7 @@ from xuannv_embedding.training.runtime import (
     TrainingSystem,
     V2TrainingSystem,
     train_steps,
+    train_v2_accumulation_steps,
     train_v2_steps,
 )
 
@@ -631,6 +633,267 @@ def _run_v2_smoke(
     return 0
 
 
+class _CyclingLoader:
+    def __init__(self, loader: DataLoader, sampler: DistributedSampler) -> None:
+        self.loader = loader
+        self.sampler = sampler
+
+    def __iter__(self):
+        epoch = 0
+        while True:
+            self.sampler.set_epoch(epoch)
+            yield from self.loader
+            epoch += 1
+
+
+def _run_v2_npu_smoke(
+    args: argparse.Namespace,
+    config: V2Config,
+    profile,
+    device: torch.device,
+    local_rank: int,
+) -> int:
+    import pyarrow.parquet as pq
+    from torch.nn.parallel import DistributedDataParallel
+
+    from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
+    from xuannv_embedding.export.v2_sharded import export_v2_sharded
+    from xuannv_embedding.training.validation_profiles import (
+        assert_macro_disjoint,
+        build_profile_model,
+        build_v2_criterion,
+        data_manifest_sha256,
+        v2_product_schema,
+        v2_temporal_contract,
+    )
+
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    if world_size != 8 or device.type != "npu":
+        raise ValueError(f"npu-smoke 必须使用 8×NPU，实际 world_size={world_size}, device={device}")
+    effective_batch = world_size * profile.batch_size * config.training.gradient_accumulation_steps
+    if effective_batch != 64:
+        raise ValueError(f"npu-smoke 等效全局 batch 必须为 64，实际 {effective_batch}")
+    registry_path = _v2_registry(config, "npu-smoke")
+    split_counts = assert_macro_disjoint(registry_path)
+    dataset = V2LocalZipDataset(
+        config,
+        registry_path,
+        spatial_size=profile.spatial_size,
+        max_records=profile.records,
+        output_selection="random_single",
+        random_seed=42,
+        context_days=config.temporal.dense_lookback_days,
+    )
+    sampler = DistributedSampler(
+        dataset,
+        num_replicas=world_size,
+        rank=rank,
+        shuffle=False,
+        drop_last=False,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=profile.batch_size,
+        sampler=sampler,
+        num_workers=0,
+        collate_fn=collate_v2,
+    )
+    stream = iter(_CyclingLoader(loader, sampler))
+    torch.manual_seed(42)
+    model = build_profile_model(config, profile)
+    criterion = build_v2_criterion(config)
+    system = V2TrainingSystem(model, criterion).to(device)
+    distributed_system = DistributedDataParallel(
+        system,
+        device_ids=[local_rank],
+        broadcast_buffers=False,
+        find_unused_parameters=True,
+    )
+    optimizer = torch.optim.AdamW(
+        distributed_system.parameters(),
+        lr=config.training.lr,
+        weight_decay=config.training.weight_decay,
+    )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+    config_sha = hashlib.sha256(args.config.read_bytes()).hexdigest()
+    manifest_sha = data_manifest_sha256(config.paths.data_root)
+    product_schema = v2_product_schema(config)
+    temporal_contract = v2_temporal_contract(config)
+    git_sha = _git_sha()
+    boundary_step = profile.steps // 2
+    boundary_path = args.output.with_name(
+        f"{args.output.stem}.step-{boundary_step:04d}{args.output.suffix or '.pt'}"
+    )
+    torch.npu.reset_peak_memory_stats(device)
+    wall_start = time.perf_counter()
+    first = train_v2_accumulation_steps(
+        distributed_system,
+        stream,
+        optimizer,
+        device=device,
+        optimizer_steps=boundary_step,
+        gradient_accumulation_steps=config.training.gradient_accumulation_steps,
+        amp=config.training.amp and not args.no_amp,
+        scheduler=scheduler,
+    )
+    dist.barrier()
+    checkpoint_start = time.perf_counter()
+    if rank == 0:
+        save_v2_training_checkpoint(
+            boundary_path,
+            model=system.model,
+            criterion=system.criterion,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            step=boundary_step,
+            config_sha256=config_sha,
+            git_sha=git_sha,
+            data_manifest_sha256=manifest_sha,
+            product_schema=product_schema,
+            temporal_contract=temporal_contract,
+            metrics=first,
+        )
+    dist.barrier()
+    checkpoint_seconds = time.perf_counter() - checkpoint_start
+    load_v2_training_checkpoint(
+        boundary_path,
+        model=system.model,
+        criterion=system.criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        expected_config_sha256=config_sha,
+        expected_data_manifest_sha256=manifest_sha,
+        expected_product_schema=product_schema,
+        expected_temporal_contract=temporal_contract,
+        device=device,
+    )
+    dist.barrier()
+    second = train_v2_accumulation_steps(
+        distributed_system,
+        stream,
+        optimizer,
+        device=device,
+        optimizer_steps=profile.steps - boundary_step,
+        gradient_accumulation_steps=config.training.gradient_accumulation_steps,
+        amp=config.training.amp and not args.no_amp,
+        scheduler=scheduler,
+    )
+    dist.barrier()
+    wall_seconds = time.perf_counter() - wall_start
+    probe = next(system.model.parameters()).detach().float().sum()
+    minimum = probe.clone()
+    maximum = probe.clone()
+    dist.all_reduce(minimum, op=dist.ReduceOp.MIN)
+    dist.all_reduce(maximum, op=dist.ReduceOp.MAX)
+    if not bool(torch.isclose(minimum, maximum, rtol=1.0e-5, atol=1.0e-6).item()):
+        raise RuntimeError(f"DDP 参数不同步: min={minimum.item()}, max={maximum.item()}")
+    local = torch.tensor(
+        [
+            profile.steps,
+            first["micro_batches"] + second["micro_batches"],
+            first["samples"] + second["samples"],
+            first["loss"] * boundary_step + second["loss"] * (profile.steps - boundary_step),
+            first["data_seconds"] + second["data_seconds"],
+            first["compute_seconds"] + second["compute_seconds"],
+            float(torch.npu.max_memory_allocated(device)),
+            wall_seconds,
+            checkpoint_seconds,
+        ],
+        dtype=torch.float32,
+        device=device,
+    )
+    gathered = [torch.zeros_like(local) for _ in range(world_size)]
+    dist.all_gather(gathered, local)
+    matrix = torch.stack(gathered).cpu()
+    if not bool((matrix[:, :3] == matrix[0, :3]).all()):
+        raise RuntimeError(f"DDP rank step/样本计数不一致: {matrix[:, :3].tolist()}")
+    if rank == 0:
+        summary = {
+            "profile": "npu-smoke",
+            "world_size": world_size,
+            "device_name": torch.npu.get_device_name(device),
+            "optimizer_steps": profile.steps,
+            "micro_batches_per_rank": int(matrix[0, 1]),
+            "samples_per_rank": int(matrix[0, 2]),
+            "effective_global_batch": effective_batch,
+            "global_samples": int(matrix[:, 2].sum()),
+            "loss": float(matrix[:, 3].sum() / (world_size * profile.steps)),
+            "data_seconds_sum": float(matrix[:, 4].sum()),
+            "compute_seconds_sum": float(matrix[:, 5].sum()),
+            "data_wait_fraction": float(
+                matrix[:, 4].sum() / (matrix[:, 4].sum() + matrix[:, 5].sum())
+            ),
+            "wall_seconds_max": float(matrix[:, 7].max()),
+            "throughput_samples_per_second": float(matrix[:, 2].sum() / matrix[:, 7].max()),
+            "peak_memory_bytes_max": int(matrix[:, 6].max()),
+            "checkpoint_seconds_max": float(matrix[:, 8].max()),
+            "checkpoint_restore_step": boundary_step,
+            "rank_sync_verified": True,
+            "split_counts": split_counts,
+            "config_sha256": config_sha,
+            "data_manifest_sha256": manifest_sha,
+            "git_sha": git_sha,
+            "network_remote_pixels": config.network_policy.allow_remote_pixels,
+        }
+        save_v2_training_checkpoint(
+            args.output,
+            model=system.model,
+            criterion=system.criterion,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            step=profile.steps,
+            config_sha256=config_sha,
+            git_sha=git_sha,
+            data_manifest_sha256=manifest_sha,
+            product_schema=product_schema,
+            temporal_contract=temporal_contract,
+            metrics=summary,
+        )
+        export_start = time.perf_counter()
+        export_dataset = V2LocalZipDataset(
+            config,
+            registry_path,
+            spatial_size=profile.spatial_size,
+            max_records=profile.records,
+            output_selection="fixed",
+            fixed_output_months=((2020, 12), (2021, 12)),
+            context_days=config.temporal.dense_lookback_days,
+            include_targets=False,
+        )
+        export_loader = DataLoader(
+            export_dataset,
+            batch_size=profile.batch_size,
+            shuffle=False,
+            num_workers=0,
+            collate_fn=collate_v2,
+        )
+        product_version = f"xuannv-v2-npu-smoke-{git_sha[:12]}"
+        catalog = export_v2_sharded(
+            system.model,
+            export_loader,
+            config.paths.data_root / "products",
+            device=device,
+            product_version=product_version,
+            data_manifest_sha256=manifest_sha,
+            config_sha256=config_sha,
+            git_sha=git_sha,
+        )
+        summary["export_seconds"] = time.perf_counter() - export_start
+        summary["catalog"] = str(catalog)
+        summary["catalog_rows"] = pq.read_metadata(catalog).num_rows
+        report_path = config.paths.data_root / "runs" / "npu-smoke" / "metrics.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+    dist.barrier()
+    dist.destroy_process_group()
+    return 0
+
+
 def _run_v2_training(args: argparse.Namespace) -> int:
     from xuannv_embedding.data.v2_dataset import V2LocalZipDataset, collate_v2
     from xuannv_embedding.training.validation_profiles import (
@@ -647,13 +910,17 @@ def _run_v2_training(args: argparse.Namespace) -> int:
     if args.profile not in config.validation_profiles:
         raise ValueError(f"配置中不存在 validation profile: {args.profile}")
     profile = config.validation_profiles[args.profile]
-    device, distributed, _ = _setup_device(args.device)
+    device, distributed, local_rank = _setup_device(args.device)
     if args.profile == "smoke":
         if distributed:
             raise ValueError("smoke 是单卡门禁；8 卡请使用 npu-smoke")
         return _run_v2_smoke(args, config, profile, device)
+    if args.profile == "npu-smoke":
+        if not distributed:
+            raise ValueError("npu-smoke 必须由 torchrun 启动")
+        return _run_v2_npu_smoke(args, config, profile, device, local_rank)
     if args.profile != "mini-real":
-        raise ValueError("npu-smoke 需要 Stage 06 分布式入口")
+        raise ValueError(f"未知 V2 profile: {args.profile}")
     if distributed:
         raise ValueError("mini-real 是单进程恢复门禁，不接受分布式环境")
     torch.manual_seed(42)

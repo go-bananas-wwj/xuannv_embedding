@@ -14,7 +14,11 @@ from xuannv_embedding.training.checkpoint import (
     save_v2_training_checkpoint,
 )
 from xuannv_embedding.training.losses import V2TotalLoss
-from xuannv_embedding.training.runtime import V2TrainingSystem, train_v2_steps
+from xuannv_embedding.training.runtime import (
+    V2TrainingSystem,
+    train_v2_accumulation_steps,
+    train_v2_steps,
+)
 from xuannv_embedding.training.validation_profiles import assert_macro_disjoint
 
 
@@ -53,6 +57,7 @@ def _system() -> V2TrainingSystem:
 def _batch() -> dict[str, object]:
     frames = torch.randn(2, 2, 2, 8, 8)
     return {
+        "patch_ids": ["p0", "p1"],
         "model_inputs": {
             "source_frames": {"dense": frames},
             "source_pixel_masks": {"dense": torch.ones(2, 2, 1, 8, 8)},
@@ -98,6 +103,27 @@ def test_v2_training_updates_parameters_and_optimizer() -> None:
     assert torch.isfinite(torch.tensor(summary["loss"]))
     assert not torch.equal(before, next(system.model.parameters()).detach())
     assert optimizer.state
+
+
+def test_v2_gradient_accumulation_counts_optimizer_and_micro_steps() -> None:
+    system = _system()
+    optimizer = torch.optim.AdamW(system.parameters(), lr=1e-3)
+    batches = [_batch() for _ in range(6)]
+
+    summary = train_v2_accumulation_steps(
+        system,
+        batches,
+        optimizer,
+        device=torch.device("cpu"),
+        optimizer_steps=2,
+        gradient_accumulation_steps=3,
+        amp=False,
+    )
+
+    assert summary["optimizer_steps"] == 2
+    assert summary["micro_batches"] == 6
+    assert summary["samples"] == 12
+    assert {int(state["step"].item()) for state in optimizer.state.values()} == {2}
 
 
 def test_v2_checkpoint_round_trip_carries_data_provenance(tmp_path: Path) -> None:
