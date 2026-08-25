@@ -12,6 +12,7 @@ from xuannv_embedding.data.contracts import ProductSpec
 from xuannv_embedding.models.v2_model import XuannvV2Model
 from xuannv_embedding.training.checkpoint import (
     CheckpointError,
+    capture_rng_state,
     load_v2_training_checkpoint,
     save_v2_training_checkpoint,
 )
@@ -150,6 +151,7 @@ def test_v2_checkpoint_round_trip_carries_data_provenance(tmp_path: Path) -> Non
         scheduler=scheduler,
         step=2,
         metrics={"loss": 1.0},
+        rank_rng_states=[capture_rng_state()],
         **contract,
     )
     restored = _system()
@@ -172,6 +174,7 @@ def test_v2_checkpoint_round_trip_carries_data_provenance(tmp_path: Path) -> Non
     assert state["data_manifest_sha256"] == "b" * 64
     assert state["step"] == 2
     assert restored_optimizer.state
+    assert len(state["rank_rng_states"]) == 1
 
 
 def test_v2_checkpoint_restores_python_numpy_and_torch_rng(tmp_path: Path) -> None:

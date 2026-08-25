@@ -1000,6 +1000,8 @@ def _run_v2_npu_smoke(
         "zarr_repack_required": input_backend == "zip"
         and float(matrix[:, 4].sum() / (matrix[:, 4].sum() + matrix[:, 5].sum())) > 0.1,
     }
+    final_rank_rng_states: list[dict[str, Any] | None] = [None] * world_size
+    dist.all_gather_object(final_rank_rng_states, capture_rng_state())
     if rank == 0:
         save_v2_training_checkpoint(
             args.output,
@@ -1018,6 +1020,7 @@ def _run_v2_npu_smoke(
                 "micro_batches_per_rank": profile.steps
                 * config.training.gradient_accumulation_steps
             },
+            rank_rng_states=[state for state in final_rank_rng_states if state is not None],
         )
     dist.barrier()
     free_memory = torch.tensor(
