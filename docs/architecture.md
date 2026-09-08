@@ -26,7 +26,7 @@ per-source stem -> gated temporal STP -> monthly embedding -> highres fusion
 - `data_process/`：全国父网格、采样、catalog、物化、预处理、十等分与审计。
 - `cli/`：唯一 `xuannv` 命令入口；可选依赖延迟导入。
 
-`scripts/` 只能放 NPU 启动和发布门禁包装，生产 Python 逻辑必须位于包内。
+`scripts/` 只能放加速器启动和发布门禁包装，生产 Python 逻辑必须位于包内。
 
 ## 区域边界
 

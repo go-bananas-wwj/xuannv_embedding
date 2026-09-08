@@ -2,24 +2,32 @@
 
 ## 训练
 
-Ascend 环境先加载 CANN，再运行单卡或 `torchrun`。训练命令默认读取配置中的真实 manifest；
-`--synthetic` 只用于发布 smoke，必须显式给出 `--steps`。
-真实栅格训练与导出需要同时安装 `npu` 和 `data-process` extras：
-`pip install ".[npu,data-process]"`；基础安装仍可查看全部命令帮助并运行 synthetic CPU smoke。
+CUDA 环境可直接运行单卡或 `torchrun`。训练命令默认优先使用 CUDA；`--synthetic` 只用于发布
+smoke，必须显式给出 `--steps`。
+真实栅格训练与导出需要安装 `data-process` extra：
+`pip install ".[data-process]"`；基础安装仍可查看全部命令帮助并运行 synthetic CPU smoke。
 
-发布环境锁定为已验收的 `torch==2.6.0` 与 `torch-npu==2.6.0.post5`；不要混装不同主次版本。
+CUDA 发布环境锁定为 `torch==2.6.0` 的 CUDA 12.4 构建；不要混装不同主次版本。
 从不含 `.git` 的已安装 wheel 训练时，启动前必须把发布提交写入 `XUANNV_GIT_SHA`；非法或无法
 证明的 SHA 会在设备初始化前被拒绝，避免产出无来源 checkpoint。
 
 ```bash
-source /usr/local/Ascend/cann-9.0.0/set_env.sh
 xuannv train --config configs/production/haidian_p10c_v1.yaml \
-  --output /path/out/checkpoint.pt --device npu:0
+  --output /path/out/checkpoint.pt --device cuda:0
 
-torchrun --standalone --nproc-per-node=6 -m xuannv_embedding.cli train \
+torchrun --standalone --nproc-per-node=8 -m xuannv_embedding.cli train \
   --config configs/production/mixed_haidian_harbin_p10c.yaml \
   --output /path/out/checkpoint.pt
 ```
+
+仓内 `scripts/cuda/launch.sh` 默认启动单机 8 卡。24 卡三节点训练时，在每个节点设置相同的
+`MASTER_ADDR`/`MASTER_PORT` 和不同的 `NODE_RANK=0,1,2`，并设置 `NNODES=3` 后运行同一命令。
+两个平台入口（`scripts/cuda/launch.sh` 8 卡、`scripts/npu/launch_6card.sh` 6 卡）都只设置默认
+卡数并转发给共用的 `scripts/launch_ddp.sh`；`NPROC_PER_NODE` 可覆盖卡数。
+
+分布式后端按设备类型自动选择：CUDA 用 nccl、NPU 用 hccl、CPU 用 gloo。CUDA AMP 在支持 bf16 的
+硬件上使用 bfloat16 并且不启用 GradScaler（bf16 不需要 loss scaling），仅在硬件不支持 bf16 时
+回退到 fp16 + GradScaler。因此 CUDA 的 loss 数值不会与 NPU fp16 记录逐位一致。
 
 多区域使用相同模型和损失。区域 loader 按 `sampling_weight` 确定性轮转；每个 batch 保持同一区域，
 以保留不同物理产品的原生高分尺寸。`--resume` 严格恢复模型、semantic probe、optimizer、scheduler
@@ -36,7 +44,7 @@ torchrun --standalone --nproc-per-node=6 -m xuannv_embedding.cli train \
 ```bash
 xuannv export --config configs/production/haidian_p10c_v1.yaml \
   --checkpoint /path/epoch_800.pt --compatibility-profile haidian_p10c_v1 \
-  --region haidian --output-root /path/embeddings --device npu:0
+  --region haidian --output-root /path/embeddings --device cuda:0
 ```
 
 ## 下游数据与协议

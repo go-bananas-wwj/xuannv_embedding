@@ -22,10 +22,10 @@ manifest、统计量和 `source_map` 表达。权重、影像、embedding、日�
 需要 Python 3.11。
 
 ```bash
+pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 pip install .
 pip install ".[data-process]"   # 网格、STAC、栅格和 manifest
 pip install ".[downstream]"    # 标准下游头与指标
-pip install ".[npu,data-process]" # Ascend 真实栅格训练/导出（已配置 CANN）
 ```
 
 唯一入口是 `xuannv`：
@@ -53,7 +53,7 @@ xuannv export \
   --compatibility-profile haidian_p10c_v1 \
   --region haidian \
   --output-root /path/out/embeddings \
-  --device npu:0
+  --device cuda:0
 
 # 下游阈值只在 validation 上选择，test 只做一次固定评测
 xuannv downstream train --dataset task.npz --folds folds.json --fold 0 \
@@ -76,7 +76,7 @@ xuannv downstream evaluate --dataset task.npz --folds folds.json --fold 0 \
 - [海淀评测证据](docs/production/haidian-evidence.md)
 - [哈尔滨迁移证据与限制](docs/production/harbin-transfer.md)
 - [迁移与来源](MIGRATION.md)
-- [NPU 发布清单](docs/release/npu-checklist.md)
+- [发布清单](docs/release/release-checklist.md)
 
 大制品发布在
 [ModelScope `WeijieWu/xuannv_haidian_embdding`](https://modelscope.cn/datasets/WeijieWu/xuannv_haidian_embdding)，

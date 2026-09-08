@@ -13,5 +13,5 @@ python scripts/release/check_repository.py
 ```
 
 涉及 NPU、checkpoint 或全国网格的变更还必须执行对应的
-[发布清单](docs/release/npu-checklist.md)。代码采用 [Apache-2.0](LICENSE)，提交即表示贡献内容可
+[发布清单](docs/release/release-checklist.md)。代码采用 [Apache-2.0](LICENSE)，提交即表示贡献内容可
 按该许可证发布。
