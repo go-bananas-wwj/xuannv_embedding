@@ -25,6 +25,13 @@ def _move(value: Any, device: torch.device) -> Any:
     return value
 
 
+def _cuda_amp_dtype() -> torch.dtype:
+    """bf16 无需 loss scaling 且对 vMF 归一化更稳；仅在硬件不支持时回退 fp16。"""
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        return torch.bfloat16
+    return torch.float16
+
+
 def _autocast(device: torch.device, enabled: bool):
     if not enabled:
         return nullcontext()
@@ -33,7 +40,7 @@ def _autocast(device: torch.device, enabled: bool):
 
         return torch_npu.npu.amp.autocast()
     if device.type == "cuda":
-        return torch.autocast(device_type="cuda", dtype=torch.float16)
+        return torch.autocast(device_type="cuda", dtype=_cuda_amp_dtype())
     if device.type == "cpu":
         return torch.autocast(device_type="cpu", dtype=torch.bfloat16)
     return nullcontext()
@@ -47,7 +54,9 @@ def _grad_scaler(device: torch.device, enabled: bool):
 
         return torch_npu.npu.amp.GradScaler()
     if device.type == "cuda":
-        return torch.cuda.amp.GradScaler()
+        if _cuda_amp_dtype() is torch.bfloat16:
+            return None
+        return torch.amp.GradScaler("cuda")
     return None
 
 
