@@ -496,16 +496,45 @@ def _batch(config: Config, region: str, limit: int) -> dict[str, Any]:
     return collate_region_batch([dataset[index] for index in range(limit)])
 
 
+def _resolve_device(requested: str | None) -> torch.device:
+    """解析门禁设备；未显式指定时优先使用 CUDA，其次 NPU，最后 CPU。"""
+    if requested is not None:
+        device = torch.device(requested)
+    elif torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    else:
+        try:
+            import torch_npu  # noqa: F401
+        except ImportError:
+            device = torch.device("cpu")
+        else:
+            device = torch.device("npu:0") if torch.npu.is_available() else torch.device("cpu")
+    if device.type == "cuda":
+        torch.cuda.set_device(device)
+    elif device.type == "npu":
+        import torch_npu  # noqa: F401
+
+        torch.npu.set_device(device)
+    return device
+
+
 def _environment(device: torch.device) -> dict[str, Any]:
     report: dict[str, Any] = {
         "torch": torch.__version__,
         "device": str(device),
+        "accelerator": device.type,
     }
     try:
         report["torch_npu"] = importlib.metadata.version("torch-npu")
     except importlib.metadata.PackageNotFoundError:
         report["torch_npu"] = None
-    if device.type == "npu":
+    if device.type == "cuda":
+        report["torch_cuda"] = torch.version.cuda
+        report["device_name"] = torch.cuda.get_device_name(device)
+        report["device_capability"] = ".".join(
+            str(part) for part in torch.cuda.get_device_capability(device)
+        )
+    elif device.type == "npu":
         report["device_name"] = torch.npu.get_device_name(device)
     return report
 
@@ -529,23 +558,19 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="运行海淀兼容与哈尔滨缺模态 NPU 门禁")
+    parser = argparse.ArgumentParser(description="运行海淀兼容与哈尔滨缺模态加速器门禁")
     parser.add_argument("--haidian-config", type=Path, required=True)
     parser.add_argument("--harbin-config", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--legacy-reference-root", type=Path, required=True)
-    parser.add_argument("--device", default="npu:0")
+    parser.add_argument("--device", default=None)
     parser.add_argument("--haidian-limit", type=int, default=2)
     parser.add_argument("--harbin-limit", type=int, default=1)
     args = parser.parse_args(argv)
     if args.haidian_limit <= 0 or args.harbin_limit <= 0:
         parser.error("limit 必须是正整数")
-    device = torch.device(args.device)
-    if device.type == "npu":
-        import torch_npu  # noqa: F401
-
-        torch.npu.set_device(device)
+    device = _resolve_device(args.device)
     haidian_config = Config.from_yaml(args.haidian_config)
     harbin_config = Config.from_yaml(args.harbin_config)
     payload = {
