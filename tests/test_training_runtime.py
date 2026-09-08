@@ -5,8 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+import torch.distributed as dist
 
 from xuannv_embedding.config import Config
+from xuannv_embedding.export.cli import _device as _export_device
 from xuannv_embedding.export.embedding import export_embedding_batches
 from xuannv_embedding.models.model import AEFModel
 from xuannv_embedding.training.checkpoint import (
@@ -19,10 +21,16 @@ from xuannv_embedding.training.cli import (
     _git_sha,
     _periodic_checkpoint_path,
     _repository_path_from_direct_url,
+    _setup_device,
     synthetic_batch,
 )
 from xuannv_embedding.training.losses import TotalLoss
-from xuannv_embedding.training.runtime import TrainingSystem, train_steps
+from xuannv_embedding.training.runtime import (
+    TrainingSystem,
+    _cuda_amp_dtype,
+    _grad_scaler,
+    train_steps,
+)
 
 
 def _system() -> TrainingSystem:
@@ -247,6 +255,106 @@ def test_local_install_direct_url_resolves_source_repository() -> None:
         "/tmp/source repository"
     )
     assert _repository_path_from_direct_url("https://example.com/source") is None
+
+
+def test_device_setup_prefers_cuda_for_single_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    selected: list[torch.device] = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "set_device", selected.append)
+
+    device, distributed, local_rank = _setup_device(None)
+
+    assert device == torch.device("cuda:0")
+    assert distributed is False
+    assert local_rank == 0
+    assert selected == [torch.device("cuda:0")]
+
+
+def test_device_setup_uses_cuda_and_nccl_for_distributed_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selected: list[torch.device] = []
+    backends: list[str] = []
+    monkeypatch.setenv("RANK", "3")
+    monkeypatch.setenv("LOCAL_RANK", "3")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "set_device", selected.append)
+    monkeypatch.setattr(dist, "init_process_group", lambda backend: backends.append(backend))
+
+    device, distributed, local_rank = _setup_device(None)
+
+    assert device == torch.device("cuda:3")
+    assert distributed is True
+    assert local_rank == 3
+    assert selected == [torch.device("cuda:3")]
+    assert backends == ["nccl"]
+
+
+def test_device_setup_rejects_distributed_device_index_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RANK", "2")
+    monkeypatch.setenv("LOCAL_RANK", "2")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "set_device", lambda device: None)
+    monkeypatch.setattr(dist, "init_process_group", lambda backend: None)
+
+    with pytest.raises(ValueError, match="LOCAL_RANK"):
+        _setup_device("cuda:1")
+
+    # 不带 index 的 cuda 与匹配 LOCAL_RANK 的 cuda:2 都必须绑定到本 rank 的卡。
+    assert _setup_device("cuda")[0] == torch.device("cuda:2")
+    assert _setup_device("cuda:2")[0] == torch.device("cuda:2")
+
+
+def test_device_setup_falls_back_to_cpu_and_gloo_without_accelerator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backends: list[str] = []
+    monkeypatch.setenv("RANK", "0")
+    monkeypatch.setenv("LOCAL_RANK", "0")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(dist, "init_process_group", lambda backend: backends.append(backend))
+
+    device, distributed, _ = _setup_device(None)
+
+    assert device == torch.device("cpu")
+    assert distributed is True
+    assert backends == ["gloo"]
+
+
+def test_cuda_amp_prefers_bfloat16_without_grad_scaler(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+    device = torch.device("cuda:0")
+
+    assert _cuda_amp_dtype() is torch.bfloat16
+    # bf16 不需要 loss scaling，scaler 必须为 None，否则 train_steps 会多做一次缩放。
+    assert _grad_scaler(device, True) is None
+
+
+def test_cuda_amp_falls_back_to_fp16_with_grad_scaler(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: False)
+    device = torch.device("cuda:0")
+
+    assert _cuda_amp_dtype() is torch.float16
+    assert _grad_scaler(device, True) is not None
+    # 关闭 amp 时无论平台都不得返回 scaler。
+    assert _grad_scaler(device, False) is None
+
+
+def test_export_device_resolution_prefers_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    selected: list[torch.device] = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "set_device", selected.append)
+
+    assert _export_device(None) == torch.device("cuda:0")
+    assert _export_device("cuda:1") == torch.device("cuda:1")
+    assert selected == [torch.device("cuda:0"), torch.device("cuda:1")]
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    assert _export_device("cpu") == torch.device("cpu")
 
 
 def test_explicit_git_sha_must_be_a_real_hex_commit(monkeypatch: pytest.MonkeyPatch) -> None:

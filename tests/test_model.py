@@ -1044,7 +1044,7 @@ def test_embedding_upsample_head_temporal_reshape() -> None:
 
 
 def test_spatial_resampling_avoids_transposed_conv() -> None:
-    """空间重采样不应使用 Ascend 反传不稳定的 ConvTranspose2d。"""
+    """空间重采样不得使用 ConvTranspose2d：该结构已固化进已登记权重。"""
     up = LearnedSpatialResampling(8, 16, 16.0)
     down = LearnedSpatialResampling(16, 8, 1.0 / 16.0)
     x_up = torch.randn(2, 8, 4, 4)

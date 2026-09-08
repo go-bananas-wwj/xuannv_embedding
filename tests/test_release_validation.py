@@ -12,6 +12,8 @@ import torch
 from xuannv_embedding.config import Config
 from xuannv_embedding.export.validation import (
     ReleaseValidationError,
+    _environment,
+    _resolve_device,
     build_legacy_haidian_model,
     model_input_evidence,
     tensor_evidence,
@@ -176,3 +178,42 @@ def test_independent_legacy_reference_binds_input_checkpoint_and_exact_output(
             reference_root=tmp_path,
             reference_manifest_path=manifest_path,
         )
+
+
+def test_gate_device_resolution_prefers_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    selected: list[torch.device] = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "set_device", selected.append)
+
+    assert _resolve_device(None) == torch.device("cuda:0")
+    assert _resolve_device("cuda:1") == torch.device("cuda:1")
+    assert selected == [torch.device("cuda:0"), torch.device("cuda:1")]
+
+
+def test_gate_device_resolution_falls_back_to_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    assert _resolve_device(None) == torch.device("cpu")
+    assert _resolve_device("cpu") == torch.device("cpu")
+
+
+def test_gate_environment_records_cuda_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CUDA 门禁证据必须包含设备型号，清单要求核验设备。"""
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda device: "NVIDIA A100-SXM4-40GB")
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: (8, 0))
+
+    report = _environment(torch.device("cuda:0"))
+
+    assert report["accelerator"] == "cuda"
+    assert report["device"] == "cuda:0"
+    assert report["device_name"] == "NVIDIA A100-SXM4-40GB"
+    assert report["device_capability"] == "8.0"
+    assert report["torch_cuda"] == torch.version.cuda
+
+
+def test_gate_environment_records_cpu_without_accelerator_fields() -> None:
+    report = _environment(torch.device("cpu"))
+
+    assert report["accelerator"] == "cpu"
+    assert "device_name" not in report
+    assert "torch_cuda" not in report

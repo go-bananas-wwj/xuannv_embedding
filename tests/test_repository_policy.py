@@ -64,11 +64,13 @@ def test_markdown_policy_checks_relative_targets(tmp_path: Path) -> None:
         validate_markdown_links(tmp_path, [source])
 
 
-def test_npu_extra_pins_the_locally_validated_torch_pair() -> None:
+def test_accelerator_extras_pin_the_locally_validated_torch_pair() -> None:
+    """torch 主版本对每个加速器平台都必须锁定在已验收的 2.6.0。"""
     project_root = Path(__file__).resolve().parents[1]
     metadata = tomllib.loads((project_root / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]
 
+    # CUDA 走同一个 torch pin，仅 wheel index 不同，因此没有独立 extra。
     assert "torch==2.6.0" in metadata["dependencies"]
     assert metadata["optional-dependencies"]["npu"] == ["torch-npu==2.6.0.post5"]
