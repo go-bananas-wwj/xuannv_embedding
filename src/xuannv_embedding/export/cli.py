@@ -22,13 +22,13 @@ def _device(value: str | None) -> torch.device:
     if value is not None:
         device = torch.device(value)
     else:
-        try:
-            import torch_npu  # noqa: F401
-
-            device = torch.device("npu:0") if torch.npu.is_available() else torch.device("cpu")
-        except ImportError:
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
             device = torch.device("cpu")
-    if device.type == "npu":
+    if device.type == "cuda":
+        torch.cuda.set_device(device)
+    elif device.type == "npu":
         torch.npu.set_device(device)
     return device
 

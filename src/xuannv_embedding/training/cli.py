@@ -254,22 +254,44 @@ def build_region_batch_stream(
 def _setup_device(requested: str | None) -> tuple[torch.device, bool, int]:
     distributed = "RANK" in os.environ
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    requested_device = torch.device(requested) if requested is not None else None
     if distributed:
-        import torch_npu  # noqa: F401
-
-        torch.npu.set_device(local_rank)
-        dist.init_process_group(backend="hccl")
-        return torch.device(f"npu:{local_rank}"), True, local_rank
-    if requested is not None:
-        device = torch.device(requested)
-    else:
-        try:
+        if requested_device is not None and requested_device.type == "cuda":
+            if requested_device.index is not None and requested_device.index != local_rank:
+                raise ValueError("分布式 CUDA 训练的 --device 必须使用 cuda 或当前 LOCAL_RANK")
+            device = torch.device(f"cuda:{local_rank}")
+        elif requested_device is None and torch.cuda.is_available():
+            device = torch.device(f"cuda:{local_rank}")
+        elif requested_device is not None and requested_device.type == "npu":
             import torch_npu  # noqa: F401
 
-            device = torch.device("npu:0") if torch.npu.is_available() else torch.device("cpu")
-        except ImportError:
+            device = torch.device(f"npu:{local_rank}")
+        elif requested_device is None:
             device = torch.device("cpu")
-    if device.type == "npu":
+        else:
+            device = requested_device
+
+        if device.type == "cuda":
+            torch.cuda.set_device(device)
+            dist.init_process_group(backend="nccl")
+        elif device.type == "npu":
+            import torch_npu  # noqa: F401
+
+            torch.npu.set_device(device)
+            dist.init_process_group(backend="hccl")
+        else:
+            dist.init_process_group(backend="gloo")
+        return device, True, local_rank
+
+    if requested_device is not None:
+        device = requested_device
+    elif torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    else:
+        device = torch.device("cpu")
+    if device.type == "cuda":
+        torch.cuda.set_device(device)
+    elif device.type == "npu":
         torch.npu.set_device(device)
     return device, False, local_rank
 
