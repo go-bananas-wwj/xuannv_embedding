@@ -298,7 +298,9 @@ class LearnedSpatialResampling(nn.Module):
 
     先用无参数重采样对齐空间尺寸，再用小卷积做通道投影。早期实现用
     ``ConvTranspose2d`` 和大 stride/downsample kernel，在 Ascend NPU 反传时容易
-    触发 ``Conv2DBackpropInput`` L1 tiling 限制；这里避免使用转置卷积和大卷积核。
+    触发 ``Conv2DBackpropInput`` L1 tiling 限制，因此改为避免转置卷积和大卷积核。
+    该结构现已固化进已登记权重，无论目标加速器为何都不得改动：改变它会破坏 431 键
+    旧 checkpoint 兼容映射与 embedding 逐元素一致性门禁。
     """
 
     def __init__(self, in_channels: int, out_channels: int, scale_factor: float) -> None:
