@@ -19,6 +19,12 @@ export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-eth0}
 # link_layer 是 Ethernet（RoCE）而非 InfiniBand，但仍走 IB verbs 路径。
 export NCCL_IB_DISABLE=${NCCL_IB_DISABLE:-0}
 
+# 注意：NCCL_IB_DISABLE 只关 NCCL 内置的 IB transport。若环境装了厂商的外部
+# 网络插件（NCCL_DEBUG=INFO 里显示 "Using network IBext_v8" 之类），插件优先级
+# 更高，置 1 也仍会走 IB verbs 并调用 ibv_reg_mr。要真正退到 TCP 必须换后端：
+#   NCCL_NET=Socket NCCL_SOCKET_IFNAME=<互通网卡>
+# 本文件不给 NCCL_NET 设默认值：留空才能让 NCCL 自行选优（含 ACP 注入的插件）。
+
 # 首次联调建议 INFO，确认选中的网卡与 GID；稳定后设为 WARN 降噪。
 export NCCL_DEBUG=${NCCL_DEBUG:-WARN}
 
