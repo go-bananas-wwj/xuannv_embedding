@@ -19,3 +19,6 @@ dist/
 *.pt
 *.pth
 *.ckpt
+
+# 站点相关的多节点参数（节点地址属于内部拓扑，不入库）
+scripts/cuda/cluster.env
