@@ -20,10 +20,45 @@ torchrun --standalone --nproc-per-node=8 -m xuannv_embedding.cli train \
   --output /path/out/checkpoint.pt
 ```
 
-仓内 `scripts/cuda/launch.sh` 默认启动单机 8 卡。24 卡三节点训练时，在每个节点设置相同的
-`MASTER_ADDR`/`MASTER_PORT` 和不同的 `NODE_RANK=0,1,2`，并设置 `NNODES=3` 后运行同一命令。
-两个平台入口（`scripts/cuda/launch.sh` 8 卡、`scripts/npu/launch_6card.sh` 6 卡）都只设置默认
-卡数并转发给共用的 `scripts/launch_ddp.sh`；`NPROC_PER_NODE` 可覆盖卡数。
+仓内 `scripts/cuda/launch.sh` 默认启动单机 8 卡。两个平台入口（`scripts/cuda/launch.sh` 8 卡、
+`scripts/npu/launch_6card.sh` 6 卡）都只设置默认卡数并转发给共用的 `scripts/launch_ddp.sh`；
+`NPROC_PER_NODE` 可覆盖卡数。
+
+### 多节点 24 卡
+
+先复制 `scripts/cuda/cluster.env.example` 为 `scripts/cuda/cluster.env` 并填入 rank 0 的
+`MASTER_ADDR`、`MASTER_PORT` 与节点数。该文件不入库：节点地址属于站点内部拓扑。环境变量优先于
+文件取值，因此临时改拓扑无需改文件。
+
+RoCE 相关设置集中在 `scripts/cuda/env_roce.sh`，两个入口脚本都会自动载入。换集群时逐项复核：
+`NCCL_IB_HCA` 需指向高速网卡（不指定时 NCCL 可能选中低速 bond 口），`NCCL_IB_GID_INDEX` 需对应
+RoCE v2（用 `grep -r . /sys/class/infiniband/mlx5_0/ports/1/gid_attrs/types/` 确认编号），
+`NCCL_SOCKET_IFNAME` 需是各节点互通的那张网卡。
+
+先跑通信自检，再跑训练——它不加载模型也不读数据，能把网络问题与训练侧问题分开：
+
+```bash
+NODE_RANK=0 scripts/cuda/check_24card.sh   # 在 MASTER_ADDR 那台
+NODE_RANK=1 scripts/cuda/check_24card.sh
+NODE_RANK=2 scripts/cuda/check_24card.sh
+```
+
+自检通过后在每个节点各运行一次训练入口，只有 `NODE_RANK` 不同：
+
+```bash
+NODE_RANK=0 scripts/cuda/launch_24card.sh configs/production/haidian_p10c_v1.yaml \
+  --output /path/out/checkpoint.pt
+```
+
+各节点镜像不一致时，裸 `torchrun` 可能解析到系统 Python 或镜像自带的另一套 torch，症状是
+`ModuleNotFoundError: xuannv_embedding`。`env_roce.sh` 会把 `XUANNV_PYTHON` 指向共享盘上的
+解释器，`scripts/launch_ddp.sh` 优先用它启动；镜像化运行时按实际路径覆盖该变量。
+`env_roce.sh` 同时固化 `XUANNV_GIT_SHA`，因为镜像内通常没有 `.git`，缺少它训练会拒绝启动。
+
+卡数变化时注意全局 batch：全局 batch = 卡数 × `data.batch_size` ×
+`training.gradient_accumulation_steps`。要在 24 卡上保持与 8 卡基线相同的全局 batch（8×3×2=48），
+可设 `data.batch_size: 2` 且 `gradient_accumulation_steps: 1`，此时 `lr` 与 `warmup_epochs`
+无需改动；若全局 batch 变了，学习率需要同步复核。
 
 分布式后端按设备类型自动选择：CUDA 用 nccl、NPU 用 hccl、CPU 用 gloo。CUDA AMP 在支持 bf16 的
 硬件上使用 bfloat16 并且不启用 GradScaler（bf16 不需要 loss scaling），仅在硬件不支持 bf16 时
