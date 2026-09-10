@@ -26,6 +26,8 @@ torchrun --standalone --nproc-per-node=8 -m xuannv_embedding.cli train \
 
 ### 多节点 24 卡
 
+本节是最小可用路径。分层验收流程、故障速查与 ACP 迁移要求见 `docs/multi-node/`。
+
 先复制 `scripts/cuda/cluster.env.example` 为 `scripts/cuda/cluster.env` 并填入 rank 0 的
 `MASTER_ADDR`、`MASTER_PORT` 与节点数。该文件不入库：节点地址属于站点内部拓扑。环境变量优先于
 文件取值，因此临时改拓扑无需改文件。
@@ -74,15 +76,20 @@ grep CapEff /proc/self/status         # 需包含 CAP_IPC_LOCK（bit 14）
 ls /sys/kernel/mm/memory_peers/       # GPUDirect 对端内存模块，应有 nv_mem
 ```
 
-在放开之前，可以先关掉 RDMA、退回 TCP 跑通多节点流程，代价是带宽显著下降；
+在放开之前，可以先退回 TCP 跑通多节点流程，代价是带宽显著下降（实测约为 RoCE 的四分之一）。
 把 `NCCL_SOCKET_IFNAME` 指向高速网卡而非管理口，否则会退到最慢的那张：
 
 ```bash
-NCCL_IB_DISABLE=1 NCCL_SOCKET_IFNAME=net1,net2 \
+NCCL_NET=Socket NCCL_SOCKET_IFNAME=<互通高速网卡> \
   NODE_RANK=0 scripts/cuda/check_24card.sh
 ```
 
-环境变量优先于 `env_roce.sh` 的默认值，因此不必改文件。
+必须用 `NCCL_NET=Socket`：`NCCL_IB_DISABLE=1` 只关 NCCL 内置的 IB transport，环境装有厂商
+网络插件时（日志显示 `Using network IBext_v8` 之类）仍会走 IB verbs 并继续失败。生效的标志
+是日志出现 `Using network Socket`。
+
+环境变量优先于 `env_roce.sh` 的默认值，因此不必改文件。若容器所在产品形态本身不开放
+capabilities（如 Serverless 类容器实例），RDMA 无法通过调参获得，见 `docs/multi-node/`。
 
 卡数变化时注意全局 batch：全局 batch = 卡数 × `data.batch_size` ×
 `training.gradient_accumulation_steps`。要在 24 卡上保持与 8 卡基线相同的全局 batch（8×3×2=48），

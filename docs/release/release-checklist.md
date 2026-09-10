@@ -61,8 +61,11 @@ python scripts/release/run_model_gates.py \
 scripts/cuda/launch.sh configs/production/haidian_p10c_v1.yaml \
   --output /path/out/checkpoint.pt
 
-# 三节点 24 卡：每节点相同 MASTER_ADDR/MASTER_PORT，NODE_RANK 依次为 0/1/2
-NNODES=3 NODE_RANK=0 MASTER_ADDR=10.0.0.1 MASTER_PORT=29500 \
-  scripts/cuda/launch.sh configs/production/haidian_p10c_v1.yaml \
+# 三节点 24 卡：在每个节点各运行一次，只有 NODE_RANK 不同
+NODE_RANK=0 scripts/cuda/launch_24card.sh configs/production/haidian_p10c_v1.yaml \
   --output /path/out/checkpoint.pt
 ```
+
+24 卡用 `launch_24card.sh` 而不是 `launch.sh`：前者会载入 `scripts/cuda/env_roce.sh`
+（RoCE 网卡、`XUANNV_PYTHON`、`XUANNV_GIT_SHA`）并从 `scripts/cuda/cluster.env` 读取节点
+拓扑。用 `launch.sh` 加环境变量拼多节点会缺掉这些设置。分层验收流程见 `docs/multi-node/`。
