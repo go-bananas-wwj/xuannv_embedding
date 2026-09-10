@@ -386,3 +386,23 @@ def test_synthetic_batch_keeps_missing_highres_out_of_input_and_supervision() ->
     assert torch.count_nonzero(batch["highres_masks"]["highres_sar"]) == 0
     assert torch.count_nonzero(batch["target_masks"]["highres_sar_recon"]) == 0
     assert torch.count_nonzero(batch["highres_masks"]["highres_optical"]) > 0
+
+
+def test_upsample_head_is_unused_when_precision_scale_is_one() -> None:
+    """precision_scale=1 时 upsample_head 拿不到梯度，DDP 必须开 find_unused_parameters。
+
+    编码器输出已是输入分辨率，AEFModel 会整体跳过 upsample_head。这 6 个参数属于已登记的
+    431 键合同，不能为了迁就 DDP 而删除，因此只能让 DDP 容忍未用参数。本用例失败即说明
+    前向路径变了，training/cli.py 里 find_unused_parameters=True 的理由需要重新评估。
+    """
+    system = _system()
+    losses = system(_batch())
+    losses["total"].backward()
+
+    graded = {
+        name
+        for name, param in system.named_parameters()
+        if name.startswith("model.upsample_head.") and param.grad is not None
+    }
+    assert graded == set()
+    assert any(name.startswith("model.upsample_head.") for name, _ in system.named_parameters())

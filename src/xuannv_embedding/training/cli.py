@@ -414,8 +414,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         start_epoch = int(state["epoch"]) + 1
     wrapped: nn.Module = system
     if distributed:
+        # precision_scale=1 时 AEFModel 会跳过 upsample_head（编码器输出已是输入分辨率），
+        # 该子模块的 6 个参数因此拿不到梯度。它们属于已登记的 431 键合同，不能删，
+        # 所以只能让 DDP 容忍未用参数，否则多卡从第二个 step 起就会中止。
         wrapped = nn.parallel.DistributedDataParallel(
-            system, device_ids=[local_rank], broadcast_buffers=False
+            system,
+            device_ids=[local_rank],
+            broadcast_buffers=False,
+            find_unused_parameters=True,
         )
     if args.synthetic:
         batch = synthetic_batch(
