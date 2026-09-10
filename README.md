@@ -72,6 +72,7 @@ xuannv downstream evaluate --dataset task.npz --folds folds.json --fold 0 \
 - [配置和 manifest 合同](docs/configuration-and-manifest.md)
 - [全国数据处理](docs/data-processing.md)
 - [训练、导出与下游评测](docs/training-export-downstream.md)
+- [多节点 24 卡训练](docs/multi-node/README.md)
 - [海淀模型卡](docs/production/haidian-model-card.md)
 - [海淀评测证据](docs/production/haidian-evidence.md)
 - [哈尔滨迁移证据与限制](docs/production/harbin-transfer.md)

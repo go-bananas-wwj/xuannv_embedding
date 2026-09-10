@@ -95,6 +95,10 @@ xuannv train \
 scripts/cuda/launch.sh configs/production/haidian_p10c_v1.yaml \
   --output /path/out/checkpoint.pt
 
+# 三节点 24 卡 DDP（每节点各跑一次，只有 NODE_RANK 不同；见 docs/multi-node/）
+NODE_RANK=0 scripts/cuda/launch_24card.sh configs/production/haidian_p10c_v1.yaml \
+  --output /path/out/checkpoint.pt
+
 # CPU smoke（仅验证前向/反向/保存，不读真实数据）
 xuannv train \
   --config configs/production/haidian_p10c_v1.yaml \
@@ -281,6 +285,7 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`：
 - `docs/configuration-and-manifest.md`：配置和 manifest 合同
 - `docs/data-processing.md`：全国数据处理流程
 - `docs/training-export-downstream.md`：训练、导出与下游评测
+- `docs/multi-node/`：多节点 24 卡分层验收、故障速查与 ACP 迁移
 - `docs/production/haidian-model-card.md`：海淀模型卡
 - `docs/production/haidian-evidence.md`：海淀评测证据
 - `docs/production/harbin-transfer.md`：哈尔滨迁移证据与限制
