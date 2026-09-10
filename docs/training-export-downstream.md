@@ -55,6 +55,35 @@ NODE_RANK=0 scripts/cuda/launch_24card.sh configs/production/haidian_p10c_v1.yam
 解释器，`scripts/launch_ddp.sh` 优先用它启动；镜像化运行时按实际路径覆盖该变量。
 `env_roce.sh` 同时固化 `XUANNV_GIT_SHA`，因为镜像内通常没有 `.git`，缺少它训练会拒绝启动。
 
+### RoCE 需要容器放开锁页内存
+
+RDMA 要把通信缓冲区锁页注册。若实例的 `ulimit -l` 很小或缺少 `CAP_IPC_LOCK`，
+握手能成功（rendezvous 走普通 socket），但第一次 all_reduce 会失败：
+
+```
+NCCL WARN Call to ibv_reg_mr_iova2 failed
+ncclSystemError: ... Call to ibv_reg_mr_iova2 failed
+```
+
+先按下面三项自查；`CapEff` 为 0 或 `ulimit -l` 的 hard limit 很小时，容器内无法自行提升，
+需要在实例/Pod 配置里放开（memlock 设为 unlimited，并授予 IPC_LOCK）：
+
+```bash
+ulimit -l; ulimit -Hl                 # 期望 unlimited
+grep CapEff /proc/self/status         # 需包含 CAP_IPC_LOCK（bit 14）
+ls /sys/kernel/mm/memory_peers/       # GPUDirect 对端内存模块，应有 nv_mem
+```
+
+在放开之前，可以先关掉 RDMA、退回 TCP 跑通多节点流程，代价是带宽显著下降；
+把 `NCCL_SOCKET_IFNAME` 指向高速网卡而非管理口，否则会退到最慢的那张：
+
+```bash
+NCCL_IB_DISABLE=1 NCCL_SOCKET_IFNAME=net1,net2 \
+  NODE_RANK=0 scripts/cuda/check_24card.sh
+```
+
+环境变量优先于 `env_roce.sh` 的默认值，因此不必改文件。
+
 卡数变化时注意全局 batch：全局 batch = 卡数 × `data.batch_size` ×
 `training.gradient_accumulation_steps`。要在 24 卡上保持与 8 卡基线相同的全局 batch（8×3×2=48），
 可设 `data.batch_size: 2` 且 `gradient_accumulation_steps: 1`，此时 `lr` 与 `warmup_epochs`
