@@ -5,10 +5,16 @@ import pytest
 from xuannv_embedding.data_process.v5_followup import next_source_action
 
 
-def test_followup_catalogs_partial_sources_but_waits_before_full_quality():
+def test_followup_catalogs_each_source_batch_before_incremental_quality():
     assert next_source_action(total=64, verified=2, cataloged=0, quality_status=None) == "catalog"
-    assert next_source_action(total=64, verified=2, cataloged=2, quality_status=None) is None
-    assert next_source_action(total=64, verified=64, cataloged=64, quality_status=None) == "quality"
+    assert (
+        next_source_action(total=64, verified=2, cataloged=2, quality_status=None)
+        == "jilin-quality"
+    )
+    assert (
+        next_source_action(total=64, verified=64, cataloged=64, quality_status=None)
+        == "jilin-quality"
+    )
     assert (
         next_source_action(
             total=64, verified=64, cataloged=64, quality_status="inferred_needs_visual_review"
@@ -70,6 +76,8 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
         lambda *args: partial_exit == 0 and "catalog-partial-bands" in actions,
     )
 
+    monkeypatch.setattr(module, "jilin_quality_finished", lambda *args: "jilin-quality" in actions)
+
     def run(command, **kwargs):
         action = command[command.index("--stage") + 1]
         actions.append(action)
@@ -84,7 +92,7 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
             assert command[command.index("--alignment-version") + 1] == "v5"
             assert command[command.index("--sensor-family") + 1] == "jilin1"
             return SimpleNamespace(returncode=band_exit)
-        elif action == "quality":
+        elif action == "jilin-quality":
             write_json(
                 args.dataset_root / "quality/cloud/jilin1/source.lock.json",
                 {"limit": None, "catalog_sha256": sha256(catalog)},
@@ -97,7 +105,7 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
     result = module.follow_started_jobs(args)
     expected = ["catalog", "catalog-partial-bands"]
     if not partial_exit:
-        expected += ["band-alignment"] + ([] if band_exit else ["quality"])
+        expected += ["band-alignment"] + ([] if band_exit else ["jilin-quality"])
     assert actions == expected
     assert len(result["failures"]) == int(bool(band_exit or partial_exit))
     assert result["status"] == "stopped_for_remaining_data_gates"
@@ -107,11 +115,11 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
 def test_followup_audits_each_catalog_before_cloud_without_repeating_finished_audit():
     common = dict(total=64, verified=3, cataloged=3, quality_status=None)
     assert next_source_action(**common, band_ready=False) == "band-alignment"
-    assert next_source_action(**common, band_ready=True) is None
+    assert next_source_action(**common, band_ready=True) == "jilin-quality"
     assert next_source_action(**{**common, "verified": 4}, band_ready=False) == "catalog"
     full = {**common, "verified": 64, "cataloged": 64}
     assert next_source_action(**full, band_ready=False) == "band-alignment"
-    assert next_source_action(**full, band_ready=True) == "quality"
+    assert next_source_action(**full, band_ready=True) == "jilin-quality"
     assert next_source_action(**full, band_ready=False, band_running=True) is None
 
 
@@ -163,7 +171,7 @@ def test_followup_refreshes_partial_bands_before_native_audit_or_cloud():
         next_source_action(**{**common, "verified": 64, "cataloged": 64}, partial_ready=False)
         == "catalog-partial-bands"
     )
-    assert next_source_action(**common, partial_ready=True, band_ready=True) is None
+    assert next_source_action(**common, partial_ready=True, band_ready=True) == "jilin-quality"
 
 
 def test_partial_completion_requires_matching_inputs_runtime_code_and_output(tmp_path):
@@ -243,3 +251,105 @@ def test_partial_completion_requires_matching_inputs_runtime_code_and_output(tmp
     assert not module.partial_catalog_finished(source, data, report)
     pointer.write_text("{")
     assert not module.partial_catalog_finished(source, data, report)
+
+
+def test_incremental_quality_never_shares_an_active_cloud_worker():
+    assert (
+        next_source_action(
+            total=64, verified=6, cataloged=6, quality_status=None, quality_running=True
+        )
+        is None
+    )
+    assert (
+        next_source_action(
+            total=64, verified=6, cataloged=6, quality_status="finished", quality_running=False
+        )
+        is None
+    )
+
+
+def test_quality_completion_rejects_pilots_stale_catalogs_and_changed_outputs(tmp_path):
+    import hashlib
+    import json
+    from importlib.metadata import version
+
+    import numpy as np
+    import pandas as pd
+    import rasterio
+    import zarr
+
+    import xuannv_embedding.data_process.v5_followup as module
+    from xuannv_embedding.data_process.v5_sources import sha256, write_json
+
+    data, report, models = [tmp_path / name for name in ["data", "report", "models"]]
+    models.mkdir()
+    model = models / "weight.om"
+    model.write_bytes(b"weight")
+    pointer = data / "observations/highres/jilin1/partial_bands/current.json"
+    catalog_lock = data / "observations/highres/jilin1/partial_bands/partial/catalog.lock.json"
+    write_json(catalog_lock, {"catalog": "one"})
+    write_json(
+        pointer,
+        {"version": "partial", "lock_path": str(catalog_lock), "lock_sha256": sha256(catalog_lock)},
+    )
+    code = Path(module.__file__).with_name("v5_jilin_quality.py")
+    config = {
+        "code_sha256": {code.name: sha256(code)},
+        "models_sha256": {model.name: sha256(model)},
+        "runtime": {
+            "numpy": np.__version__,
+            "rasterio": rasterio.__version__,
+            "gdal": rasterio.__gdal_version__,
+            "zarr": zarr.__version__,
+            "pandas": pd.__version__,
+            "pyarrow": version("pyarrow"),
+        },
+    }
+    config_id = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:20]
+    root = data / "quality/cloud/jilin1/v2" / config_id
+    output = root / "catalogs/snapshot"
+    write_json(root / "configuration.lock.json", config)
+    output.mkdir(parents=True)
+    table = output / "observation_quality.parquet"
+    table.write_bytes(b"table")
+    lock = output / "quality.lock.json"
+    locked = {
+        "snapshot": {
+            "limit": None,
+            "catalog_lock_sha256": sha256(catalog_lock),
+            "configuration_id": config_id,
+        },
+        "processed_scenes": 10,
+        "quality_table_sha256": sha256(table),
+    }
+    summary = {
+        "status": "inferred_needs_visual_review",
+        "partial_catalog_version": "partial",
+        "selected_scenes": 10,
+        "processed_scenes": 10,
+        "output": str(output),
+        "quality_root": str(root),
+    }
+
+    def publish():
+        write_json(lock, locked)
+        summary["quality_lock_sha256"] = sha256(lock)
+        write_json(report / "jilin_quality_v2_full.json", summary)
+
+    publish()
+    assert module.jilin_quality_finished(data, report, models)
+    locked["snapshot"]["limit"] = 32
+    publish()
+    assert not module.jilin_quality_finished(data, report, models)
+    locked["snapshot"]["limit"] = None
+    publish()
+    summary["partial_catalog_version"] = "older"
+    publish()
+    assert not module.jilin_quality_finished(data, report, models)
+    summary["partial_catalog_version"] = "partial"
+    publish()
+    table.write_bytes(b"damaged")
+    assert not module.jilin_quality_finished(data, report, models)
+    table.write_bytes(b"table")
+    model.write_bytes(b"changed")
+    assert not module.jilin_quality_finished(data, report, models)

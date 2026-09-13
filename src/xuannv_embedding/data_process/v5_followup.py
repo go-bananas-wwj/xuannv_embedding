@@ -23,6 +23,7 @@ def next_source_action(
     band_ready: bool = True,
     band_running: bool = False,
     partial_ready: bool = True,
+    quality_running: bool = False,
 ) -> str | None:
     if total > 0 and verified > cataloged:
         return "catalog"
@@ -30,8 +31,8 @@ def next_source_action(
         return "catalog-partial-bands"
     if total > 0 and verified > 0 and verified == cataloged and not band_ready:
         return None if band_running else "band-alignment"
-    if total > 0 and verified == total and cataloged == total and quality_status is None:
-        return "quality"
+    if total > 0 and verified > 0 and verified == cataloged and quality_status is None:
+        return None if quality_running else "jilin-quality"
     return None
 
 
@@ -86,6 +87,67 @@ def partial_catalog_finished(source_root: Path, dataset_root: Path, report_root:
         return False
 
 
+def jilin_quality_finished(dataset_root: Path, report_root: Path, model_dir: Path) -> bool:
+    """Recognize completed current-catalog QA, including explicit missing-QA outcomes."""
+    import numpy as np
+    import pandas as pd
+    import rasterio
+    import zarr
+
+    try:
+        summary = json.loads((report_root / "jilin_quality_v2_full.json").read_text())
+        pointer = json.loads(
+            (dataset_root / "observations/highres/jilin1/partial_bands/current.json").read_text()
+        )
+        output = Path(summary["output"])
+        lock = output / "quality.lock.json"
+        if sha256(lock) != summary["quality_lock_sha256"]:
+            return False
+        locked = json.loads(lock.read_text())
+        snapshot = locked["snapshot"]
+        root = Path(summary["quality_root"])
+        configuration = json.loads((root / "configuration.lock.json").read_text())
+        config_id = hashlib.sha256(json.dumps(configuration, sort_keys=True).encode()).hexdigest()[
+            :20
+        ]
+        if (
+            summary.get("status") != "inferred_needs_visual_review"
+            or summary.get("partial_catalog_version") != pointer["version"]
+            or not summary.get("selected_scenes")
+            or summary.get("selected_scenes") != summary.get("processed_scenes")
+            or locked.get("processed_scenes") != summary["selected_scenes"]
+            or snapshot.get("limit") is not None
+            or snapshot["catalog_lock_sha256"] != sha256(Path(pointer["lock_path"]))
+            or snapshot["configuration_id"] != config_id
+            or root.resolve() != (dataset_root / "quality/cloud/jilin1/v2" / config_id).resolve()
+            or output.parent.resolve() != (root / "catalogs").resolve()
+            or sha256(output / "observation_quality.parquet") != locked["quality_table_sha256"]
+            or not configuration.get("code_sha256")
+            or not configuration.get("models_sha256")
+        ):
+            return False
+        if any(
+            sha256(Path(__file__).with_name(name)) != expected
+            for name, expected in configuration["code_sha256"].items()
+        ):
+            return False
+        if any(
+            sha256(model_dir / name) != expected
+            for name, expected in configuration["models_sha256"].items()
+        ):
+            return False
+        return configuration.get("runtime") == {
+            "numpy": np.__version__,
+            "rasterio": rasterio.__version__,
+            "gdal": rasterio.__gdal_version__,
+            "zarr": zarr.__version__,
+            "pandas": pd.__version__,
+            "pyarrow": package_version("pyarrow"),
+        }
+    except (OSError, KeyError, TypeError, ValueError):
+        return False
+
+
 def band_inventory_finished(
     dataset_root: Path, summary: dict, inventory_hash: str | None, version: str
 ) -> bool:
@@ -136,6 +198,7 @@ def follow_started_jobs(args) -> dict:
         "dense_integrity",
         "band_gaofen",
         "band_jilin1",
+        "jilin_quality_v2",
     ):
         info = read(args.report_root / f"{name}_worker.json")
         if info:
@@ -164,8 +227,6 @@ def follow_started_jobs(args) -> dict:
                 verified += 1
         catalog = read(args.report_root / "grid_match_report.json")
         cataloged = int(catalog.get("processed_archives", 0))
-        quality = read(args.report_root / "jilin_cloud_summary.json")
-        quality_lock = read(args.dataset_root / "quality/cloud/jilin1/source.lock.json")
         catalog_path = args.dataset_root / "observations/highres/jilin1/files.parquet"
         catalog_hash = sha256(catalog_path) if catalog_path.exists() else None
         if catalog_hash and catalog_hash not in inventory_cache:
@@ -182,12 +243,8 @@ def follow_started_jobs(args) -> dict:
             alignment_version,
         )
         full_quality_status = (
-            quality.get("status")
-            if quality_lock
-            and quality_lock.get("limit") is None
-            and catalog_path.exists()
-            and quality_lock.get("catalog_sha256") == catalog_hash
-            and quality.get("processed_scenes") == quality.get("selected_scenes")
+            "finished"
+            if jilin_quality_finished(args.dataset_root, args.report_root, args.model_dir)
             else None
         )
         partial_ready = partial_catalog_finished(
@@ -200,9 +257,10 @@ def follow_started_jobs(args) -> dict:
             quality_status=full_quality_status,
             band_ready=band_ready,
             partial_ready=partial_ready,
+            quality_running=alive.get("jilin_quality_v2", False),
             band_running=alive.get("band_jilin1", False),
         )
-        if action == "quality" and alive.get("gaofen", False):
+        if action == "jilin-quality" and alive.get("gaofen", False):
             action = None  # The same data inference device must have one owner.
         identity = (action, verified, inventory_hash, alignment_version)
         if action and identity not in attempted_failures:
@@ -226,7 +284,7 @@ def follow_started_jobs(args) -> dict:
                     "--workers",
                     str(args.workers),
                 ]
-            if action == "quality":
+            if action == "jilin-quality":
                 command += ["--model-dir", str(args.model_dir), "--device-id", str(args.device_id)]
             write_json(
                 output,
@@ -262,6 +320,7 @@ def follow_started_jobs(args) -> dict:
             "cataloged_archives": cataloged,
             "band_inventory_finished": band_ready,
             "partial_catalog_finished": partial_ready,
+            "jilin_quality_finished": full_quality_status is not None,
             "alignment_version": alignment_version,
             "failures": failures,
             "training_authorized": False,
