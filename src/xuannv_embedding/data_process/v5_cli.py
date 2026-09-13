@@ -200,7 +200,9 @@ def acquire(args: argparse.Namespace, source: dict) -> None:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--stage", required=True, choices=["source-lock", "download", "extract", "ingest"]
+        "--stage",
+        required=True,
+        choices=["source-lock", "download", "extract", "ingest", "catalog"],
     )
     for key in ["source-root", "dataset-root", "report-root", "base-root"]:
         parser.add_argument("--" + key, type=Path, required=True)
@@ -210,7 +212,8 @@ def main(argv=None) -> int:
         parser.error("--limit must be between 1 and 64")
     args.source_root.mkdir(parents=True, exist_ok=True)
     args.report_root.mkdir(parents=True, exist_ok=True)
-    with (args.source_root / ".prepare.lock").open("a") as mutex:
+    lock_name = ".catalog.lock" if args.stage == "catalog" else ".prepare.lock"
+    with (args.source_root / lock_name).open("a") as mutex:
         try:
             fcntl.flock(mutex, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -228,7 +231,14 @@ def main(argv=None) -> int:
             source = lock_source(args.source_root)
             input_lock(args, source)
             record["input_fingerprint"] = source["manifest_sha256"]
-            if args.stage != "source-lock":
+            write_json(record_path, record)
+            if args.stage == "catalog":
+                from xuannv_embedding.data_process.v5_catalog import build_catalog
+
+                record["result"] = build_catalog(
+                    args.source_root, args.dataset_root, args.report_root
+                )
+            elif args.stage != "source-lock":
                 acquire(args, source)
             record["status"] = "complete"
         except Exception as exc:
