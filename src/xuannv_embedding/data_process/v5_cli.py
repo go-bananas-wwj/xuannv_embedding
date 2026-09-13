@@ -222,6 +222,7 @@ def main(argv=None) -> int:
             "target-values",
             "target-temporal",
             "target-negative-rules",
+            "target-negative-corrections",
             "target-sources",
             "target-geometry",
             "dem-geometry",
@@ -393,6 +394,14 @@ def main(argv=None) -> int:
                     args.model_dir,
                     device_id=args.device_id,
                 )
+            elif args.stage == "target-negative-corrections":
+                from xuannv_embedding.data_process.v5_negative_corrections import (
+                    build_negative_corrections,
+                )
+
+                if args.max_patches is not None:
+                    raise ValueError("Negative corrections require the complete audited data view")
+                record["result"] = build_negative_corrections(args.dataset_root, args.report_root)
             elif args.stage == "target-negative-rules":
                 from xuannv_embedding.data_process.v5_negative_rules import audit_negative_rules
 
