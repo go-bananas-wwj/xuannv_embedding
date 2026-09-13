@@ -224,6 +224,7 @@ def main(argv=None) -> int:
             "highres-statistics",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
+            "adaptive-alignment-review",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -253,6 +254,8 @@ def main(argv=None) -> int:
     parser.add_argument("--quality-root", type=Path)
     parser.add_argument("--clear-calibration-root", type=Path)
     parser.add_argument("--alignment-audit-root", type=Path)
+    parser.add_argument("--adaptive-calibration-root", type=Path)
+    parser.add_argument("--exclusion-inputs", type=Path, action="append", default=[])
     parser.add_argument("--device-id", type=int, default=1)
     parser.add_argument("--max-scenes", type=int)
     parser.add_argument("--sensor-family", choices=["jilin1", "gaofen"])
@@ -272,6 +275,7 @@ def main(argv=None) -> int:
             "highres-statistics",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
+            "adaptive-alignment-review",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -288,17 +292,27 @@ def main(argv=None) -> int:
             "highres-statistics",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
+            "adaptive-alignment-review",
         }
         and args.quality_root is None
     ):
         parser.error("--quality-root is required for clear alignment calibration")
-    if args.stage == "alignment-diagnostics" and args.alignment_audit_root is None:
+    if (
+        args.stage in {"alignment-diagnostics", "adaptive-alignment-review"}
+        and args.alignment_audit_root is None
+    ):
         parser.error("--alignment-audit-root is required for alignment diagnostics")
     if (
         args.stage in {"clear-band-audit", "adaptive-alignment-calibration"}
         and args.clear_calibration_root is None
     ):
         parser.error("--clear-calibration-root is required for clear band audit")
+    if args.stage == "adaptive-alignment-review" and (
+        args.adaptive_calibration_root is None or not args.exclusion_inputs
+    ):
+        parser.error(
+            "--adaptive-calibration-root and --exclusion-inputs are required for real review"
+        )
     if args.stage == "target-geometry" and args.target_family is None:
         parser.error("--target-family is required for target geometry audit")
     if args.max_patches is not None and args.max_patches <= 0:
@@ -347,6 +361,7 @@ def main(argv=None) -> int:
         "highres-statistics",
         "alignment-diagnostics",
         "adaptive-alignment-calibration",
+        "adaptive-alignment-review",
     }:
         lock_name = f".{args.stage}.{args.sensor_family}.lock"
     if args.stage == "target-geometry":
@@ -365,7 +380,11 @@ def main(argv=None) -> int:
             "started_at": now(),
             "status": "running",
             "parameters": {
-                key: str(value) if isinstance(value, Path) else value
+                key: (
+                    str(value)
+                    if isinstance(value, Path)
+                    else [str(item) for item in value] if isinstance(value, list) else value
+                )
                 for key, value in vars(args).items()
                 if key != "stage"
             },
@@ -389,6 +408,7 @@ def main(argv=None) -> int:
             "highres-statistics",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
+            "adaptive-alignment-review",
         }:
             record_name = f"{args.stage}_{args.sensor_family}"
         if args.stage == "dense-integrity" and args.dense_audit_version != "v1":
@@ -454,6 +474,18 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "adaptive-alignment-review":
+                from xuannv_embedding.data_process.v5_adaptive_review import run_adaptive_review
+
+                record["result"] = run_adaptive_review(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    args.quality_root,
+                    args.alignment_audit_root,
+                    args.adaptive_calibration_root,
+                    args.exclusion_inputs,
+                )
             elif args.stage == "adaptive-alignment-calibration":
                 from xuannv_embedding.data_process.v5_adaptive_calibration import calibrate_adaptive
 
