@@ -213,6 +213,7 @@ def main(argv=None) -> int:
             "gaofen-quality",
             "targets",
             "target-values",
+            "target-sources",
             "visual-review",
             "report",
         ],
@@ -255,7 +256,11 @@ def main(argv=None) -> int:
             "step": args.stage,
             "started_at": now(),
             "status": "running",
-            "parameters": {"limit": args.limit},
+            "parameters": {
+                key: str(value) if isinstance(value, Path) else value
+                for key, value in vars(args).items()
+                if key != "stage"
+            },
             "code_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         }
         record["code_fingerprint"] = {
@@ -268,7 +273,11 @@ def main(argv=None) -> int:
             input_lock(args, source)
             record["input_fingerprint"] = source["manifest_sha256"]
             write_json(record_path, record)
-            if args.stage == "target-values":
+            if args.stage == "target-sources":
+                from xuannv_embedding.data_process.v5_provenance import audit_target_sources
+
+                record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "target-values":
                 from xuannv_embedding.data_process.v5_targets import audit_target_values
 
                 record["result"] = audit_target_values(args.dataset_root, args.report_root)
