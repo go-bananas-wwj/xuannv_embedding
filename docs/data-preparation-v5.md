@@ -93,3 +93,109 @@ checks、code_commit、status、started_at、finished_at。运行中/失败不�
 阶段输出临时写入后发布；进程互斥，禁止两个进程同时修改同一运行。
 每个行为改动先失败测试后实现，执行针对性pytest、Black/Ruff及仓库/发行门禁，
 每个改进单独提交并push至wwj。外部完整清单不提交Git。
+
+## 实施记录：2026-09-13（进行中，未提交最终验收）
+
+本节是代码交付和实际执行快照，**不是全量数据处理完成声明**。数据盘中的
+`stages/*.json`、`progress.json`、各产品进度文件记录实际部署路径、参数、数量和时间。
+完整数据盘路径绑定在 `locks/input.lock.json` 及阶段参数中；Git仅保存脱敏目录合同。
+原有工作区中的模型、训练和配置改动未纳入本次数据升级提交。
+
+### 当前输入基线
+
+- 全国网格已锁定：62,000位置；train49,600、val6,200、test6,200，沿用原划分。
+- 吉林一号固定revision：`f7dcc7ade6e2c65ffbcdc6a040a1823458594e78`。
+  64包，742,115张TIFF，61,927个发布位置标识；压缩208,290,405,248字节，
+  发布清单中的原文件210,125,547,669字节。发布位置数不等于2020/2021合格覆盖数。
+- 基础影像72个月度ZIP，现有文件名清单含S2 1,478,047、S1 1,467,180、
+  Landsat 1,480,709张TIFF；这是包内清点数，尚不代表全部像素解码通过。
+- 高分使用未被60%整景门槛过滤的177,505个场景组作为质量检查输入；
+  旧104,808组过滤视图不能替代完整候选目录。
+
+### 每一步的实际执行及剩余工作
+
+| 步骤 | 已实现/已执行 | 实际输出（相对对应根目录） | 检查及未完成项 | GitHub代码提交 |
+|---|---|---|---|---|
+| A0 | 已固定JL发布版本、四份来源清单、全国网格及划分 | source根`manifests/source.lock.json`；data根`registry/`、`locks/input.lock.json` | 网格62,000，划分不变；原数据保留 | `e832195`、`07c2e46` |
+| A1 | 双包并发下载已运行；包内8个16MiB区间并发，严格校验Range，整包最终SHA不变 | source根`packages/`、`manifests/download_status.parquet` | 首批2/64包已通过大小和SHA256；合计6.534GB；64包全量未完成 | `07c2e46`、`dd7b855` |
+| A2 | 安全解压、逐块TIFF解码已实现；随首批整包校验通过后执行 | report根`integrity_shards/`及`archive_integrity.json` | 首批2包23,261张TIFF全部解码通过；不足完整包不建立成功标记 | `07c2e46`、`774e98c` |
+| A2基础源补充 | 72个本地ZIP的全量CRC、SHA、TIFF解码及全国网格检查已启动 | report根`dense_integrity_shards/`、`dense_integrity_summary.json` | 每包流式inventory和missing.parquet；物理合同未知状态独立保留；全量未完成 | `8f69d87`、`098cee7` |
+| A3 | JL基于CRS/bounds唯一匹配、观测分组、冲突隔离已实现；后续任务会按已校验分包自动执行 | data根`observations/highres/jilin1/`；report根`grid_match_report.json` | 首批2包23,209文件通过，52文件缺波段隔离；1,930位置/6,745场景；全量未完成 | `acfff17`、`6f1784c` |
+| B1 | 原生读取、明确波段选择、掩膜后缩放的核心已实现；基础72包216张完成诊断抽样 | report根`radiometry_audit.parquet`、`band_contract_failures.parquet` | S1次序说明冲突，LS RGB/B2-B4冲突，S2处理基线/缩放缺证；未知合同不通过 | `b3a15de`、`2826df0` |
+| B2高分 | 冻结OmniCloudMask真实129/256组试运行退出正常；完整177,505组处理进行中 | data根`quality/cloud/gaofen/{classes,valid_masks}.zarr`、`observation_quality.parquet` | 有效像素不再因整景<60%清零；30m缓冲按真实地理网格传至PAN；尚待全量及视觉验收 | `51c674d`、`efb9694`、`1946713`、`e753305` |
+| B2吉林一号 | B5/B4/B6云输入、同景B0/10m/20m掩膜传递已实现，模拟端到端测试通过 | data根拟生成`quality/cloud/jilin1/` | 真实32场景/125分支试运行完成，31独立位置；全量未运行；全部包和目录齐备后自动推理 | `efb9694`、`6f1784c` |
+| B3 | 多窗口偏移、一致性和纹理不足判断核心已实现，已知平移测试通过 | 拟生成`quality/alignment/`及报告 | 尚缺真实固定样例标定、可靠同年参考及全量检查，不能声明配准合格 | `807aa64` |
+| B4目录 | 已核对306个标签数组的形状、年份声明及全国位置顺序 | data根`targets/manifest.parquet`；report根`target_audit.json` | 当前manifest明确标为仍需数值和来源审核，不是批准的监督标签索引 | `2826df0` |
+| B4数值 | 306数组的逐块数值检查进行中，检查类别/非有限值/OSM状态/负例冲突 | report根`target_value_shards/`、`target_value_progress.json` | 重跑读取并哈希实际像素，像素变化不得复用旧结果；全量未完成 | `76e7bdb` |
+| B4来源 | 10个源文件检查完成，失败0；8份静态分片来源一致 | report根`target_source_audit.json` | 3个OSM索引匹配原SHA；7个静态源只匹配原size/mtime并新增当前SHA，不能声称历史SHA验证 | `798e741` |
+| B5 | 有效像元流式均值/方差、确定性有界分位数抽样核心已实现，直接计算对照通过 | 训练集正式统计**尚未生成** | 尚需连接全部合格观测、地区/年份贡献和源指纹；不是已完成的statistics阶段 | `7512427` |
+| B6 | 季度不越界、同年度先验复用、每类最多4场景、全部无高分区域保留的索引核心已测试 | 全国季度/年度候选与默认选择表**尚未生成** | 等待质量、配准及物理合同；核心函数不是已物化的sample-index阶段 | `7512427` |
+| B7 | 已有核心数据单测和原生读取检查；NPU推理与训练运行时隔离 | report根`npu_cloud_buffer_regression.json` | 三划分各100位置、两年四季正式加载、缓存对照、dataset.lock**尚未完成** | `1946713`、`e753305` |
+| C1 | 已生成32组真实高分独立位置图；进度报告及禁止自动批准机制已执行 | report根`visual_review/index.html`、`samples.csv`、`acceptance_report.md`；data根`locks/acceptance.json` | 基础/JL各32样例尚缺；疑似雪地云误判待核；状态incomplete，训练未授权 | `2826df0`、`82468da`、`774e98c` |
+
+### 实际可用CLI与有限后续处理
+
+下面是当前实现的入口，均使用相同四个显式根目录参数：
+
+```text
+xuannv data prepare-v5 --stage source-lock
+xuannv data prepare-v5 --stage ingest
+xuannv data prepare-v5 --stage catalog
+xuannv data prepare-v5 --stage radiometry --dense-root <本地基础影像根>
+xuannv data prepare-v5 --stage dense-integrity --dense-root <本地基础影像根>
+xuannv data prepare-v5 --stage gaofen-quality --gaofen-source-catalog <未过滤场景表> --model-dir <冻结模型目录>
+xuannv data prepare-v5 --stage quality --model-dir <冻结模型目录>
+xuannv data prepare-v5 --stage targets
+xuannv data prepare-v5 --stage target-values
+xuannv data prepare-v5 --stage target-sources
+xuannv data prepare-v5 --stage visual-review --quality-root <已完成高分QA批次>
+xuannv data prepare-v5 --stage report
+xuannv data prepare-v5 --stage followup --model-dir <冻结模型目录>
+```
+
+上述为阶段选择说明，执行时须补齐`--source-root`、`--dataset-root`、`--report-root`、
+`--base-root`。当前没有冒充已实现的alignment/statistics/sample-index/verify CLI。
+这些核心到全量产物的集成仍属于剩余工作，完成后再记录相应实际结果。
+
+`followup`跟随已经启动的有限数据作业：按新增像素校验包更新catalog，全部64包
+catalog完成且高分推理释放设备后执行JL质量处理，每30秒刷新外部进度。
+它不训练、不批准数据，失败保留退出码和阶段日志，现有作业结束后停止。
+输入版本变化由各阶段锁拒绝；catalog/QA失败不会被改写成完成。
+
+### 运行问题与验证证据
+
+- `open_issues.json`保存每个问题的步骤、影响和状态；缺少基础源导出合同是实际阻塞项。
+- 真实NPU试运行曾在退出释放阶段失败；数据CLI隔离Torch/训练运行时后，129和256组
+  独立试运行正常结束，前32组分类与置信度逐项一致。失败批次仍保留失败记录。
+- 当前32组高分图属于早期检查样例，不满足96组完整验收覆盖要求。
+- 完整仓库回归569项通过（1条已有依赖弃用警告）；随后针对真实基础影像的浮点
+  仿射误差修复，2项定向回归再次通过。Black、Ruff、仓库门禁和发行包构建通过。
+  精确数量及提交绑定见外部`code_verification.json`。
+- 每项代码提交已push到远端`wwj`并核对SHA；提交标题和SHA可沿上表直接检索。
+  数据报告中的运行提交可早于最新文档提交，具体处理代码同时以文件SHA指纹记录。
+
+基础源全量审核的首轮精确浮点比较曾产生误报，原审核已移入外部diagnostics并标记失效。
+修复仅允许1e-9米/像元的数值容差，保持全国网格匹配和仿射方向检查；原影像没有改写。
+
+2026-09-13 12:22 UTC的高分处理快照：28,688个已处理场景中，11,289个场景低于60%
+整景门槛但仍有有效像素。使用同一批当前云分类，逐像元策略保留其中76,278,193个
+MS像素和1,220,443,002个PAN像素。此为重复观测像素计数，不是独立覆盖面积或模型收益；
+尚未经过最终配准和云质量验收。冻结快照来源SHA及计数见外部`gaofen_retention_snapshot.json`。
+
+对已推送`098cee7`的独立Git文件快照另行验证：357项测试通过（1条依赖警告），
+Black/Ruff、仓库内容门禁、sdist和wheel构建通过。该验证不包含原工作区未提交文件。
+
+首包吉林一号实际目录（仅1/64包，不能外推全国覆盖）：2020年658位置/1,024场景，
+2021年547位置/818场景，2022年913位置/1,482场景，2023年35位置/39场景。
+2022/2023仅保留来源目录，不进入2020/2021年度先验。25个隔离分支是实际波段不全，
+例如20m文件只有17通道；原始像素可解码不代表通过完整波段合同。
+
+吉林一号真实32场景云推理正常退出，原生各分支125个质量记录已落盘；共31个独立位置。
+诊断图`jilin_pilot_preview.png`发现疑似亮建筑/地表被判为云，并有可见彩色边缘现象，
+尚未确认原因；不能将冻结模型输出直接当作云真值。该单张诊断图不是正式96组验收材料。
+
+截至首批2包完整核验后，目录累计23,209文件通过、52个不完整波段文件隔离，
+1,930个位置/6,745个场景。2020年1,315位置/2,058场景，2021年1,104位置/1,648场景；
+这仍只是2/64包的原始合同覆盖，尚非全量QA/配准后的覆盖。后续分包已继续下载。
+32场景JL试运行使用首包目录；其`catalog.snapshot.parquet`已保存在pilot目录，
+SHA与原质量锁完全一致，后续增量catalog不会使该试运行失去原始输入快照。
