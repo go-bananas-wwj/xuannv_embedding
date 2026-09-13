@@ -213,6 +213,8 @@ def main(argv=None) -> int:
             "quality",
             "gaofen-quality",
             "cloud-resolution-audit",
+            "alignment-calibration",
+            "band-alignment",
             "targets",
             "target-values",
             "target-temporal",
@@ -231,7 +233,12 @@ def main(argv=None) -> int:
     parser.add_argument("--quality-root", type=Path)
     parser.add_argument("--device-id", type=int, default=1)
     parser.add_argument("--max-scenes", type=int)
+    parser.add_argument("--sensor-family", choices=["jilin1", "gaofen"])
+    parser.add_argument("--alignment-version", default="v1")
+    parser.add_argument("--workers", type=int, default=2)
     args = parser.parse_args(argv)
+    if args.stage in {"alignment-calibration", "band-alignment"} and args.sensor_family is None:
+        parser.error("--sensor-family is required for native-band alignment")
     if args.stage in {"radiometry", "dense-integrity"} and args.dense_root is None:
         parser.error("--dense-root is required for dense source audits")
     if args.stage in {"quality", "gaofen-quality", "followup"} and args.model_dir is None:
@@ -251,7 +258,11 @@ def main(argv=None) -> int:
     lock_name = (
         ".prepare.lock"
         if args.stage in {"source-lock", "download", "extract", "ingest"}
-        else f".{args.stage}.lock"
+        else (
+            f".{args.stage}.{args.sensor_family}.lock"
+            if args.stage in {"alignment-calibration", "band-alignment"}
+            else f".{args.stage}.lock"
+        )
     )
     with (args.source_root / lock_name).open("a") as mutex:
         try:
@@ -272,7 +283,12 @@ def main(argv=None) -> int:
         record["code_fingerprint"] = {
             path.name: sha256(path) for path in Path(__file__).parent.glob("v5_*.py")
         }
-        record_path = args.report_root / "stages" / (args.stage + ".json")
+        record_name = (
+            f"{args.stage}_{args.sensor_family}"
+            if args.stage in {"alignment-calibration", "band-alignment"}
+            else args.stage
+        )
+        record_path = args.report_root / "stages" / (record_name + ".json")
         write_json(record_path, record)
         try:
             source = lock_source(args.source_root)
@@ -293,6 +309,24 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage in {"alignment-calibration", "band-alignment"}:
+                from xuannv_embedding.data_process.v5_intraband import (
+                    calibrate_family,
+                    run_intraband,
+                )
+
+                runner = (
+                    calibrate_family if args.stage == "alignment-calibration" else run_intraband
+                )
+                options = {"version": args.alignment_version}
+                if args.stage == "band-alignment":
+                    options["workers"] = args.workers
+                record["result"] = runner(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    **options,
+                )
             elif args.stage == "cloud-resolution-audit":
                 from xuannv_embedding.data_process.v5_resolution import compare_jilin_resolution
 

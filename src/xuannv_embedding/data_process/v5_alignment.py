@@ -22,7 +22,7 @@ PARAMETERS = {
 }
 
 
-def _edges(array, valid):
+def _edges(array: np.ndarray, valid: np.ndarray) -> np.ndarray:
     selected = array[valid]
     if not selected.size or float(selected.std()) <= 1e-12:
         return np.zeros_like(array, dtype="f8")
@@ -30,7 +30,9 @@ def _edges(array, valid):
     return np.hypot(sobel(values, axis=0), sobel(values, axis=1)) / 8
 
 
-def _masked_ncc(template, search, template_valid, search_valid):
+def _masked_ncc(
+    template: np.ndarray, search: np.ndarray, template_valid: np.ndarray, search_valid: np.ndarray
+) -> np.ndarray:
     tmask = template_valid.astype("f8")
     smask = search_valid.astype("f8")
     t = np.where(template_valid, template, 0)
@@ -54,7 +56,9 @@ def _masked_ncc(template, search, template_valid, search_valid):
     return np.clip(score, -1, 1, where=np.isfinite(score), out=score)
 
 
-def _match_window(template, search, tvalid, svalid):
+def _match_window(
+    template: np.ndarray, search: np.ndarray, tvalid: np.ndarray, svalid: np.ndarray
+) -> dict | None:
     score = _masked_ncc(template, search, tvalid, svalid)
     if not np.isfinite(score).any():
         return None
@@ -110,7 +114,9 @@ def _match_window(template, search, tvalid, svalid):
     }
 
 
-def audit_translation(reference, moving, valid, *, gsd):
+def audit_translation(
+    reference: np.ndarray, moving: np.ndarray, valid: np.ndarray, *, gsd: float
+) -> dict:
     reference = np.asarray(reference, dtype="f8")
     moving = np.asarray(moving, dtype="f8")
     valid = np.asarray(valid, dtype=bool)

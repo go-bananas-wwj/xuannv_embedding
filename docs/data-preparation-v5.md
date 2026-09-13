@@ -122,11 +122,11 @@ checks、code_commit、status、started_at、finished_at。运行中/失败不�
 | A2基础源补充 | 72个本地ZIP的全量CRC、SHA、TIFF解码及全国网格检查已启动 | report根`dense_integrity_shards/`、`dense_integrity_summary.json` | 每包流式inventory和missing.parquet；物理合同未知状态独立保留；全量未完成 | `8f69d87`、`098cee7` |
 | A3 | JL基于CRS/bounds唯一匹配、观测分组、冲突隔离已实现；后续任务会按已校验分包自动执行 | data根`observations/highres/jilin1/`；report根`grid_match_report.json` | 首批2包23,209文件通过，52文件缺波段隔离；1,930位置/6,745场景；全量未完成 | `acfff17`、`6f1784c` |
 | B1 | 原生读取、明确波段选择、掩膜后缩放的核心已实现；基础72包216张完成诊断抽样 | report根`radiometry_audit.parquet`、`band_contract_failures.parquet` | S1次序说明冲突，LS RGB/B2-B4冲突，S2处理基线/缩放缺证；未知合同不通过 | `b3a15de`、`2826df0` |
-| B2高分 | 冻结OmniCloudMask真实129/256组试运行退出正常；完整177,505组处理进行中 | data根`quality/cloud/gaofen/{classes,valid_masks}.zarr`、`observation_quality.parquet` | 有效像素不再因整景<60%清零；30m缓冲按真实地理网格传至PAN；尚待全量及视觉验收 | `51c674d`、`efb9694`、`1946713`、`e753305` |
+| B2高分 | 冻结OmniCloudMask真实129/256组试运行退出正常；完整177,505组冻结推理已完成 | data根`quality/cloud/gaofen/{classes,valid_masks}.zarr`、`observation_quality.parquet` | 有效像素不再因整景<60%清零；30m缓冲按真实地理网格传至PAN；全量0拒绝，视觉与配准审核仍未完成 | `51c674d`、`efb9694`、`1946713`、`e753305` |
 | B2吉林一号 | B5/B4/B6云输入、同景B0/10m/20m掩膜传递已实现，模拟端到端测试通过 | data根拟生成`quality/cloud/jilin1/` | 真实32场景/125分支试运行完成，31独立位置；全量未运行；全部包和目录齐备后自动推理 | `efb9694`、`6f1784c` |
 | B3 | 多窗口偏移、一致性和纹理不足判断核心已实现，已知平移测试通过 | 拟生成`quality/alignment/`及报告 | 尚缺真实固定样例标定、可靠同年参考及全量检查，不能声明配准合格 | `807aa64` |
 | B4目录 | 已核对306个标签数组的形状、年份声明及全国位置顺序 | data根`targets/manifest.parquet`；report根`target_audit.json` | 当前manifest明确标为仍需数值和来源审核，不是批准的监督标签索引 | `2826df0` |
-| B4数值 | 306数组的逐块数值检查进行中，检查类别/非有限值/OSM状态/负例冲突 | report根`target_value_shards/`、`target_value_progress.json` | 重跑读取并哈希实际像素，像素变化不得复用旧结果；全量未完成 | `76e7bdb` |
+| B4数值 | 306数组的逐块数值检查全量完成，0失败，检查类别/非有限值/OSM状态/负例冲突 | report根`target_value_shards/`、`target_value_progress.json` | 重跑读取并哈希实际像素，像素变化不得复用旧结果；年度交叉审核单独执行 | `76e7bdb` |
 | B4来源 | 10个源文件检查完成，失败0；8份静态分片来源一致 | report根`target_source_audit.json` | 3个OSM索引匹配原SHA；7个静态源只匹配原size/mtime并新增当前SHA，不能声称历史SHA验证 | `798e741` |
 | B5 | 有效像元流式均值/方差、确定性有界分位数抽样核心已实现，直接计算对照通过 | 训练集正式统计**尚未生成** | 尚需连接全部合格观测、地区/年份贡献和源指纹；不是已完成的statistics阶段 | `7512427` |
 | B6 | 季度不越界、同年度先验复用、每类最多4场景、全部无高分区域保留的索引核心已测试 | 全国季度/年度候选与默认选择表**尚未生成** | 等待质量、配准及物理合同；核心函数不是已物化的sample-index阶段 | `7512427` |
@@ -154,8 +154,9 @@ xuannv data prepare-v5 --stage followup --model-dir <冻结模型目录>
 ```
 
 上述为阶段选择说明，执行时须补齐`--source-root`、`--dataset-root`、`--report-root`、
-`--base-root`。当前没有冒充已实现的alignment/statistics/sample-index/verify CLI。
-这些核心到全量产物的集成仍属于剩余工作，完成后再记录相应实际结果。
+`--base-root`。现已支持alignment-calibration与band-alignment；正式基础参考的跨传感器alignment、
+statistics、sample-index、verify仍待集成与实际处理。
+这些剩余核心到全量产物的集成继续推进，不能用内部波段检查替代跨传感器配准。
 
 `followup`跟随已经启动的有限数据作业：按新增像素校验包更新catalog，全部64包
 catalog完成且高分推理释放设备后执行JL质量处理，每30秒刷新外部进度。
@@ -321,3 +322,47 @@ OMP/OpenBLAS/MKL各1线程。首次全量曾有既有fork测试5秒队列超时�
 
 新增平滑背景掩盖偏移、线性坡面缺乏唯一匹配的先失败回归；修正后通过。当前包含
 其他已有改动的工作树589项全量测试通过（1条既有依赖警告），CPU线程限制与前轮一致。
+
+### 原生波段配准的完整数据入口
+
+新增`alignment-calibration`与`band-alignment`；显式指定`--sensor-family jilin1|gaofen`、
+`--alignment-version`和四个数据根目录。校准与全量处理各自按产品互斥，阶段记录按产品
+分文件，不能由一个产品覆盖另一个产品的执行状态。
+
+- 吉林一号输入：`observations/highres/jilin1/files.parquet`中2020/2021的5m MS观测。
+  原生6×256×256，以B4为参照检查B1/B2/B3/B5/B6；文件名位置不代替波段标识。
+- 高分输入：完整`quality/cloud/gaofen/observation_quality.parquet`所指向的原始MS。
+  原生4×160×160，以green为参照检查blue/red/nir，维持明确的stored DN读取合同。
+- 标定输入：只从train选择每个卫星变体8个不同位置，固定后不因新增下载而换样本。
+  全量开始前要求各变体标定合格，锁定NumPy、SciPy、Rasterio/GDAL版本及算法源码SHA。
+- 原始读取：实际文件SHA须与观测目录一致；读取原生值和逐波段有效掩膜，每一对波段
+  使用各自掩膜的交集。无纹理、匹配歧义和局部偏移不一致均不能归入passed。
+- 输出：`quality/alignment/intraband/<产品>/<版本>/`下的calibration_inputs.parquet、
+  calibration.json、inputs/<输入指纹>.parquet、分观测receipts及最终observations.parquet；
+  报告目录`intraband_progress_<产品>.json`记录实际处理、通过、超限、不确定、拒绝数量。
+- 重复运行：重新核对源文件SHA后才复用；缓存同时绑定观测ID、位置、年份、split、
+  传感器、算法及标定锁。标定重跑核实输入不变后复用原锁，不因更新时间戳使全量结果
+  无效。像素、元数据或运行库改变时拒用旧结果；不能仅凭文件存在跳过。
+
+部署使用`--alignment-version v5`：前面的v1保留旧算法失败证据，v2保留修正算法的
+同批对照，v3/v4记录缓存和运行版本校验的实施过程；最终入口类型与校验合同固定于v5。
+这些版本均沿用同一批56个标定观测。中间版本的三个测量源码文件已按记录SHA归档，
+不是只留下无法复现的哈希。此处版本号仅指原生波段审核，不是新训练或嵌入模型版本。
+
+实际命令模式（执行时补齐四个根目录）：
+
+```text
+xuannv data prepare-v5 --stage alignment-calibration --sensor-family gaofen --alignment-version v5
+xuannv data prepare-v5 --stage band-alignment --sensor-family gaofen --alignment-version v5 --workers 2
+xuannv data prepare-v5 --stage alignment-calibration --sensor-family jilin1 --alignment-version v5
+xuannv data prepare-v5 --stage band-alignment --sensor-family jilin1 --alignment-version v5 --workers 2
+```
+
+检查范围是输入锁中全部已入库观测。吉林一号仍未完成64包下载，部分目录的审核完成
+不等于全国审核完成；新增源会产生新的输入清单，原有合格观测可经SHA复核复用。
+所有结果明确`pixel_fusion_authorized=false`，因为内部波段通过仍不证明与基础参考的
+绝对配准。实际跨传感器配准、完整统计/索引/加载及最终验收仍是剩余工作。
+
+上述缓存、源变化、运行库变化、缺失纹理、已知偏移及CLI前置条件由定向回归覆盖；
+完整工作树590项测试通过（1条既有依赖警告），补齐类型声明后10项相关回归再通过。
+Black/Ruff、构建检查通过。配准核心修正`63f54b1`已push并核对远端SHA。
