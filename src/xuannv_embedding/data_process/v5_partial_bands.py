@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 import numpy as np
@@ -224,6 +225,13 @@ def catalog_partial_bands(source_root: Path, dataset_root: Path, report_root: Pa
         "grid_matcher_sha256": sha256(Path(__file__).with_name("v5_catalog.py")),
         "source_packages": package_locks,
         "candidate_file_sha256": candidate_hashes,
+        "runtime": {
+            "numpy": np.__version__,
+            "pandas": pd.__version__,
+            "rasterio": rasterio.__version__,
+            "gdal": rasterio.__gdal_version__,
+            "pyarrow": package_version("pyarrow"),
+        },
     }
     version = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:20]
     directory = dataset_root / "observations/highres/jilin1/partial_bands" / version
@@ -331,14 +339,19 @@ def catalog_partial_bands(source_root: Path, dataset_root: Path, report_root: Pa
         "training_authorized": False,
         "finished_at": now(),
     }
-    write_json(directory / "catalog.lock.json", summary)
-    write_json(
-        directory.parent / "current.json",
-        {
-            "version": version,
-            "lock_path": str(directory / "catalog.lock.json"),
-            "lock_sha256": sha256(directory / "catalog.lock.json"),
-        },
-    )
+    lock_path = directory / "catalog.lock.json"
+    locked = {key: value for key, value in summary.items() if key != "finished_at"}
+    if lock_path.exists() and json.loads(lock_path.read_text()) != locked:
+        raise ValueError("published partial catalog changed; use a new version")
+    if not lock_path.exists():
+        write_json(lock_path, locked)
+    pointer = {
+        "version": version,
+        "lock_path": str(lock_path),
+        "lock_sha256": sha256(lock_path),
+    }
+    current = directory.parent / "current.json"
+    if not current.exists() or json.loads(current.read_text()) != pointer:
+        write_json(current, pointer)
     write_json(report_root / "partial_band_catalog.json", summary)
     return summary

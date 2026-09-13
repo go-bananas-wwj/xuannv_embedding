@@ -187,8 +187,11 @@ def test_partial_catalog_keeps_full_inventory_and_spatial_split_and_requires_ver
     assert prior.missing_selected_band_ids.tolist() == []
     assert bool(prior.cloud_input_band_ids_available) is False
     assert sha256(full) == full_hash and sha256(path) == raw_hash
+    lock = Path(result["output"]) / "catalog.lock.json"
+    locked_bytes = lock.read_bytes()
     again = catalog_partial_bands(source, data, report)
     assert result["output"] == again["output"] and result["output_sha256"] == again["output_sha256"]
+    assert lock.read_bytes() == locked_bytes
     bad = json.loads(integrity.read_text())
     bad["status"] = "failed"
     write_json(integrity, bad)
