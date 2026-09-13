@@ -212,6 +212,7 @@ def main(argv=None) -> int:
             "dense-integrity",
             "quality",
             "gaofen-quality",
+            "cloud-resolution-audit",
             "targets",
             "target-values",
             "target-temporal",
@@ -237,8 +238,10 @@ def main(argv=None) -> int:
         parser.error("--model-dir is required for quality")
     if args.stage == "gaofen-quality" and args.gaofen_source_catalog is None:
         parser.error("--gaofen-source-catalog is required")
-    if args.stage == "visual-review" and args.quality_root is None:
-        parser.error("--quality-root is required for visual-review")
+    if args.stage in {"visual-review", "cloud-resolution-audit"} and args.quality_root is None:
+        parser.error("--quality-root is required for cloud review")
+    if args.stage == "cloud-resolution-audit" and args.model_dir is None:
+        parser.error("--model-dir is required for cloud-resolution-audit")
     if args.max_scenes is not None and args.max_scenes <= 0:
         parser.error("--max-scenes must be positive")
     if not 1 <= args.limit <= 64:
@@ -290,6 +293,16 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "cloud-resolution-audit":
+                from xuannv_embedding.data_process.v5_resolution import compare_jilin_resolution
+
+                record["result"] = compare_jilin_resolution(
+                    args.dataset_root,
+                    args.report_root,
+                    args.quality_root,
+                    args.model_dir,
+                    device_id=args.device_id,
+                )
             elif args.stage == "target-temporal":
                 from xuannv_embedding.data_process.v5_temporal import audit_osm_temporal
 
