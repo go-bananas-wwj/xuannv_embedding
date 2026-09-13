@@ -214,6 +214,7 @@ def main(argv=None) -> int:
             "gaofen-quality",
             "targets",
             "target-values",
+            "target-temporal",
             "target-sources",
             "visual-review",
             "followup",
@@ -289,6 +290,10 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "target-temporal":
+                from xuannv_embedding.data_process.v5_temporal import audit_osm_temporal
+
+                record["result"] = audit_osm_temporal(args.dataset_root, args.report_root)
             elif args.stage == "target-values":
                 from xuannv_embedding.data_process.v5_targets import audit_target_values
 

@@ -33,7 +33,14 @@ def follow_started_jobs(args) -> dict:
         return json.loads(path.read_text()) if path.exists() else {}
 
     jobs = {}
-    for name in ("download", "gaofen", "target_value", "target_source", "dense_integrity"):
+    for name in (
+        "download",
+        "gaofen",
+        "target_value",
+        "target_source",
+        "target_temporal",
+        "dense_integrity",
+    ):
         info = read(args.report_root / f"{name}_worker.json")
         if info:
             pid = int(info["pid"])
