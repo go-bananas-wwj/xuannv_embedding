@@ -223,6 +223,7 @@ def main(argv=None) -> int:
             "clear-band-audit",
             "highres-statistics",
             "alignment-diagnostics",
+            "adaptive-alignment-calibration",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -268,6 +269,7 @@ def main(argv=None) -> int:
             "clear-band-audit",
             "highres-statistics",
             "alignment-diagnostics",
+            "adaptive-alignment-calibration",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -283,13 +285,17 @@ def main(argv=None) -> int:
             "clear-band-audit",
             "highres-statistics",
             "alignment-diagnostics",
+            "adaptive-alignment-calibration",
         }
         and args.quality_root is None
     ):
         parser.error("--quality-root is required for clear alignment calibration")
     if args.stage == "alignment-diagnostics" and args.alignment_audit_root is None:
         parser.error("--alignment-audit-root is required for alignment diagnostics")
-    if args.stage == "clear-band-audit" and args.clear_calibration_root is None:
+    if (
+        args.stage in {"clear-band-audit", "adaptive-alignment-calibration"}
+        and args.clear_calibration_root is None
+    ):
         parser.error("--clear-calibration-root is required for clear band audit")
     if args.stage == "target-geometry" and args.target_family is None:
         parser.error("--target-family is required for target geometry audit")
@@ -332,6 +338,7 @@ def main(argv=None) -> int:
         "clear-band-audit",
         "highres-statistics",
         "alignment-diagnostics",
+        "adaptive-alignment-calibration",
     }:
         lock_name = f".{args.stage}.{args.sensor_family}.lock"
     if args.stage == "target-geometry":
@@ -369,6 +376,7 @@ def main(argv=None) -> int:
             "clear-band-audit",
             "highres-statistics",
             "alignment-diagnostics",
+            "adaptive-alignment-calibration",
         }:
             record_name = f"{args.stage}_{args.sensor_family}"
         record_path = args.report_root / "stages" / (record_name + ".json")
@@ -424,6 +432,16 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "adaptive-alignment-calibration":
+                from xuannv_embedding.data_process.v5_adaptive_calibration import calibrate_adaptive
+
+                record["result"] = calibrate_adaptive(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    args.quality_root,
+                    args.clear_calibration_root,
+                )
             elif args.stage == "alignment-diagnostics":
                 from xuannv_embedding.data_process.v5_alignment_diagnostics import (
                     diagnose_alignment,
