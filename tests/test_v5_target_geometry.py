@@ -202,6 +202,10 @@ def test_full_annual_reconstruction_reuses_chunks_and_detects_changed_target_byt
     assert first["scope"] == "full" and first["reused_targets"] == 0
     cached = audit_target_geometry(data, report, "clcd")
     assert cached["reused_targets"] == 2
+    old_hash = sha256(report / "target_geometry_clcd_full.json")
+    versioned = audit_target_geometry(data, report, "clcd", audit_version="v2")
+    assert versioned["audit_version"] == "v2" and "/clcd/v2/full/" in versioned["output"]
+    assert sha256(report / "target_geometry_clcd_full.json") == old_hash
     # Same histogram / source files cannot hide a changed per-pixel label value.
     root["targets/clcd_2020"][0, 0, 0] = 2
     with pytest.raises(ValueError, match="changed after completed value audit"):
@@ -209,3 +213,19 @@ def test_full_annual_reconstruction_reuses_chunks_and_detects_changed_target_byt
     pilot = audit_target_geometry(data, report, "clcd", max_patches=1)
     assert pilot["scope"] == "pilot_1" and pilot["failed_targets"] == 1
     assert pilot["training_authorized"] is False
+
+
+def test_source_conflicts_are_checked_after_boundary_mask_without_approving_valid_disagreement():
+    from xuannv_embedding.data_process.v5_target_geometry import finalize_categorical_mask
+
+    values = np.array([[10, 10, 30, 30], [10, 10, 30, 30]], dtype="f4")
+    valid = np.ones_like(values, bool)
+    conflict = np.zeros_like(valid)
+    conflict[0, 1] = True
+    masked = finalize_categorical_mask(values, valid, conflict, allow_masked_conflicts=True)
+    assert not masked[0, 1] and masked[0, 0]
+    with pytest.raises(ValueError, match="overlapping"):
+        finalize_categorical_mask(values, valid, conflict, allow_masked_conflicts=False)
+    conflict[0, 0] = True
+    with pytest.raises(ValueError, match="valid categorical"):
+        finalize_categorical_mask(values, valid, conflict, allow_masked_conflicts=True)

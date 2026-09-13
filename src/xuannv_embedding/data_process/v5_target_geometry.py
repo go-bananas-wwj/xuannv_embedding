@@ -62,6 +62,19 @@ def categorical_validity(values: np.ndarray, valid: np.ndarray) -> np.ndarray:
     return valid & ~boundary
 
 
+def finalize_categorical_mask(
+    values: np.ndarray, valid: np.ndarray, conflicts: np.ndarray, *, allow_masked_conflicts: bool
+) -> np.ndarray:
+    if conflicts.shape != valid.shape:
+        raise ValueError("source conflict mask differs from target grid")
+    if not allow_masked_conflicts and conflicts.any():
+        raise ValueError("overlapping source tiles disagree about categorical labels")
+    final = categorical_validity(values, valid)
+    if (final & conflicts).any():
+        raise ValueError("source tiles disagree on valid categorical target pixels")
+    return final
+
+
 def compare_target(
     expected: np.ndarray,
     expected_valid: np.ndarray,
@@ -95,8 +108,10 @@ def compare_target(
 class AnnualRasterArchive:
     """Read real GeoTIFF bounds and masks; names select product/year, never spatial bounds."""
 
-    def __init__(self, path: Path, family: str, year: int):
+    def __init__(self, path: Path, family: str, year: int, *, allow_masked_conflicts: bool = False):
         self.path, self.family, self.year = path, family, year
+        self.allow_masked_conflicts = allow_masked_conflicts
+        self.last_masked_source_conflicts = 0
         self.readers = OrderedDict()
         with ZipFile(path) as archive:
             names = archive.namelist()
@@ -155,6 +170,8 @@ class AnnualRasterArchive:
         shape = (128, 128)
         output = np.zeros(shape, "f4")
         valid = np.zeros(shape, bool)
+        conflicts = np.zeros(shape, bool)
+        self.last_masked_source_conflicts = 0
         destination_crs = rasterio.crs.CRS.from_epsg(int(epsg))
         destination_transform = from_bounds(*bounds, *shape)
         geographic = transform_bounds(destination_crs, "EPSG:4326", *bounds, densify_pts=21)
@@ -199,8 +216,8 @@ class AnnualRasterArchive:
             )
             current = np.isfinite(temporary)
             overlap = valid & current
-            if categorical and np.any(overlap & (output != temporary)):
-                raise ValueError("overlapping source tiles disagree about categorical labels")
+            if categorical:
+                conflicts |= overlap & (output != temporary)
             output[current] = temporary[current]
             valid |= current
             used.append(entry["member"])
@@ -212,7 +229,10 @@ class AnnualRasterArchive:
             )
             if not np.isin(output[valid], allowed).all():
                 raise ValueError("unexpected class or valid NoData in source reconstruction")
-            valid = categorical_validity(output, valid)
+            valid = finalize_categorical_mask(
+                output, valid, conflicts, allow_masked_conflicts=self.allow_masked_conflicts
+            )
+            self.last_masked_source_conflicts = int(conflicts.sum())
         return np.where(valid, output, 0), valid, used
 
 
@@ -234,9 +254,18 @@ def _source_reference(report_root: Path, family: str, year: int) -> dict:
 
 
 def audit_target_geometry(
-    dataset_root: Path, report_root: Path, family: str, *, max_patches: int | None = None
+    dataset_root: Path,
+    report_root: Path,
+    family: str,
+    *,
+    max_patches: int | None = None,
+    audit_version: str = "v1",
 ) -> dict:
-    if family not in FAMILIES or (max_patches is not None and max_patches <= 0):
+    if (
+        family not in FAMILIES
+        or audit_version not in {"v1", "v2"}
+        or (max_patches is not None and max_patches <= 0)
+    ):
         raise ValueError("invalid target family or patch limit")
     registry_path = dataset_root / "registry/national_62000.parquet"
     registry = pd.read_parquet(registry_path)
@@ -247,20 +276,25 @@ def audit_target_geometry(
     value_audit = pd.read_parquet(report_root / "target_value_audit.parquet")
     selected_registry = registry if max_patches is None else registry.iloc[:max_patches]
     scope = "full" if max_patches is None else f"pilot_{max_patches}"
-    directory = dataset_root / "quality/targets/geometry" / family / scope
+    directory = dataset_root / "quality/targets/geometry" / family
+    if audit_version != "v1":
+        directory /= audit_version
+    directory /= scope
     directory.mkdir(parents=True, exist_ok=True)
     fingerprint = {
         "code_sha256": sha256(Path(__file__)),
         "registry_sha256": sha256(registry_path),
         "manifest_sha256": sha256(manifest_path),
         "policy": POLICY,
+        "audit_version": audit_version,
         "runtime": {
             "numpy": np.__version__,
             "rasterio": rasterio.__version__,
             "gdal": rasterio.__gdal_version__,
         },
     }
-    progress = report_root / f"target_geometry_{family}_{scope}.json"
+    tag = family if audit_version == "v1" else f"{family}_{audit_version}"
+    progress = report_root / f"target_geometry_{tag}_{scope}.json"
     rows, source_locks = [], []
     reused = 0
     for year in [2020, 2021]:
@@ -283,7 +317,9 @@ def audit_target_geometry(
         source_hash = sha256(source_path)
         if source_hash != reference["actual_sha256"]:
             raise ValueError("source archive changed after provenance audit")
-        source = AnnualRasterArchive(source_path, family, year)
+        source = AnnualRasterArchive(
+            source_path, family, year, allow_masked_conflicts=audit_version == "v2"
+        )
         source_lock = {
             "year": year,
             "path": str(source_path),
@@ -343,6 +379,7 @@ def audit_target_geometry(
                                 )
                             )
                             result["source_members"] = members
+                            result["masked_source_conflicts"] = source.last_masked_source_conflicts
                         except (ValueError, OSError) as exc:
                             result.update(status="failed", reason=str(exc), source_members=[])
                         chunk_rows.append(result)
@@ -391,6 +428,8 @@ def audit_target_geometry(
         "selected_targets": len(selected_registry) * 2,
         "failed_targets": sum(r["status"] == "failed" for r in rows),
         "reused_targets": reused,
+        "audit_version": audit_version,
+        "masked_source_conflicts": sum(r.get("masked_source_conflicts", 0) for r in rows),
         "source_locks": source_locks,
         "fingerprint": fingerprint,
         "output": str(directory / "observations.parquet"),

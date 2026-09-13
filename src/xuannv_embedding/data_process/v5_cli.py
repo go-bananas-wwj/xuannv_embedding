@@ -241,6 +241,7 @@ def main(argv=None) -> int:
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--target-family", choices=["worldcover", "clcd", "nightlights"])
     parser.add_argument("--max-patches", type=int)
+    parser.add_argument("--target-audit-version", choices=["v1", "v2"], default="v1")
     args = parser.parse_args(argv)
     if (
         args.stage in {"alignment-calibration", "band-alignment", "band-review"}
@@ -332,11 +333,14 @@ def main(argv=None) -> int:
             elif args.stage == "target-geometry":
                 from xuannv_embedding.data_process.v5_target_geometry import audit_target_geometry
 
+                options = {"max_patches": args.max_patches}
+                if args.target_audit_version != "v1":
+                    options["audit_version"] = args.target_audit_version
                 record["result"] = audit_target_geometry(
                     args.dataset_root,
                     args.report_root,
                     args.target_family,
-                    max_patches=args.max_patches,
+                    **options,
                 )
             elif args.stage == "target-sources":
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
