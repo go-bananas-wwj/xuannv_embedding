@@ -215,6 +215,7 @@ def main(argv=None) -> int:
             "cloud-resolution-audit",
             "alignment-calibration",
             "band-alignment",
+            "band-review",
             "targets",
             "target-values",
             "target-temporal",
@@ -237,7 +238,10 @@ def main(argv=None) -> int:
     parser.add_argument("--alignment-version", default="v1")
     parser.add_argument("--workers", type=int, default=2)
     args = parser.parse_args(argv)
-    if args.stage in {"alignment-calibration", "band-alignment"} and args.sensor_family is None:
+    if (
+        args.stage in {"alignment-calibration", "band-alignment", "band-review"}
+        and args.sensor_family is None
+    ):
         parser.error("--sensor-family is required for native-band alignment")
     if args.stage in {"radiometry", "dense-integrity"} and args.dense_root is None:
         parser.error("--dense-root is required for dense source audits")
@@ -260,7 +264,7 @@ def main(argv=None) -> int:
         if args.stage in {"source-lock", "download", "extract", "ingest"}
         else (
             f".{args.stage}.{args.sensor_family}.lock"
-            if args.stage in {"alignment-calibration", "band-alignment"}
+            if args.stage in {"alignment-calibration", "band-alignment", "band-review"}
             else f".{args.stage}.lock"
         )
     )
@@ -285,7 +289,7 @@ def main(argv=None) -> int:
         }
         record_name = (
             f"{args.stage}_{args.sensor_family}"
-            if args.stage in {"alignment-calibration", "band-alignment"}
+            if args.stage in {"alignment-calibration", "band-alignment", "band-review"}
             else args.stage
         )
         record_path = args.report_root / "stages" / (record_name + ".json")
@@ -309,6 +313,15 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "band-review":
+                from xuannv_embedding.data_process.v5_band_review import review_native_bands
+
+                record["result"] = review_native_bands(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    version=args.alignment_version,
+                )
             elif args.stage in {"alignment-calibration", "band-alignment"}:
                 from xuannv_embedding.data_process.v5_intraband import (
                     calibrate_family,
