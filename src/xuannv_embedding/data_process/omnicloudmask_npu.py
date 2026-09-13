@@ -4,10 +4,23 @@ from __future__ import annotations
 
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
 import numpy as np
+
+
+def _host_array_pointer(acl: Any, array: np.ndarray) -> int:
+    """Retain the established NumPy buffer API without flooding data-processing logs."""
+    with warnings.catch_warnings(record=True) as captured:
+        pointer = acl.util.numpy_to_ptr(array)
+    for warning in captured:
+        if not str(warning.message).startswith("acl.util.numpy_to_ptr will be deprecated."):
+            warnings.warn_explicit(
+                warning.message, warning.category, warning.filename, warning.lineno
+            )
+    return pointer
 
 
 class OmLogitRunner(Protocol):
@@ -110,7 +123,7 @@ class AscendAclOmEnsemble:
                 acl.rt.memcpy(
                     model["input_ptr"],
                     model["input_size"],
-                    acl.util.numpy_to_ptr(values),
+                    _host_array_pointer(acl, values),
                     values.nbytes,
                     self._ACL_MEMCPY_HOST_TO_DEVICE,
                 ),
@@ -125,7 +138,7 @@ class AscendAclOmEnsemble:
             output = np.empty(model["output_size"] // 4, dtype=np.float32)
             _check(
                 acl.rt.memcpy(
-                    acl.util.numpy_to_ptr(output),
+                    _host_array_pointer(acl, output),
                     output.nbytes,
                     model["output_ptr"],
                     model["output_size"],

@@ -56,3 +56,22 @@ def test_npu_predictor_keeps_nodata_clear_but_zero_confidence() -> None:
 
     assert np.all(labels[0, :4, :4] == 0)
     assert np.all(confidence[0, :4, :4] == 0)
+
+
+def test_pointer_adapter_preserves_numpy_lifetime_and_filters_only_known_warning():
+    import warnings
+    from types import SimpleNamespace
+
+    from xuannv_embedding.data_process.omnicloudmask_npu import _host_array_pointer
+
+    def pointer(array):
+        warnings.warn(
+            "acl.util.numpy_to_ptr will be deprecated. Please use acl.util.bytes_to_ptr instead."
+        )
+        assert array.shape == (3, 96, 96)
+        return 123
+
+    acl = SimpleNamespace(util=SimpleNamespace(numpy_to_ptr=pointer))
+    with warnings.catch_warnings(record=True) as captured:
+        value = _host_array_pointer(acl, np.ones((3, 96, 96), dtype=np.float32))
+    assert value == 123 and not captured
