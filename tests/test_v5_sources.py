@@ -114,3 +114,28 @@ def test_download_rejects_wrong_range_and_auth_without_retries(tmp_path):
     with pytest.raises(PermissionError):
         download_archive(spec, tmp_path, "revision", session=session)
     assert len(session.ranges) == 1
+
+
+def test_chunk_download_validates_range_and_checksum(tmp_path, monkeypatch):
+    from xuannv_embedding.data_process import v5_sources
+    from xuannv_embedding.data_process.v5_transfer import download_chunked
+
+    data = b"abcdef"
+
+    class RangeSession:
+        def get(self, url, **kwargs):
+            header = kwargs["headers"]["Range"]
+            start, end = (int(x) for x in header.removeprefix("bytes=").split("-"))
+            return Response(
+                206, data[start : end + 1], {"Content-Range": f"bytes {start}-{end}/{len(data)}"}
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(v5_sources, "session", RangeSession)
+    spec = ArchiveSpec("p.tar.gz", len(data), hashlib.sha256(data).hexdigest(), 1)
+    result = download_chunked(spec, tmp_path, "revision", workers=2, chunk_bytes=2)
+    assert result["status"] == "complete"
+    assert (tmp_path / "p.tar.gz").read_bytes() == data
+    assert not (tmp_path / "p.tar.gz.parts").exists()

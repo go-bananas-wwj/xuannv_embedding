@@ -15,13 +15,13 @@ import rasterio
 
 from xuannv_embedding.data_process.v5_sources import (
     ArchiveSpec,
-    download_archive,
     extract_archive,
     lock_source,
     now,
     sha256,
     write_json,
 )
+from xuannv_embedding.data_process.v5_transfer import download_chunked
 
 
 def atomic_parquet(frame: pd.DataFrame, path: Path) -> None:
@@ -143,7 +143,7 @@ def acquire(args: argparse.Namespace, source: dict) -> None:
             with ThreadPoolExecutor(max_workers=2) as pool:
                 jobs = {
                     pool.submit(
-                        download_archive, spec, args.source_root / "packages", source["revision"]
+                        download_chunked, spec, args.source_root / "packages", source["revision"]
                     ): spec
                     for spec in pair
                 }
