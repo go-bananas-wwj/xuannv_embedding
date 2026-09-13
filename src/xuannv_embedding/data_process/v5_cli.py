@@ -221,6 +221,7 @@ def main(argv=None) -> int:
             "targets",
             "target-values",
             "target-temporal",
+            "target-negative-rules",
             "target-sources",
             "target-geometry",
             "dem-geometry",
@@ -384,6 +385,14 @@ def main(argv=None) -> int:
                     args.quality_root,
                     args.model_dir,
                     device_id=args.device_id,
+                )
+            elif args.stage == "target-negative-rules":
+                from xuannv_embedding.data_process.v5_negative_rules import audit_negative_rules
+
+                record["result"] = audit_negative_rules(
+                    args.dataset_root,
+                    args.report_root,
+                    max_patches=args.max_patches,
                 )
             elif args.stage == "target-temporal":
                 from xuannv_embedding.data_process.v5_temporal import audit_osm_temporal
