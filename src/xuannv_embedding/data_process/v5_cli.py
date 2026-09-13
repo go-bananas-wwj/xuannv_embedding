@@ -225,6 +225,7 @@ def main(argv=None) -> int:
             "target-sources",
             "target-geometry",
             "dem-geometry",
+            "dem-corrections",
             "visual-review",
             "followup",
             "report",
@@ -325,6 +326,12 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_followup import follow_started_jobs
 
                 record["result"] = follow_started_jobs(args)
+            elif args.stage == "dem-corrections":
+                from xuannv_embedding.data_process.v5_dem_corrections import build_dem_corrections
+
+                if args.max_patches is not None:
+                    raise ValueError("DEM corrections require the complete audit and grid")
+                record["result"] = build_dem_corrections(args.dataset_root, args.report_root)
             elif args.stage == "dem-geometry":
                 from xuannv_embedding.data_process.v5_dem_geometry import audit_dem_geometry
 
