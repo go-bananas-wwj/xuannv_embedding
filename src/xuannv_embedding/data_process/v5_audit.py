@@ -205,23 +205,49 @@ def report_progress(source_root: Path, dataset_root: Path, report_root: Path) ->
     completed = 0
     partial_bytes = 0
     verified_bytes = 0
+    pixel_verified = 0
+    download_records = source_root / "manifests/download_status.parquet"
+    downloads = (
+        pd.read_parquet(download_records).set_index("archive").to_dict("index")
+        if download_records.exists()
+        else {}
+    )
     for row in specs:
         path = source_root / "packages" / row["archive"]
         marker = source_root / "manifests/extracted" / (row["archive"] + ".json")
-        if path.exists():
+        receipt = downloads.get(row["archive"], {})
+        downloaded = (
+            path.exists()
+            and path.stat().st_size == row["bytes"]
+            and receipt.get("status") == "complete"
+            and receipt.get("sha256") == row["sha256"]
+            and receipt.get("actual_bytes") == row["bytes"]
+        )
+        if downloaded:
             verified_bytes += path.stat().st_size
         partial = path.with_name(path.name + ".partial")
         parts = path.with_name(path.name + ".parts")
         part_bytes = sum(p.stat().st_size for p in parts.glob("*.part"))
         part_bytes += sum(p.stat().st_size for p in parts.glob("*.partial"))
-        partial_bytes += min(
-            row["bytes"], max(partial.stat().st_size if partial.exists() else 0, part_bytes)
-        )
+        if not downloaded:
+            partial_bytes += min(
+                row["bytes"], max(partial.stat().st_size if partial.exists() else 0, part_bytes)
+            )
         if marker.exists():
             completed += 1
+        integrity = read(report_root / "integrity_shards" / (row["archive"] + ".json"))
+        if (
+            downloaded
+            and marker.exists()
+            and integrity.get("status") == "complete"
+            and integrity.get("sha256") == row["sha256"]
+            and integrity.get("decoded_tiffs") == row["tiff_count"]
+            and integrity.get("failures") == []
+        ):
+            pixel_verified += 1
     catalog = read(report_root / "grid_match_report.json")
     checks = {key: False for key in REQUIRED_GATES}
-    checks["download"] = bool(specs) and completed == len(specs)
+    checks["download"] = bool(specs) and pixel_verified == len(specs)
     checks["catalog"] = bool(specs) and catalog.get("processed_archives") == len(specs)
     # Later stages must publish their own verifications; file existence alone never passes them.
     for key in REQUIRED_GATES[2:]:
@@ -236,6 +262,7 @@ def report_progress(source_root: Path, dataset_root: Path, report_root: Path) ->
     result.update(
         total_archives=len(specs),
         extracted_archives=completed,
+        pixel_verified_archives=pixel_verified,
         expected_bytes=total_bytes,
         completed_archive_bytes=verified_bytes,
         partial_bytes=partial_bytes,
@@ -275,11 +302,29 @@ def report_progress(source_root: Path, dataset_root: Path, report_root: Path) ->
         ]
     lines += [
         "",
+        "## 正在执行的实际处理",
+        "",
+    ]
+    for filename, title in [
+        ("gaofen_cloud_summary.json", "高分云质量处理"),
+        ("target_value_progress.json", "标签全量数值检查"),
+        ("visual_review_summary.json", "可视化样例"),
+    ]:
+        details = read(report_root / filename)
+        result[filename.removesuffix(".json")] = details
+        lines.append(f"- {title}：`{json.dumps(details, ensure_ascii=False)}`")
+    issues = read(report_root / "open_issues.json")
+    if issues:
+        lines += ["", "## 未解决问题", ""]
+        lines.extend(f'- {issue["id"]}：{issue["description"]}' for issue in issues["issues"])
+    lines += [
+        "",
         "## 验收材料",
         "",
         "当前为进度快照，不是验收通过报告。",
         "完整视觉样例、配准、统计、样本与加载验证完成后，才允许进入ready_for_review。",
         "具体文件清单与错误位于同目录parquet/JSON报告。",
     ]
+    write_json(report_root / "progress.json", result)
     (report_root / "acceptance_report.md").write_text("\n".join(lines) + "\n")
     return result
