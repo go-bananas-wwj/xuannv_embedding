@@ -218,6 +218,7 @@ def main(argv=None) -> int:
             "jilin-quality",
             "cloud-resolution-audit",
             "alignment-calibration",
+            "clear-alignment-calibration",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -254,10 +255,18 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     if (
         args.stage
-        in {"alignment-calibration", "band-alignment", "band-alignment-parallel", "band-review"}
+        in {
+            "alignment-calibration",
+            "clear-alignment-calibration",
+            "band-alignment",
+            "band-alignment-parallel",
+            "band-review",
+        }
         and args.sensor_family is None
     ):
         parser.error("--sensor-family is required for native-band alignment")
+    if args.stage == "clear-alignment-calibration" and args.quality_root is None:
+        parser.error("--quality-root is required for clear alignment calibration")
     if args.stage == "target-geometry" and args.target_family is None:
         parser.error("--target-family is required for target geometry audit")
     if args.max_patches is not None and args.max_patches <= 0:
@@ -293,6 +302,8 @@ def main(argv=None) -> int:
     )
     if args.stage == "band-alignment-parallel":
         lock_name = f".band-alignment.{args.sensor_family}.lock"
+    if args.stage == "clear-alignment-calibration":
+        lock_name = f".clear-alignment-calibration.{args.sensor_family}.lock"
     if args.stage == "target-geometry":
         lock_name = f".target-geometry.{args.target_family}.lock"
     with (args.source_root / lock_name).open("a") as mutex:
@@ -322,6 +333,8 @@ def main(argv=None) -> int:
         )
         if args.stage == "target-geometry":
             record_name = f"target-geometry_{args.target_family}"
+        if args.stage == "clear-alignment-calibration":
+            record_name = f"clear-alignment-calibration_{args.sensor_family}"
         record_path = args.report_root / "stages" / (record_name + ".json")
         write_json(record_path, record)
         try:
@@ -375,6 +388,16 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "clear-alignment-calibration":
+                from xuannv_embedding.data_process.v5_clear_intraband import calibrate_clear
+
+                record["result"] = calibrate_clear(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    args.quality_root,
+                    version=args.alignment_version,
+                )
             elif args.stage == "band-review":
                 from xuannv_embedding.data_process.v5_band_review import review_native_bands
 
