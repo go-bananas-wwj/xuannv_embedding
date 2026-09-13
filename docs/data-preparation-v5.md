@@ -19,6 +19,12 @@
 旧检查停止时65包有结果，其中48通过、17个Landsat结构失败，旧记录保留。
 详细参数、实际分项结果、验证及证据见文末。
 
+23:29 UTC补充：Landsat修复c43b3c5已push并核对远端SHA；新v2的2020年1、2月
+两个完整包合计123,488张TIFF已解码并通过几何检查，0失败。全部成员字节SHA、
+全国位置及split与旧记录逐项一致，每月实际缺256位置。剩余22月继续运行。
+完整对账见报告目录diagnostics/landsat_grid_contract_v2/first_two_full_archives_verification.json。
+其余表项仍按上述快照时间理解，几何检查通过不代表基础物理合同或数据验收通过。
+
 ## 路径与执行合同
 
 部署时显式指定 `--source-root`（吉林一号目录）、`--dataset-root`（新质量版本）、
