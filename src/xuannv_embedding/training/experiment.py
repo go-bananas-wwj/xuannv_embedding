@@ -437,10 +437,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--epochs", type=int, default=20)
     p.add_argument("--resume", type=Path)
     p.add_argument("--pilot", action="store_true")
+    p = sub.add_parser("follow")
+    p.add_argument("--root", type=Path, required=True)
     args = parser.parse_args(argv)
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers)
+    elif args.action == "follow":
+        from xuannv_embedding.training.experiment_schedule import main as follow_main
+
+        follow_main(args.root)
     else:
         if args.epochs <= 0:
             parser.error("epochs must be positive")

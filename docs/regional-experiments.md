@@ -41,3 +41,12 @@ xuannv experiment run --config /data/experiment/base.yaml --cache /data/experime
 
 High-resolution adapters, alignment-tolerant losses and their formal evaluations are separate
 experiments. No baseline checkpoint may be labeled as having validated those upgrades.
+
+`xuannv experiment follow --root /data/experiment` advances a registered six-run calibration to
+three independent 800-epoch public baselines. It requires every pilot to complete, selects the
+learning rate by the predeclared paired-seed mean, waits for devices 1–3 to have no processes, then
+starts each full baseline from scratch using the complete development training split. A file lock
+prevents concurrent controllers; existing formal registrations are never silently relaunched.
+Training uses the immutable code snapshot and cache checksums in the registry. Any failed pilot
+stops advancement. `controller_status.json` records waiting, running, completion or failure.
+The controller does not implement or launch high-resolution adapters after the baselines finish.
