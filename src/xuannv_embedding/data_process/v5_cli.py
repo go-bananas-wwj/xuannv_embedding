@@ -221,6 +221,7 @@ def main(argv=None) -> int:
             "target-temporal",
             "target-sources",
             "target-geometry",
+            "dem-geometry",
             "visual-review",
             "followup",
             "report",
@@ -320,6 +321,14 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_followup import follow_started_jobs
 
                 record["result"] = follow_started_jobs(args)
+            elif args.stage == "dem-geometry":
+                from xuannv_embedding.data_process.v5_dem_geometry import audit_dem_geometry
+
+                record["result"] = audit_dem_geometry(
+                    args.dataset_root,
+                    args.report_root,
+                    max_patches=args.max_patches,
+                )
             elif args.stage == "target-geometry":
                 from xuannv_embedding.data_process.v5_target_geometry import audit_target_geometry
 
