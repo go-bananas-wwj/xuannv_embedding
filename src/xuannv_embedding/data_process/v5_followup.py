@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
 import time
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 from xuannv_embedding.data_process.v5_audit import report_progress
@@ -20,14 +22,68 @@ def next_source_action(
     quality_status: str | None,
     band_ready: bool = True,
     band_running: bool = False,
+    partial_ready: bool = True,
 ) -> str | None:
     if total > 0 and verified > cataloged:
         return "catalog"
+    if total > 0 and verified > 0 and verified == cataloged and not partial_ready:
+        return "catalog-partial-bands"
     if total > 0 and verified > 0 and verified == cataloged and not band_ready:
         return None if band_running else "band-alignment"
     if total > 0 and verified == total and cataloged == total and quality_status is None:
         return "quality"
     return None
+
+
+def partial_catalog_finished(source_root: Path, dataset_root: Path, report_root: Path) -> bool:
+    """Check the current partial snapshot, without implying cloud or alignment approval."""
+    import numpy as np
+    import pandas as pd
+    import rasterio
+
+    root = dataset_root / "observations/highres/jilin1"
+    try:
+        pointer = json.loads((root / "partial_bands/current.json").read_text())
+        lock_path = Path(pointer["lock_path"])
+        if sha256(lock_path) != pointer["lock_sha256"]:
+            return False
+        locked = json.loads(lock_path.read_text())
+        fingerprint = locked["fingerprint"]
+        version = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:20]
+        directory = root / "partial_bands" / version
+        if (
+            locked.get("status") != "partial_band_catalog_finished"
+            or pointer["version"] != version
+            or lock_path.resolve() != (directory / "catalog.lock.json").resolve()
+            or Path(locked["output"]).resolve() != directory.resolve()
+        ):
+            return False
+        inputs = {
+            "registry_sha256": dataset_root / "registry/national_62000.parquet",
+            "rejected_inventory_sha256": report_root / "rejected_files.parquet",
+            "complete_catalog_sha256": root / "files.parquet",
+            "source_lock_sha256": source_root / "manifests/source.lock.json",
+            "code_sha256": Path(__file__).with_name("v5_partial_bands.py"),
+            "reader_sha256": Path(__file__).with_name("v5_rasters.py"),
+            "grid_matcher_sha256": Path(__file__).with_name("v5_catalog.py"),
+        }
+        if any(sha256(path) != fingerprint[key] for key, path in inputs.items()):
+            return False
+        runtime = {
+            "numpy": np.__version__,
+            "pandas": pd.__version__,
+            "rasterio": rasterio.__version__,
+            "gdal": rasterio.__gdal_version__,
+            "pyarrow": package_version("pyarrow"),
+        }
+        return (
+            fingerprint.get("runtime") == runtime
+            and sha256(directory / "files.parquet") == locked["output_sha256"]
+            and sha256(directory / "files_with_partial_bands.parquet")
+            == locked["augmented_catalog_sha256"]
+        )
+    except (OSError, KeyError, TypeError, ValueError):
+        return False
 
 
 def band_inventory_finished(
@@ -134,12 +190,16 @@ def follow_started_jobs(args) -> dict:
             and quality.get("processed_scenes") == quality.get("selected_scenes")
             else None
         )
+        partial_ready = partial_catalog_finished(
+            args.source_root, args.dataset_root, args.report_root
+        )
         action = next_source_action(
             total=len(specs),
             verified=verified,
             cataloged=cataloged,
             quality_status=full_quality_status,
             band_ready=band_ready,
+            partial_ready=partial_ready,
             band_running=alive.get("band_jilin1", False),
         )
         if action == "quality" and alive.get("gaofen", False):
@@ -201,6 +261,7 @@ def follow_started_jobs(args) -> dict:
             "verified_archives": verified,
             "cataloged_archives": cataloged,
             "band_inventory_finished": band_ready,
+            "partial_catalog_finished": partial_ready,
             "alignment_version": alignment_version,
             "failures": failures,
             "training_authorized": False,
