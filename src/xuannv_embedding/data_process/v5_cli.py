@@ -209,6 +209,7 @@ def main(argv=None) -> int:
             "ingest",
             "catalog",
             "radiometry",
+            "dense-integrity",
             "quality",
             "gaofen-quality",
             "targets",
@@ -229,8 +230,8 @@ def main(argv=None) -> int:
     parser.add_argument("--device-id", type=int, default=1)
     parser.add_argument("--max-scenes", type=int)
     args = parser.parse_args(argv)
-    if args.stage == "radiometry" and args.dense_root is None:
-        parser.error("--dense-root is required for radiometry")
+    if args.stage in {"radiometry", "dense-integrity"} and args.dense_root is None:
+        parser.error("--dense-root is required for dense source audits")
     if args.stage in {"quality", "gaofen-quality", "followup"} and args.model_dir is None:
         parser.error("--model-dir is required for quality")
     if args.stage == "gaofen-quality" and args.gaofen_source_catalog is None:
@@ -274,7 +275,13 @@ def main(argv=None) -> int:
             input_lock(args, source)
             record["input_fingerprint"] = source["manifest_sha256"]
             write_json(record_path, record)
-            if args.stage == "followup":
+            if args.stage == "dense-integrity":
+                from xuannv_embedding.data_process.v5_dense_integrity import audit_dense_integrity
+
+                record["result"] = audit_dense_integrity(
+                    args.dense_root, args.dataset_root, args.report_root
+                )
+            elif args.stage == "followup":
                 from xuannv_embedding.data_process.v5_followup import follow_started_jobs
 
                 record["result"] = follow_started_jobs(args)
