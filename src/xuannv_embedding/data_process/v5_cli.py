@@ -215,6 +215,7 @@ def main(argv=None) -> int:
             "dense-integrity",
             "quality",
             "gaofen-quality",
+            "jilin-quality",
             "cloud-resolution-audit",
             "alignment-calibration",
             "band-alignment",
@@ -261,7 +262,10 @@ def main(argv=None) -> int:
         parser.error("--max-patches must be positive")
     if args.stage in {"radiometry", "dense-integrity"} and args.dense_root is None:
         parser.error("--dense-root is required for dense source audits")
-    if args.stage in {"quality", "gaofen-quality", "followup"} and args.model_dir is None:
+    if (
+        args.stage in {"quality", "gaofen-quality", "jilin-quality", "followup"}
+        and args.model_dir is None
+    ):
         parser.error("--model-dir is required for quality")
     if args.stage == "gaofen-quality" and args.gaofen_source_catalog is None:
         parser.error("--gaofen-source-catalog is required")
@@ -449,6 +453,17 @@ def main(argv=None) -> int:
                     args.dataset_root,
                     args.report_root,
                     args.gaofen_source_catalog,
+                    args.model_dir,
+                    device_id=args.device_id,
+                    limit=args.max_scenes,
+                )
+            elif args.stage == "jilin-quality":
+                from xuannv_embedding.data_process.v5_jilin_quality import process_jilin_quality
+
+                record["result"] = process_jilin_quality(
+                    args.source_root,
+                    args.dataset_root,
+                    args.report_root,
                     args.model_dir,
                     device_id=args.device_id,
                     limit=args.max_scenes,
