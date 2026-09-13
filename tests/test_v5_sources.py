@@ -139,3 +139,85 @@ def test_chunk_download_validates_range_and_checksum(tmp_path, monkeypatch):
     assert result["status"] == "complete"
     assert (tmp_path / "p.tar.gz").read_bytes() == data
     assert not (tmp_path / "p.tar.gz.parts").exists()
+
+
+def test_chunk_retry_resumes_written_bytes_and_preserves_range_validation(tmp_path, monkeypatch):
+    import requests
+
+    from xuannv_embedding.data_process import v5_sources, v5_transfer
+
+    class Interrupted(Response):
+        def iter_content(self, chunk_size):
+            yield b"abc"
+            raise requests.ConnectionError("private signed URL must not be logged")
+
+    session = Session(
+        [
+            Interrupted(206, b"", {"Content-Range": "bytes 0-5/6"}),
+            Response(206, b"def", {"Content-Range": "bytes 3-5/6"}),
+        ]
+    )
+    session.close = lambda: None
+    monkeypatch.setattr(v5_sources, "session", lambda: session)
+    monkeypatch.setattr(v5_transfer.time, "sleep", lambda _: None)
+    spec = ArchiveSpec("p.tar.gz", 6, hashlib.sha256(b"abcdef").hexdigest(), 1)
+    result = v5_transfer.download_chunked(spec, tmp_path, "revision", workers=1)
+    assert session.ranges == ["bytes=0-5", "bytes=3-5"]
+    assert result["retries"] == 1
+    assert (tmp_path / "p.tar.gz").read_bytes() == b"abcdef"
+
+
+def test_chunk_failures_record_safe_diagnostics_and_bound_retries(tmp_path, monkeypatch):
+    import json
+
+    from xuannv_embedding.data_process import v5_sources, v5_transfer
+
+    session = Session([Response(503, b"secret response") for _ in range(4)])
+    session.close = lambda: None
+    monkeypatch.setattr(v5_sources, "session", lambda: session)
+    monkeypatch.setattr(v5_transfer.time, "sleep", lambda _: None)
+    spec = ArchiveSpec("p.tar.gz", 6, hashlib.sha256(b"abcdef").hexdigest(), 1)
+    with pytest.raises(RuntimeError):
+        v5_transfer.download_chunked(spec, tmp_path, "revision", workers=1)
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "p.tar.gz.parts/000000000000.events.jsonl").read_text().splitlines()
+    ]
+    assert len(session.ranges) == len(events) == 4
+    assert all(e["http_status"] == 503 and e["error_type"] == "ConnectionError" for e in events)
+    assert [e["attempt"] for e in events] == [1, 2, 3, 4]
+    assert "secret" not in json.dumps(events)
+
+
+def test_chunk_auth_failure_stops_queued_ranges(tmp_path, monkeypatch):
+    from xuannv_embedding.data_process import v5_sources, v5_transfer
+
+    session = Session([Response(403, b"private response")])
+    session.close = lambda: None
+    monkeypatch.setattr(v5_sources, "session", lambda: session)
+    spec = ArchiveSpec("p.tar.gz", 6, hashlib.sha256(b"abcdef").hexdigest(), 1)
+    with pytest.raises(PermissionError):
+        v5_transfer.download_chunked(spec, tmp_path, "revision", workers=1, chunk_bytes=2)
+    assert len(session.ranges) == 1
+
+
+def test_chunk_resume_rejects_wrong_range_without_appending(tmp_path, monkeypatch):
+    from xuannv_embedding.data_process import v5_sources, v5_transfer
+
+    session = Session([Response(206, b"abc", {"Content-Range": "bytes 0-2/6"})])
+    session.close = lambda: None
+    monkeypatch.setattr(v5_sources, "session", lambda: session)
+    parts = tmp_path / "p.tar.gz.parts"
+    parts.mkdir()
+    partial = parts / "000000000000.partial"
+    partial.write_bytes(b"abc")
+    spec = ArchiveSpec("p.tar.gz", 6, hashlib.sha256(b"abcdef").hexdigest(), 1)
+    # Production partials always have a pinned-source marker.
+    v5_sources.write_json(
+        parts / "source.json",
+        {"revision": "revision", **spec.__dict__, "chunk_bytes": 16 * 1024 * 1024},
+    )
+    with pytest.raises(ValueError, match="Content-Range"):
+        v5_transfer.download_chunked(spec, tmp_path, "revision", workers=1)
+    assert partial.read_bytes() == b"abc"
+    assert session.ranges == ["bytes=3-5"]
