@@ -209,6 +209,8 @@ def main(argv=None) -> int:
             "ingest",
             "catalog",
             "radiometry",
+            "quality",
+            "gaofen-quality",
             "targets",
             "report",
         ],
@@ -217,9 +219,19 @@ def main(argv=None) -> int:
         parser.add_argument("--" + key, type=Path, required=True)
     parser.add_argument("--limit", type=int, default=64, help="number of archive packages, 1..64")
     parser.add_argument("--dense-root", type=Path)
+    parser.add_argument("--model-dir", type=Path)
+    parser.add_argument("--gaofen-source-catalog", type=Path)
+    parser.add_argument("--device-id", type=int, default=1)
+    parser.add_argument("--max-scenes", type=int)
     args = parser.parse_args(argv)
     if args.stage == "radiometry" and args.dense_root is None:
         parser.error("--dense-root is required for radiometry")
+    if args.stage in {"quality", "gaofen-quality"} and args.model_dir is None:
+        parser.error("--model-dir is required for quality")
+    if args.stage == "gaofen-quality" and args.gaofen_source_catalog is None:
+        parser.error("--gaofen-source-catalog is required")
+    if args.max_scenes is not None and args.max_scenes <= 0:
+        parser.error("--max-scenes must be positive")
     if not 1 <= args.limit <= 64:
         parser.error("--limit must be between 1 and 64")
     args.source_root.mkdir(parents=True, exist_ok=True)
@@ -256,6 +268,27 @@ def main(argv=None) -> int:
 
                 record["result"] = build_catalog(
                     args.source_root, args.dataset_root, args.report_root
+                )
+            elif args.stage == "gaofen-quality":
+                from xuannv_embedding.data_process.v5_gaofen import process_gaofen
+
+                record["result"] = process_gaofen(
+                    args.dataset_root,
+                    args.report_root,
+                    args.gaofen_source_catalog,
+                    args.model_dir,
+                    device_id=args.device_id,
+                    limit=args.max_scenes,
+                )
+            elif args.stage == "quality":
+                from xuannv_embedding.data_process.v5_cloud import process_jilin_cloud
+
+                record["result"] = process_jilin_cloud(
+                    args.dataset_root,
+                    args.report_root,
+                    args.model_dir,
+                    device_id=args.device_id,
+                    limit=args.max_scenes,
                 )
             elif args.stage in {"radiometry", "targets", "report"}:
                 from xuannv_embedding.data_process.v5_audit import (
