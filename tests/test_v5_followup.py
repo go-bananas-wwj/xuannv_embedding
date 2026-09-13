@@ -67,7 +67,7 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
     monkeypatch.setattr(
         module,
         "band_inventory_finished",
-        lambda *args: band_exit == 0 and "band-alignment" in actions,
+        lambda *args: band_exit == 0 and "band-alignment-parallel" in actions,
     )
 
     monkeypatch.setattr(
@@ -88,7 +88,7 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
             write_json(args.report_root / "grid_match_report.json", {"processed_archives": 1})
         elif action == "catalog-partial-bands":
             return SimpleNamespace(returncode=partial_exit)
-        elif action == "band-alignment":
+        elif action == "band-alignment-parallel":
             assert command[command.index("--alignment-version") + 1] == "v5"
             assert command[command.index("--sensor-family") + 1] == "jilin1"
             return SimpleNamespace(returncode=band_exit)
@@ -105,7 +105,7 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
     result = module.follow_started_jobs(args)
     expected = ["catalog", "catalog-partial-bands"]
     if not partial_exit:
-        expected += ["band-alignment"] + ([] if band_exit else ["jilin-quality"])
+        expected += ["band-alignment-parallel"] + ([] if band_exit else ["jilin-quality"])
     assert actions == expected
     assert len(result["failures"]) == int(bool(band_exit or partial_exit))
     assert result["status"] == "stopped_for_remaining_data_gates"
@@ -114,11 +114,11 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
 
 def test_followup_audits_each_catalog_before_cloud_without_repeating_finished_audit():
     common = dict(total=64, verified=3, cataloged=3, quality_status=None)
-    assert next_source_action(**common, band_ready=False) == "band-alignment"
+    assert next_source_action(**common, band_ready=False) == "band-alignment-parallel"
     assert next_source_action(**common, band_ready=True) == "jilin-quality"
     assert next_source_action(**{**common, "verified": 4}, band_ready=False) == "catalog"
     full = {**common, "verified": 64, "cataloged": 64}
-    assert next_source_action(**full, band_ready=False) == "band-alignment"
+    assert next_source_action(**full, band_ready=False) == "band-alignment-parallel"
     assert next_source_action(**full, band_ready=True) == "jilin-quality"
     assert next_source_action(**full, band_ready=False, band_running=True) is None
 

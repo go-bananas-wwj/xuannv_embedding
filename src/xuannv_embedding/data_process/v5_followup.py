@@ -30,7 +30,7 @@ def next_source_action(
     if total > 0 and verified > 0 and verified == cataloged and not partial_ready:
         return "catalog-partial-bands"
     if total > 0 and verified > 0 and verified == cataloged and not band_ready:
-        return None if band_running else "band-alignment"
+        return None if band_running else "band-alignment-parallel"
     if total > 0 and verified > 0 and verified == cataloged and quality_status is None:
         return None if quality_running else "jilin-quality"
     return None
@@ -275,7 +275,7 @@ def follow_started_jobs(args) -> dict:
             ]
             for field in ("source_root", "dataset_root", "report_root", "base_root"):
                 command += ["--" + field.replace("_", "-"), str(getattr(args, field))]
-            if action == "band-alignment":
+            if action == "band-alignment-parallel":
                 command += [
                     "--sensor-family",
                     "jilin1",
