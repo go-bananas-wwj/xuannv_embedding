@@ -222,6 +222,7 @@ def main(argv=None) -> int:
             "clear-training-calibration",
             "clear-band-audit",
             "highres-statistics",
+            "alignment-diagnostics",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -248,6 +249,7 @@ def main(argv=None) -> int:
     parser.add_argument("--gaofen-source-catalog", type=Path)
     parser.add_argument("--quality-root", type=Path)
     parser.add_argument("--clear-calibration-root", type=Path)
+    parser.add_argument("--alignment-audit-root", type=Path)
     parser.add_argument("--device-id", type=int, default=1)
     parser.add_argument("--max-scenes", type=int)
     parser.add_argument("--sensor-family", choices=["jilin1", "gaofen"])
@@ -265,6 +267,7 @@ def main(argv=None) -> int:
             "clear-training-calibration",
             "clear-band-audit",
             "highres-statistics",
+            "alignment-diagnostics",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -279,10 +282,13 @@ def main(argv=None) -> int:
             "clear-training-calibration",
             "clear-band-audit",
             "highres-statistics",
+            "alignment-diagnostics",
         }
         and args.quality_root is None
     ):
         parser.error("--quality-root is required for clear alignment calibration")
+    if args.stage == "alignment-diagnostics" and args.alignment_audit_root is None:
+        parser.error("--alignment-audit-root is required for alignment diagnostics")
     if args.stage == "clear-band-audit" and args.clear_calibration_root is None:
         parser.error("--clear-calibration-root is required for clear band audit")
     if args.stage == "target-geometry" and args.target_family is None:
@@ -325,6 +331,7 @@ def main(argv=None) -> int:
         "clear-training-calibration",
         "clear-band-audit",
         "highres-statistics",
+        "alignment-diagnostics",
     }:
         lock_name = f".{args.stage}.{args.sensor_family}.lock"
     if args.stage == "target-geometry":
@@ -361,6 +368,7 @@ def main(argv=None) -> int:
             "clear-training-calibration",
             "clear-band-audit",
             "highres-statistics",
+            "alignment-diagnostics",
         }:
             record_name = f"{args.stage}_{args.sensor_family}"
         record_path = args.report_root / "stages" / (record_name + ".json")
@@ -416,6 +424,18 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "alignment-diagnostics":
+                from xuannv_embedding.data_process.v5_alignment_diagnostics import (
+                    diagnose_alignment,
+                )
+
+                record["result"] = diagnose_alignment(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    args.quality_root,
+                    args.alignment_audit_root,
+                )
             elif args.stage == "highres-statistics":
                 from xuannv_embedding.data_process.v5_highres_statistics import (
                     run_highres_statistics,
