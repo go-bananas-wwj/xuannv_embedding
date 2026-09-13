@@ -12,12 +12,50 @@ from xuannv_embedding.data_process.v5_audit import report_progress
 from xuannv_embedding.data_process.v5_sources import now, sha256, write_json
 
 
-def next_source_action(*, total: int, verified: int, cataloged: int, quality_status: str | None):
+def next_source_action(
+    *,
+    total: int,
+    verified: int,
+    cataloged: int,
+    quality_status: str | None,
+    band_ready: bool = True,
+    band_running: bool = False,
+) -> str | None:
     if total > 0 and verified > cataloged:
         return "catalog"
+    if total > 0 and verified > 0 and verified == cataloged and not band_ready:
+        return None if band_running else "band-alignment"
     if total > 0 and verified == total and cataloged == total and quality_status is None:
         return "quality"
     return None
+
+
+def band_inventory_finished(
+    dataset_root: Path, summary: dict, inventory_hash: str | None, version: str
+) -> bool:
+    """Audit completion is distinct from passed observations or fusion authorization."""
+    root = dataset_root / "quality/alignment/intraband/jilin1" / version
+    calibration = root / "calibration.json"
+    if (
+        not inventory_hash
+        or summary.get("status") != "intraband_audit_finished"
+        or summary.get("family") != "jilin1"
+        or summary.get("version") != version
+        or summary.get("input_inventory_sha256") != inventory_hash
+        or not summary.get("selected_observations")
+        or summary.get("processed_observations") != summary.get("selected_observations")
+        or not (root / "observations.parquet").is_file()
+        or not calibration.is_file()
+        or summary.get("calibration_sha256") != sha256(calibration)
+        or json.loads(calibration.read_text()).get("status") != "passed"
+        or not summary.get("code_sha256")
+    ):
+        return False
+    return all(
+        Path(__file__).with_name(name).is_file()
+        and sha256(Path(__file__).with_name(name)) == expected
+        for name, expected in summary["code_sha256"].items()
+    )
 
 
 def process_identity(pid: int) -> str | None:
@@ -40,16 +78,22 @@ def follow_started_jobs(args) -> dict:
         "target_source",
         "target_temporal",
         "dense_integrity",
+        "band_gaofen",
+        "band_jilin1",
     ):
         info = read(args.report_root / f"{name}_worker.json")
         if info:
             pid = int(info["pid"])
-            jobs[name] = {"pid": pid, "identity": process_identity(pid)}
+            current = process_identity(pid)
+            identity = current if info.get("identity", current) == current else None
+            jobs[name] = {"pid": pid, "identity": identity}
     if not jobs:
         raise ValueError("no started data jobs to follow")
     failures = []
     attempted_failures = set()
     output = args.report_root / "followup_progress.json"
+    inventory_cache = {}
+    alignment_version = args.alignment_version
     while True:
         alive = {
             name: bool(info["identity"]) and process_identity(info["pid"]) == info["identity"]
@@ -67,12 +111,26 @@ def follow_started_jobs(args) -> dict:
         quality = read(args.report_root / "jilin_cloud_summary.json")
         quality_lock = read(args.dataset_root / "quality/cloud/jilin1/source.lock.json")
         catalog_path = args.dataset_root / "observations/highres/jilin1/files.parquet"
+        catalog_hash = sha256(catalog_path) if catalog_path.exists() else None
+        if catalog_hash and catalog_hash not in inventory_cache:
+            from xuannv_embedding.data_process.v5_intraband import current_inventory_fingerprint
+
+            inventory_cache[catalog_hash] = current_inventory_fingerprint(
+                args.dataset_root, "jilin1"
+            )
+        inventory_hash = inventory_cache.get(catalog_hash)
+        band_ready = band_inventory_finished(
+            args.dataset_root,
+            read(args.report_root / "intraband_progress_jilin1.json"),
+            inventory_hash,
+            alignment_version,
+        )
         full_quality_status = (
             quality.get("status")
             if quality_lock
             and quality_lock.get("limit") is None
             and catalog_path.exists()
-            and quality_lock.get("catalog_sha256") == sha256(catalog_path)
+            and quality_lock.get("catalog_sha256") == catalog_hash
             and quality.get("processed_scenes") == quality.get("selected_scenes")
             else None
         )
@@ -81,10 +139,12 @@ def follow_started_jobs(args) -> dict:
             verified=verified,
             cataloged=cataloged,
             quality_status=full_quality_status,
+            band_ready=band_ready,
+            band_running=alive.get("band_jilin1", False),
         )
         if action == "quality" and alive.get("gaofen", False):
             action = None  # The same data inference device must have one owner.
-        identity = (action, verified)
+        identity = (action, verified, inventory_hash, alignment_version)
         if action and identity not in attempted_failures:
             command = [
                 sys.executable,
@@ -97,6 +157,15 @@ def follow_started_jobs(args) -> dict:
             ]
             for field in ("source_root", "dataset_root", "report_root", "base_root"):
                 command += ["--" + field.replace("_", "-"), str(getattr(args, field))]
+            if action == "band-alignment":
+                command += [
+                    "--sensor-family",
+                    "jilin1",
+                    "--alignment-version",
+                    alignment_version,
+                    "--workers",
+                    str(args.workers),
+                ]
             if action == "quality":
                 command += ["--model-dir", str(args.model_dir), "--device-id", str(args.device_id)]
             write_json(
@@ -131,6 +200,8 @@ def follow_started_jobs(args) -> dict:
             "jobs_alive": alive,
             "verified_archives": verified,
             "cataloged_archives": cataloged,
+            "band_inventory_finished": band_ready,
+            "alignment_version": alignment_version,
             "failures": failures,
             "training_authorized": False,
             "updated_at": now(),
