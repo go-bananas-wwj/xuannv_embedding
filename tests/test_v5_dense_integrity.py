@@ -32,7 +32,7 @@ def test_dense_integrity_checks_pixels_and_grid_without_guessing_radiometry(tmp_
             count=2,
             dtype="float32",
             crs="EPSG:32650",
-            transform=from_origin(500000, 3001280, 10, 10),
+            transform=from_origin(500000, 3001280, 10 + 6e-12, 10 + 7e-12),
         ) as dst:
             dst.write(np.ones((2, 128, 128), dtype="f4"))
         blob = file.read()

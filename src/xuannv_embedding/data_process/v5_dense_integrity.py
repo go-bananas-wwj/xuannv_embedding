@@ -113,8 +113,9 @@ def inspect_dense_archive(
                         or raster.shape != (128, 128)
                         or raster.transform.b != 0
                         or raster.transform.d != 0
-                        or raster.transform.a != 10
-                        or raster.transform.e != -10
+                        or not np.allclose(
+                            [raster.transform.a, raster.transform.e], [10, -10], rtol=0, atol=1e-9
+                        )
                         or not np.allclose(raster.res, [10, 10], rtol=0, atol=1e-9)
                     ):
                         raise ValueError("dense shape/band/grid structure differs")
