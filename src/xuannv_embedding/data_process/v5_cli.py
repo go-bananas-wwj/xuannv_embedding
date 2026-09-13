@@ -210,6 +210,7 @@ def main(argv=None) -> int:
             "extract",
             "ingest",
             "catalog",
+            "catalog-partial-bands",
             "radiometry",
             "dense-integrity",
             "quality",
@@ -429,6 +430,12 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_visual import review_gaofen
 
                 record["result"] = review_gaofen(args.quality_root, args.report_root)
+            elif args.stage == "catalog-partial-bands":
+                from xuannv_embedding.data_process.v5_partial_bands import catalog_partial_bands
+
+                record["result"] = catalog_partial_bands(
+                    args.source_root, args.dataset_root, args.report_root
+                )
             elif args.stage == "catalog":
                 from xuannv_embedding.data_process.v5_catalog import build_catalog
 
