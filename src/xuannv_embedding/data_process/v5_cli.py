@@ -220,6 +220,7 @@ def main(argv=None) -> int:
             "target-values",
             "target-temporal",
             "target-sources",
+            "target-geometry",
             "visual-review",
             "followup",
             "report",
@@ -237,12 +238,18 @@ def main(argv=None) -> int:
     parser.add_argument("--sensor-family", choices=["jilin1", "gaofen"])
     parser.add_argument("--alignment-version", default="v1")
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--target-family", choices=["worldcover", "clcd", "nightlights"])
+    parser.add_argument("--max-patches", type=int)
     args = parser.parse_args(argv)
     if (
         args.stage in {"alignment-calibration", "band-alignment", "band-review"}
         and args.sensor_family is None
     ):
         parser.error("--sensor-family is required for native-band alignment")
+    if args.stage == "target-geometry" and args.target_family is None:
+        parser.error("--target-family is required for target geometry audit")
+    if args.max_patches is not None and args.max_patches <= 0:
+        parser.error("--max-patches must be positive")
     if args.stage in {"radiometry", "dense-integrity"} and args.dense_root is None:
         parser.error("--dense-root is required for dense source audits")
     if args.stage in {"quality", "gaofen-quality", "followup"} and args.model_dir is None:
@@ -268,6 +275,8 @@ def main(argv=None) -> int:
             else f".{args.stage}.lock"
         )
     )
+    if args.stage == "target-geometry":
+        lock_name = f".target-geometry.{args.target_family}.lock"
     with (args.source_root / lock_name).open("a") as mutex:
         try:
             fcntl.flock(mutex, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -292,6 +301,8 @@ def main(argv=None) -> int:
             if args.stage in {"alignment-calibration", "band-alignment", "band-review"}
             else args.stage
         )
+        if args.stage == "target-geometry":
+            record_name = f"target-geometry_{args.target_family}"
         record_path = args.report_root / "stages" / (record_name + ".json")
         write_json(record_path, record)
         try:
@@ -309,6 +320,15 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_followup import follow_started_jobs
 
                 record["result"] = follow_started_jobs(args)
+            elif args.stage == "target-geometry":
+                from xuannv_embedding.data_process.v5_target_geometry import audit_target_geometry
+
+                record["result"] = audit_target_geometry(
+                    args.dataset_root,
+                    args.report_root,
+                    args.target_family,
+                    max_patches=args.max_patches,
+                )
             elif args.stage == "target-sources":
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 

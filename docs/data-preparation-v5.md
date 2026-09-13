@@ -410,3 +410,37 @@ SHA写入`diagnostics/native_band/visual_findings.json`，明确为助手诊断�
 
 完整工作树597项测试通过（1条既有依赖警告），Black/Ruff、仓库门禁及sdist/wheel构建
 通过。上述实际CLI生成成功；图片和逐观测来源清单保留在数据盘。
+
+
+### B4年度标签从锁定源重建核验
+
+新增`target-geometry --target-family worldcover|clcd|nightlights`，使用四个既有根目录。
+`--max-patches 32`明确生成pilot_32诊断；不传该参数才核验完整62,000位置。不同产品
+互斥锁分开，试验和全量产物目录分开，不能把首批结果覆盖成全量状态。
+
+输入为冻结registry、targets/manifest.parquet、已完成target_source_audit.json指向的
+原始ZIP及target_value_audit.parquet。每年度开始重新计算实际源ZIP SHA并与锁比较；
+WorldCover/CLCD/夜光严格选择对应年TIFF成员，排除其他年及不同夜光派生产品。
+读取真实GeoTIFF CRS/仿射/范围/NoData/掩膜/比例，文件名只用于产品与年份识别。
+
+按每个1280米网格重建128×128标签：类别最近邻，夜光双线性；插值读取保留邻域。
+WorldCover/CLCD相邻有效类别变化的两侧像元保持未知；NoData不会参与插值或成为类别。
+类别输出逐像元精确比较，连续值容差atol=1e-5/rtol=1e-6，掩膜另作精确比较；非法
+类别、冲突重叠瓦片和无效处非零值单独报错。重建只在内存中进行，不复制标签大体积
+存储，也不覆盖原始影像或标签。
+
+每32位置写chunk receipt，绑定源索引/完整SHA、代码、运行库、registry、manifest及
+本次实际读取的标签/掩膜像元SHA。重复运行仅复用全部指纹一致的比较结果；全量结束
+还要求实际累计标签/掩膜SHA与已完成数值审核一致。输入源在运行中变化则拒绝发布。
+产物为新数据目录`quality/targets/geometry/<产品>/full|pilot_32/`中的源成员清单、
+chunks及observations.parquet；报告为`target_geometry_<产品>_<范围>.json`，包含
+处理/失败/复用数量和限制。该核验确认当前锁定年度源到标签的一致性，不能补造历史
+缺失SHA，也不能代替产品本身的独立精度评测。DEM/坡度及OSM几何审核另行处理。
+
+17:11 UTC实际小批次：32位置（29 train、1 val、2 test），两年、三个产品共192项；
+源重建与现有标签的有效掩膜差异0、像元差异0、最大绝对误差0。试验保存在各产品的
+pilot_32，未写作全国已通过。回归覆盖错年、错网格、掩膜变化、按像元比较、完整读取
+缓存复用、实际标签变化拒用和CLI分阶段合同；17项相关检查通过。
+
+该标签重建实现完成后的完整工作树603项测试通过（1条既有依赖警告），全仓
+Black/Ruff、仓库门禁及sdist/wheel构建通过。三个产品的实际pilot命令均退出成功。
