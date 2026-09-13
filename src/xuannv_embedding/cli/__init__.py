@@ -57,6 +57,7 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     data = subparsers.add_parser("data", help="网格、采样、物化、预处理与审计")
     actions = data.add_subparsers(dest="data_command", required=True)
     descriptions = {
+        "prepare-v5": "分阶段准备并验收 V5 数据（不训练）",
         "grid": "构建全国 1280 m 父网格",
         "registry": "生成全国采样 registry",
         "partition": "生成确定性的全国十等分",
@@ -76,6 +77,11 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _run_data(args: argparse.Namespace) -> int:
+    if args.data_command == "prepare-v5":
+        from xuannv_embedding.data_process.v5_cli import main as prepare_main
+
+        return prepare_main(args.forwarded_args)
+
     from xuannv_embedding.data_process.cli import dispatch
 
     return dispatch(args.data_command, args.forwarded_args)
