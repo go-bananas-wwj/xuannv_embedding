@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from xuannv_embedding import __version__
-from xuannv_embedding.downstream.heads import STANDARD_HEAD_NAMES
 
 
 def _add_downstream_commands(subparsers: argparse._SubParsersAction) -> None:
+    from xuannv_embedding.downstream.heads import STANDARD_HEAD_NAMES
+
     downstream = subparsers.add_parser("downstream", help="训练或评测标准下游头")
     actions = downstream.add_subparsers(dest="downstream_command", required=True)
 
@@ -120,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:2] == ["data", "prepare-v5"]:
+        from xuannv_embedding.data_process.v5_cli import main as prepare_main
+
+        return prepare_main(arguments[2:])
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
     if args.command in {"data", "train", "export"}:
