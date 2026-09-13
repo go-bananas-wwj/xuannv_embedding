@@ -221,6 +221,7 @@ def main(argv=None) -> int:
             "clear-alignment-calibration",
             "clear-training-calibration",
             "clear-band-audit",
+            "highres-statistics",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -263,6 +264,7 @@ def main(argv=None) -> int:
             "clear-alignment-calibration",
             "clear-training-calibration",
             "clear-band-audit",
+            "highres-statistics",
             "band-alignment",
             "band-alignment-parallel",
             "band-review",
@@ -272,7 +274,12 @@ def main(argv=None) -> int:
         parser.error("--sensor-family is required for native-band alignment")
     if (
         args.stage
-        in {"clear-alignment-calibration", "clear-training-calibration", "clear-band-audit"}
+        in {
+            "clear-alignment-calibration",
+            "clear-training-calibration",
+            "clear-band-audit",
+            "highres-statistics",
+        }
         and args.quality_root is None
     ):
         parser.error("--quality-root is required for clear alignment calibration")
@@ -317,6 +324,7 @@ def main(argv=None) -> int:
         "clear-alignment-calibration",
         "clear-training-calibration",
         "clear-band-audit",
+        "highres-statistics",
     }:
         lock_name = f".{args.stage}.{args.sensor_family}.lock"
     if args.stage == "target-geometry":
@@ -352,6 +360,7 @@ def main(argv=None) -> int:
             "clear-alignment-calibration",
             "clear-training-calibration",
             "clear-band-audit",
+            "highres-statistics",
         }:
             record_name = f"{args.stage}_{args.sensor_family}"
         record_path = args.report_root / "stages" / (record_name + ".json")
@@ -407,6 +416,18 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
+            elif args.stage == "highres-statistics":
+                from xuannv_embedding.data_process.v5_highres_statistics import (
+                    run_highres_statistics,
+                )
+
+                record["result"] = run_highres_statistics(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    args.quality_root,
+                    limit=args.max_scenes,
+                )
             elif args.stage == "clear-band-audit":
                 from xuannv_embedding.data_process.v5_clear_audit import run_clear_audit
 
