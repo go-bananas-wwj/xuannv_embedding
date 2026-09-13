@@ -202,17 +202,33 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--stage",
         required=True,
-        choices=["source-lock", "download", "extract", "ingest", "catalog"],
+        choices=[
+            "source-lock",
+            "download",
+            "extract",
+            "ingest",
+            "catalog",
+            "radiometry",
+            "targets",
+            "report",
+        ],
     )
     for key in ["source-root", "dataset-root", "report-root", "base-root"]:
         parser.add_argument("--" + key, type=Path, required=True)
     parser.add_argument("--limit", type=int, default=64, help="number of archive packages, 1..64")
+    parser.add_argument("--dense-root", type=Path)
     args = parser.parse_args(argv)
+    if args.stage == "radiometry" and args.dense_root is None:
+        parser.error("--dense-root is required for radiometry")
     if not 1 <= args.limit <= 64:
         parser.error("--limit must be between 1 and 64")
     args.source_root.mkdir(parents=True, exist_ok=True)
     args.report_root.mkdir(parents=True, exist_ok=True)
-    lock_name = ".catalog.lock" if args.stage == "catalog" else ".prepare.lock"
+    lock_name = (
+        ".prepare.lock"
+        if args.stage in {"source-lock", "download", "extract", "ingest"}
+        else f".{args.stage}.lock"
+    )
     with (args.source_root / lock_name).open("a") as mutex:
         try:
             fcntl.flock(mutex, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -224,6 +240,9 @@ def main(argv=None) -> int:
             "status": "running",
             "parameters": {"limit": args.limit},
             "code_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+        }
+        record["code_fingerprint"] = {
+            path.name: sha256(path) for path in Path(__file__).parent.glob("v5_*.py")
         }
         record_path = args.report_root / "stages" / (args.stage + ".json")
         write_json(record_path, record)
@@ -238,6 +257,23 @@ def main(argv=None) -> int:
                 record["result"] = build_catalog(
                     args.source_root, args.dataset_root, args.report_root
                 )
+            elif args.stage in {"radiometry", "targets", "report"}:
+                from xuannv_embedding.data_process.v5_audit import (
+                    audit_radiometry,
+                    audit_targets,
+                    report_progress,
+                )
+
+                if args.stage == "radiometry":
+                    record["result"] = audit_radiometry(args.dense_root, args.report_root)
+                elif args.stage == "targets":
+                    record["result"] = audit_targets(
+                        args.base_root, args.dataset_root, args.report_root
+                    )
+                else:
+                    record["result"] = report_progress(
+                        args.source_root, args.dataset_root, args.report_root
+                    )
             elif args.stage != "source-lock":
                 acquire(args, source)
             record["status"] = "complete"
