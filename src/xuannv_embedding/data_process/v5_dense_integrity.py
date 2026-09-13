@@ -20,6 +20,12 @@ from xuannv_embedding.data_process.v5_cli import atomic_parquet
 from xuannv_embedding.data_process.v5_sources import now, sha256, write_json
 
 BAND_COUNTS = {"s2_local": 10, "s1_local": 2, "landsat_local": 6}
+# Storage geometry is observed independently of band identities or physical scaling.
+STORED_GRIDS = {
+    "s2_local": {"bands": 10, "shape": [128, 128], "pixel_size_m": 10.0},
+    "s1_local": {"bands": 2, "shape": [128, 128], "pixel_size_m": 10.0},
+    "landsat_local": {"bands": 6, "shape": [43, 43], "pixel_size_m": 1280 / 43},
+}
 SCHEMA = pa.schema(
     [
         ("member_name", pa.string()),
@@ -40,6 +46,8 @@ def inspect_dense_archive(
 ) -> dict:
     if product not in BAND_COUNTS or year not in (2020, 2021) or not 1 <= month <= 12:
         raise ValueError("unsupported dense archive interval/product")
+    geometry_contract = STORED_GRIDS[product]
+    pixel_size = geometry_contract["pixel_size_m"]
     key = f"{product}_{year}_{month:02d}"
     output_root.mkdir(parents=True, exist_ok=True)
     initial_stat = path.stat()
@@ -110,13 +118,16 @@ def inspect_dense_archive(
                     row["patch_id"], row["split"] = lookup[geometry]
                     if (
                         raster.count != BAND_COUNTS[product]
-                        or raster.shape != (128, 128)
+                        or raster.shape != tuple(geometry_contract["shape"])
                         or raster.transform.b != 0
                         or raster.transform.d != 0
                         or not np.allclose(
-                            [raster.transform.a, raster.transform.e], [10, -10], rtol=0, atol=1e-9
+                            [raster.transform.a, raster.transform.e],
+                            [pixel_size, -pixel_size],
+                            rtol=0,
+                            atol=1e-9,
                         )
-                        or not np.allclose(raster.res, [10, 10], rtol=0, atol=1e-9)
+                        or not np.allclose(raster.res, [pixel_size, pixel_size], rtol=0, atol=1e-9)
                     ):
                         raise ValueError("dense shape/band/grid structure differs")
                     nonfinite = 0
@@ -127,6 +138,7 @@ def inspect_dense_archive(
                     row["nonfinite_pixels"] = nonfinite
                     row["metadata_json"] = json.dumps(
                         {
+                            "shape": list(raster.shape),
                             "crs": str(raster.crs),
                             "transform": list(raster.transform)[:6],
                             "descriptions": raster.descriptions,
@@ -191,12 +203,28 @@ def inspect_dense_archive(
         "inventory_sha256": sha256(inventory),
         "finished_at": now(),
         "physical_contract_verified": False,
+        "stored_grid_contract": geometry_contract,
     }
     write_json(receipt_path, result)
     return result
 
 
-def audit_dense_integrity(dense_root: Path, dataset_root: Path, report_root: Path) -> dict:
+def audit_dense_integrity(
+    dense_root: Path,
+    dataset_root: Path,
+    report_root: Path,
+    *,
+    audit_version: str = "v1",
+    selected_product: str | None = None,
+) -> dict:
+    if audit_version not in {"v1", "v2"} or (
+        selected_product is not None and selected_product not in BAND_COUNTS
+    ):
+        raise ValueError("unsupported dense audit version or product")
+    if selected_product is not None and audit_version == "v1":
+        raise ValueError("product-specific reruns require an isolated v2 audit")
+    if audit_version != "v1":
+        report_root = report_root / "dense_integrity" / audit_version / (selected_product or "all")
     registry = pd.read_parquet(dataset_root / "registry/national_62000.parquet")
     selected = []
     for product, folder in [
@@ -204,6 +232,8 @@ def audit_dense_integrity(dense_root: Path, dataset_root: Path, report_root: Pat
         ("s1_local", "pc-s1"),
         ("landsat_local", "pc-ls"),
     ]:
+        if selected_product is not None and product != selected_product:
+            continue
         for year in (2020, 2021):
             for month in range(1, 13):
                 path = (

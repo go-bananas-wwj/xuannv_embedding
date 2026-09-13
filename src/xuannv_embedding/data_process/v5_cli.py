@@ -246,6 +246,8 @@ def main(argv=None) -> int:
         parser.add_argument("--" + key, type=Path, required=True)
     parser.add_argument("--limit", type=int, default=64, help="number of archive packages, 1..64")
     parser.add_argument("--dense-root", type=Path)
+    parser.add_argument("--dense-audit-version", choices=["v1", "v2"], default="v1")
+    parser.add_argument("--dense-product", choices=["s2_local", "s1_local", "landsat_local"])
     parser.add_argument("--model-dir", type=Path)
     parser.add_argument("--gaofen-source-catalog", type=Path)
     parser.add_argument("--quality-root", type=Path)
@@ -301,6 +303,12 @@ def main(argv=None) -> int:
         parser.error("--target-family is required for target geometry audit")
     if args.max_patches is not None and args.max_patches <= 0:
         parser.error("--max-patches must be positive")
+    if (
+        args.stage == "dense-integrity"
+        and args.dense_product is not None
+        and args.dense_audit_version == "v1"
+    ):
+        parser.error("--dense-product requires --dense-audit-version v2")
     if args.stage in {"radiometry", "dense-integrity"} and args.dense_root is None:
         parser.error("--dense-root is required for dense source audits")
     if (
@@ -343,6 +351,10 @@ def main(argv=None) -> int:
         lock_name = f".{args.stage}.{args.sensor_family}.lock"
     if args.stage == "target-geometry":
         lock_name = f".target-geometry.{args.target_family}.lock"
+    if args.stage == "dense-integrity" and args.dense_audit_version != "v1":
+        lock_name = (
+            f".dense-integrity.{args.dense_audit_version}.{args.dense_product or 'all'}.lock"
+        )
     with (args.source_root / lock_name).open("a") as mutex:
         try:
             fcntl.flock(mutex, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -379,6 +391,10 @@ def main(argv=None) -> int:
             "adaptive-alignment-calibration",
         }:
             record_name = f"{args.stage}_{args.sensor_family}"
+        if args.stage == "dense-integrity" and args.dense_audit_version != "v1":
+            record_name = (
+                f"dense-integrity_{args.dense_audit_version}_{args.dense_product or 'all'}"
+            )
         record_path = args.report_root / "stages" / (record_name + ".json")
         write_json(record_path, record)
         try:
@@ -389,8 +405,14 @@ def main(argv=None) -> int:
             if args.stage == "dense-integrity":
                 from xuannv_embedding.data_process.v5_dense_integrity import audit_dense_integrity
 
+                options = {}
+                if args.dense_audit_version != "v1":
+                    options = {
+                        "audit_version": args.dense_audit_version,
+                        "selected_product": args.dense_product,
+                    }
                 record["result"] = audit_dense_integrity(
-                    args.dense_root, args.dataset_root, args.report_root
+                    args.dense_root, args.dataset_root, args.report_root, **options
                 )
             elif args.stage == "followup":
                 from xuannv_embedding.data_process.v5_followup import follow_started_jobs
