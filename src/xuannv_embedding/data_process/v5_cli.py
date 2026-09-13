@@ -219,6 +219,7 @@ def main(argv=None) -> int:
             "cloud-resolution-audit",
             "alignment-calibration",
             "band-alignment",
+            "band-alignment-parallel",
             "band-review",
             "targets",
             "target-values",
@@ -252,7 +253,8 @@ def main(argv=None) -> int:
     parser.add_argument("--target-audit-version", choices=["v1", "v2"], default="v1")
     args = parser.parse_args(argv)
     if (
-        args.stage in {"alignment-calibration", "band-alignment", "band-review"}
+        args.stage
+        in {"alignment-calibration", "band-alignment", "band-alignment-parallel", "band-review"}
         and args.sensor_family is None
     ):
         parser.error("--sensor-family is required for native-band alignment")
@@ -284,10 +286,13 @@ def main(argv=None) -> int:
         if args.stage in {"source-lock", "download", "extract", "ingest"}
         else (
             f".{args.stage}.{args.sensor_family}.lock"
-            if args.stage in {"alignment-calibration", "band-alignment", "band-review"}
+            if args.stage
+            in {"alignment-calibration", "band-alignment", "band-alignment-parallel", "band-review"}
             else f".{args.stage}.lock"
         )
     )
+    if args.stage == "band-alignment-parallel":
+        lock_name = f".band-alignment.{args.sensor_family}.lock"
     if args.stage == "target-geometry":
         lock_name = f".target-geometry.{args.target_family}.lock"
     with (args.source_root / lock_name).open("a") as mutex:
@@ -311,7 +316,8 @@ def main(argv=None) -> int:
         }
         record_name = (
             f"{args.stage}_{args.sensor_family}"
-            if args.stage in {"alignment-calibration", "band-alignment", "band-review"}
+            if args.stage
+            in {"alignment-calibration", "band-alignment", "band-alignment-parallel", "band-review"}
             else args.stage
         )
         if args.stage == "target-geometry":
@@ -377,6 +383,18 @@ def main(argv=None) -> int:
                     args.report_root,
                     args.sensor_family,
                     version=args.alignment_version,
+                )
+            elif args.stage == "band-alignment-parallel":
+                from xuannv_embedding.data_process.v5_parallel_intraband import (
+                    run_parallel_intraband,
+                )
+
+                record["result"] = run_parallel_intraband(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    version=args.alignment_version,
+                    workers=args.workers,
                 )
             elif args.stage in {"alignment-calibration", "band-alignment"}:
                 from xuannv_embedding.data_process.v5_intraband import (
