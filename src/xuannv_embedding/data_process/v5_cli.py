@@ -213,6 +213,7 @@ def main(argv=None) -> int:
             "gaofen-quality",
             "targets",
             "target-values",
+            "visual-review",
             "report",
         ],
     )
@@ -222,6 +223,7 @@ def main(argv=None) -> int:
     parser.add_argument("--dense-root", type=Path)
     parser.add_argument("--model-dir", type=Path)
     parser.add_argument("--gaofen-source-catalog", type=Path)
+    parser.add_argument("--quality-root", type=Path)
     parser.add_argument("--device-id", type=int, default=1)
     parser.add_argument("--max-scenes", type=int)
     args = parser.parse_args(argv)
@@ -231,6 +233,8 @@ def main(argv=None) -> int:
         parser.error("--model-dir is required for quality")
     if args.stage == "gaofen-quality" and args.gaofen_source_catalog is None:
         parser.error("--gaofen-source-catalog is required")
+    if args.stage == "visual-review" and args.quality_root is None:
+        parser.error("--quality-root is required for visual-review")
     if args.max_scenes is not None and args.max_scenes <= 0:
         parser.error("--max-scenes must be positive")
     if not 1 <= args.limit <= 64:
@@ -268,6 +272,10 @@ def main(argv=None) -> int:
                 from xuannv_embedding.data_process.v5_targets import audit_target_values
 
                 record["result"] = audit_target_values(args.dataset_root, args.report_root)
+            elif args.stage == "visual-review":
+                from xuannv_embedding.data_process.v5_visual import review_gaofen
+
+                record["result"] = review_gaofen(args.quality_root, args.report_root)
             elif args.stage == "catalog":
                 from xuannv_embedding.data_process.v5_catalog import build_catalog
 
