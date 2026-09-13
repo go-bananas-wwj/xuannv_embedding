@@ -215,6 +215,7 @@ def main(argv=None) -> int:
             "target-values",
             "target-sources",
             "visual-review",
+            "followup",
             "report",
         ],
     )
@@ -230,7 +231,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     if args.stage == "radiometry" and args.dense_root is None:
         parser.error("--dense-root is required for radiometry")
-    if args.stage in {"quality", "gaofen-quality"} and args.model_dir is None:
+    if args.stage in {"quality", "gaofen-quality", "followup"} and args.model_dir is None:
         parser.error("--model-dir is required for quality")
     if args.stage == "gaofen-quality" and args.gaofen_source_catalog is None:
         parser.error("--gaofen-source-catalog is required")
@@ -273,7 +274,11 @@ def main(argv=None) -> int:
             input_lock(args, source)
             record["input_fingerprint"] = source["manifest_sha256"]
             write_json(record_path, record)
-            if args.stage == "target-sources":
+            if args.stage == "followup":
+                from xuannv_embedding.data_process.v5_followup import follow_started_jobs
+
+                record["result"] = follow_started_jobs(args)
+            elif args.stage == "target-sources":
                 from xuannv_embedding.data_process.v5_provenance import audit_target_sources
 
                 record["result"] = audit_target_sources(args.base_root, args.report_root)
