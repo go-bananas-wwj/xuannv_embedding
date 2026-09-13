@@ -226,6 +226,7 @@ def main(argv=None) -> int:
             "target-sources",
             "target-geometry",
             "dem-geometry",
+            "osm-geometry",
             "dem-corrections",
             "visual-review",
             "followup",
@@ -333,6 +334,12 @@ def main(argv=None) -> int:
                 if args.max_patches is not None:
                     raise ValueError("DEM corrections require the complete audit and grid")
                 record["result"] = build_dem_corrections(args.dataset_root, args.report_root)
+            elif args.stage == "osm-geometry":
+                from xuannv_embedding.data_process.v5_osm_geometry import audit_osm_geometry
+
+                record["result"] = audit_osm_geometry(
+                    args.dataset_root, args.report_root, max_patches=args.max_patches
+                )
             elif args.stage == "dem-geometry":
                 from xuannv_embedding.data_process.v5_dem_geometry import audit_dem_geometry
 
