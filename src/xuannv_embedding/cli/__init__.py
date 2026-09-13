@@ -88,6 +88,12 @@ def _run_export(args: argparse.Namespace) -> int:
     return export_main(args.forwarded_args)
 
 
+def _run_experiment(args: argparse.Namespace) -> int:
+    from xuannv_embedding.training.experiment import main as experiment_main
+
+    return experiment_main(args.forwarded_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建不依赖可选运行组件的顶层命令解析器。"""
     parser = argparse.ArgumentParser(
@@ -104,6 +110,8 @@ def build_parser() -> argparse.ArgumentParser:
         "export", help="从严格 checkpoint 导出 embedding", add_help=False
     )
     export.set_defaults(handler=_run_export)
+    experiment = subparsers.add_parser("experiment", help="准备和运行独立区域实验", add_help=False)
+    experiment.set_defaults(handler=_run_experiment)
     return parser
 
 
@@ -111,7 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
-    if args.command in {"data", "train", "export"}:
+    if args.command in {"data", "train", "export", "experiment"}:
         args.forwarded_args = unknown
     elif unknown:
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")
