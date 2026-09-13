@@ -212,6 +212,7 @@ def main(argv=None) -> int:
             "quality",
             "gaofen-quality",
             "targets",
+            "target-values",
             "report",
         ],
     )
@@ -263,7 +264,11 @@ def main(argv=None) -> int:
             input_lock(args, source)
             record["input_fingerprint"] = source["manifest_sha256"]
             write_json(record_path, record)
-            if args.stage == "catalog":
+            if args.stage == "target-values":
+                from xuannv_embedding.data_process.v5_targets import audit_target_values
+
+                record["result"] = audit_target_values(args.dataset_root, args.report_root)
+            elif args.stage == "catalog":
                 from xuannv_embedding.data_process.v5_catalog import build_catalog
 
                 record["result"] = build_catalog(
