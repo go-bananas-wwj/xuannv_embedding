@@ -42,11 +42,13 @@ def input_lock(args: argparse.Namespace, source: dict) -> None:
         "source_manifest_sha256": source["manifest_sha256"],
     }
     path = args.dataset_root / "locks/input.lock.json"
+    target = args.dataset_root / "registry/national_62000.parquet"
     if path.exists():
         if json.loads(path.read_text())["fingerprint"] != fingerprint:
             raise ValueError("input fingerprint changed; choose a new dataset version")
+        if not target.is_file() or sha256(target) != fingerprint["registry_sha256"]:
+            raise ValueError("dataset registry is missing or differs from the locked source")
         return
-    target = args.dataset_root / "registry/national_62000.parquet"
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() and sha256(target) != fingerprint["registry_sha256"]:
         raise ValueError("existing grid differs from source")
