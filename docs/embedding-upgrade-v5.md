@@ -928,3 +928,39 @@ b3fab4f9a5604da910eedbe35106e4cdfaadeadd3f127782326938eb87010030。
 吉林一号候选统计62,698观测实际完整重跑于05:28:01结束，15份正式文件不变。
 这些结果分别位于diagnostics/target_reader/replay_verification.json和
  diagnostics/candidate_statistics/jilin1_replay_verification.json；仍不代替完整B7/C1。
+
+
+### 全国季度来源索引已生成及独立核对结果（2026-09-14）
+
+旧审核兼容修复688661a649565a719becb16fc39b1b0e881af2a6已push至wwj并核对远端。
+新增2项回归先失败；21项定向、工作树779项、干净快照567项测试及两套格式/
+静态/仓库门禁/build全部通过，各2个非失败弃用警告。修复使用的4个文件与干净
+测试快照逐字节一致；原有未提交改动没有纳入。另已核对全部48个S1/S2月度表，
+逐月读取固定第一张原始影像，48张的实际像元SHA、波段数及128×128形状全部匹配。
+该小样本只佐证旧形状合同，不宣称重新扫描了全部基础像元或核实了物理缩放。
+
+恢复后的统一CLI于06:14:08 UTC完成全国季度来源索引，版本fed03caca6f637b13828，
+实际目录为新数据目录observations/index/quarters/fed03caca6f637b13828。输出锁SHA为
+3360209b1e4440dea942174c7d9803c13ee130f456a8fa8f0e119d415ed006c4。
+
+- 原62,000位置、两年四季度共496,000条查询记录，原空间划分不变。
+- 72个基础归档对应4,425,936个实际月度观测；缺38,064个月度产品/位置槽位。
+- Landsat：1,480,709条显式形状记录，缺7,291槽位；S1：1,467,180条旧审核形状
+  记录，缺20,820；S2：1,478,047条旧审核形状记录，缺9,953。每包保留形状证据类别。
+- 高分年度候选185,277场景组、默认185,058组；仍来自完整高分QA及吉林一号QA16
+  冻结范围，后续64包最终范围须新版本。每族每位置/年最多4个默认场景，其余保留候选。
+
+独立核验于06:15:28完成：逐条检查496,000查询的基础引用、缺失槽位、年/季度边界、
+年份标签、划分及年度高分默认集合；全部来源/代码/输出SHA匹配。报告目录
+ diagnostics/quarter_legacy/production_verification.json保留证据，
+ quarter_source_report.md给出基础来源和各年份/划分/季度覆盖表。48张旧格式原始
+影像预检见real_legacy_preflight.json；原失败运行在diagnostics/quarter_index中保留。
+
+已将同版本元数据核验重跑交给独立后台任务，7个正式文件的SHA/修改时间基准位于
+before_replay.json，完成后才会生成replay_verification.json。它是来源与索引重现性
+检查，不替代B7实际影像读取。启动和日志在followup_worker.json、followup.log。
+
+**当前仍为source_index_complete_quality_pending，sample_index_gate_passed=false。**
+基础影像物理波段/缩放与QA尚未核实，所以可训练基础观测和可用基础查询数均为0；
+已有但隔离的来源保留，不与缺文件混淆。还需真实物理/质量合同、匹配统计、全模态
+加载、完整64包处理及C1的96组影像材料。完整数据验收仍incomplete，训练授权false。
