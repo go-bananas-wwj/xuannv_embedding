@@ -235,4 +235,90 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
         return manifest_main(argv)
     if command == "validate":
         return validate_main(argv)
+    if command == "storage":
+        return storage_main(argv)
     raise ValueError(f"未知 data command: {command}")
+
+
+def storage_main(argv: Sequence[str] | None = None) -> int:
+    """Initialize, inventory, plan, or execute the versioned storage layout."""
+    parser = argparse.ArgumentParser(prog="xuannv data storage")
+    actions = parser.add_subparsers(dest="action", required=True)
+    init = actions.add_parser("init", help="创建 raw/processed/experiments 等目录")
+    init.add_argument("--root", type=Path, required=True)
+    inventory = actions.add_parser("inventory", help="生成文件级清单，不跟随软链接")
+    inventory.add_argument("--root", type=Path, required=True)
+    inventory.add_argument("--output", type=Path, required=True)
+    inventory.add_argument("--hash-files", action="store_true")
+    inventory.add_argument("--max-files", type=int)
+    plan = actions.add_parser("plan", help="生成迁移计划，不修改数据")
+    plan.add_argument("--root", type=Path, required=True)
+    plan.add_argument("--output", type=Path, required=True)
+    execute = actions.add_parser("migrate", help="执行已审阅的迁移计划")
+    execute.add_argument("--plan", type=Path, required=True)
+    execute.add_argument("--allow-active", action="store_true")
+    execute.add_argument("--no-compat-symlink", action="store_true")
+    verify = actions.add_parser("verify", help="验证迁移后的目标和兼容软链接")
+    verify.add_argument("--journal", type=Path, required=True)
+    rollback = actions.add_parser("rollback", help="按迁移日志安全回退")
+    rollback.add_argument("--journal", type=Path, required=True)
+    cleanup = actions.add_parser("cleanup", help="生成待审核清理清单，不删除数据")
+    cleanup.add_argument("--root", type=Path, required=True)
+    cleanup.add_argument("--output", type=Path, required=True)
+    backup = actions.add_parser("backup", help="按容量预算调用 restic 并写入回执")
+    backup.add_argument("--source", type=Path, action="append", required=True)
+    backup.add_argument("--repository", type=Path, required=True)
+    backup.add_argument("--password-file", type=Path, required=True)
+    backup.add_argument("--output", type=Path, required=True)
+    backup.add_argument("--restic", default="restic")
+    backup.add_argument("--max-gib", type=int, default=1024)
+    backup.add_argument("--min-free-gib", type=int, default=200)
+    backup.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+    from xuannv_embedding.data_process.storage import (
+        backup_sources,
+        cleanup_candidates,
+        execute_plan,
+        initialize_layout,
+        make_plan,
+        rollback_migration,
+        verify_migration,
+        write_inventory,
+    )
+
+    if args.action == "init":
+        result = initialize_layout(args.root)
+    elif args.action == "inventory":
+        result = write_inventory(
+            args.root,
+            args.output,
+            hash_files=args.hash_files,
+            max_files=args.max_files,
+        )
+    elif args.action == "plan":
+        result = make_plan(args.root, args.output)
+    elif args.action == "migrate":
+        result = execute_plan(
+            args.plan,
+            allow_active=args.allow_active,
+            symlink_compat=not args.no_compat_symlink,
+        )
+    elif args.action == "verify":
+        result = verify_migration(args.journal)
+    elif args.action == "rollback":
+        result = rollback_migration(args.journal)
+    elif args.action == "backup":
+        result = backup_sources(
+            args.source,
+            args.repository,
+            args.password_file,
+            args.output,
+            restic=args.restic,
+            max_bytes=args.max_gib * 1024**3,
+            min_free_bytes=args.min_free_gib * 1024**3,
+            dry_run=args.dry_run,
+        )
+    else:
+        result = cleanup_candidates(args.root, args.output)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
