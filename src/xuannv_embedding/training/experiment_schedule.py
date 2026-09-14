@@ -102,6 +102,10 @@ def follow(root: Path) -> None:
             logpath = root / f"{name}.log"
             if destination.exists() or logpath.exists():
                 raise FileExistsError(name)
+            # CANN writes compiler reports to cwd; keep them out of the code snapshot
+            # and prevent independent runs from overwriting one another's reports.
+            runtime = root / "runtime" / name
+            runtime.mkdir(parents=True, exist_ok=False)
             command = [
                 sys.executable,
                 "-u",
@@ -123,7 +127,7 @@ def follow(root: Path) -> None:
             with logpath.open("x") as log:
                 process = subprocess.Popen(
                     command,
-                    cwd=code,
+                    cwd=runtime,
                     env=env,
                     stdout=log,
                     stderr=subprocess.STDOUT,
@@ -139,6 +143,7 @@ def follow(root: Path) -> None:
                     "lr": selected,
                     "output": str(destination),
                     "log": str(logpath),
+                    "runtime": str(runtime),
                     "command": command,
                     "initialization": "scratch",
                     "epochs": 800,

@@ -49,4 +49,7 @@ starts each full baseline from scratch using the complete development training s
 prevents concurrent controllers; existing formal registrations are never silently relaunched.
 Training uses the immutable code snapshot and cache checksums in the registry. Any failed pilot
 stops advancement. `controller_status.json` records waiting, running, completion or failure.
+Each full baseline runs in its own `runtime/<run-name>` directory beneath the experiment root.
+Device compiler reports therefore stay outside the immutable source tree and do not overwrite
+reports from other runs. The registry records this working directory alongside each run.
 The controller does not implement or launch high-resolution adapters after the baselines finish.
