@@ -11,9 +11,8 @@ import pandas as pd
 import zarr
 from scipy.ndimage import gaussian_filter, shift
 
-from xuannv_embedding.data_process.v5_adaptive_alignment import LAYOUT
 from xuannv_embedding.data_process.v5_alignment import audit_translation
-from xuannv_embedding.data_process.v5_cfog_alignment import PARAMETERS, audit_cfog
+from xuannv_embedding.data_process.v5_cfog_alignment import LAYOUT, PARAMETERS, audit_cfog
 from xuannv_embedding.data_process.v5_clear_intraband import NativeQualityReader
 from xuannv_embedding.data_process.v5_cli import atomic_parquet
 from xuannv_embedding.data_process.v5_intraband import CALIBRATION, _runtime_versions
@@ -29,6 +28,7 @@ EXPERIMENT = {
     "descriptor_source": "https://arxiv.org/abs/1808.06194v8",
     "project_adaptations": "finite mask support, channel-centered NCC, independent masks",
     "threshold_policy": "0.80 NCC and 0.01 peak margin fixed before real calibration",
+    "support_budget": "56px templates, complete 9x9 support; 70% overlap unchanged",
 }
 
 

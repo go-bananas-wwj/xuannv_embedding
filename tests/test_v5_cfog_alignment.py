@@ -59,7 +59,7 @@ def test_structural_alignment_recovers_fractional_shifts_with_separate_cloud_mas
         assert not result["pixel_fusion_authorized"]
         assert len(result["windows"]) <= 4
         for w in result["windows"]:
-            assert w["valid_pixels"] >= 64 * 64 * 0.7
+            assert w["valid_pixels"] >= 56 * 56 * 0.7
 
 
 def test_structural_alignment_rejects_flat_ramps_periodicity_and_unrelated_textures():
@@ -92,3 +92,46 @@ def test_structural_layout_keeps_usable_interior_without_double_eroding_selectio
     result = audit_cfog(a, a, valid, valid, gsd=5)
     assert result["status"] == "passed"
     assert result["valid_windows"] == 4
+
+
+def test_structural_windows_allow_true_half_pixel_support_on_central_clear_regions():
+    from xuannv_embedding.data_process.v5_cfog_alignment import PARAMETERS, audit_cfog
+
+    for pixels in [160, 256]:
+        a = gaussian_filter(np.random.default_rng(37).normal(size=(pixels, pixels)), 1.5)
+        mask = np.zeros(a.shape, bool)
+        start = (pixels - 116) // 2
+        mask[start : start + 116, start : start + 116] = True
+        for delta in [(0, 0.5), (0, 1.5), (2, -1)]:
+            b = shift(a, delta, order=1, mode="constant", cval=0)
+            moved = shift(mask.astype(float), delta, order=1, mode="constant", cval=0) >= 1 - 1e-6
+            result = audit_cfog(a, b, mask, moved, gsd=5)
+            assert result["status"] != "uncertain"
+            np.testing.assert_allclose(
+                np.array(result["translation_yx_m"]) / 5, -np.array(delta), atol=0.35
+            )
+            assert result["valid_windows"] >= 3
+    assert PARAMETERS["window_pixels"] == 56
+    assert PARAMETERS["minimum_valid_fraction"] == 0.70
+    assert PARAMETERS["minimum_correlation"] == 0.80
+    assert PARAMETERS["minimum_peak_margin"] == 0.01
+    assert PARAMETERS["maximum_residual_m"] == 5
+
+
+def test_structural_window_layout_uses_descriptor_support_without_overlap():
+    from xuannv_embedding.data_process.v5_cfog_alignment import cfog_features, select_cfog_windows
+
+    a = gaussian_filter(np.random.default_rng(21).normal(size=(256, 256)), 1.5)
+    mask = np.zeros(a.shape, bool)
+    mask[70:186, 70:186] = True
+    features, support = cfog_features(a, mask)
+    selected = select_cfog_windows(features, support)
+    assert all(selected["reference_qualified"])
+    regions = np.zeros(a.shape, int)
+    for y, x in selected["origins_yx"]:
+        regions[y : y + 56, x : x + 56] += 1
+        assert support[y : y + 56, x : x + 56].mean() >= 0.9
+    assert regions.max() == 1
+    assert selected == select_cfog_windows(features.copy(), support.copy())
+    with pytest.raises(ValueError):
+        select_cfog_windows(features[:, :100, :100], support[:100, :100])

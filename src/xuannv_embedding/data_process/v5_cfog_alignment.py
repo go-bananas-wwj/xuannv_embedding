@@ -12,10 +12,10 @@ from scipy.ndimage import binary_erosion, correlate1d, gaussian_filter, map_coor
 from scipy.optimize import minimize
 from scipy.signal import correlate
 
-from xuannv_embedding.data_process.v5_adaptive_alignment import select_windows
+from xuannv_embedding.data_process.v5_adaptive_alignment import _sums
 
 PARAMETERS = {
-    "method": "masked_CFOG_channel_centered_NCC_candidate_v1",
+    "method": "masked_CFOG_channel_centered_NCC_candidate_v2",
     "orientation_channels": 9,
     "gaussian_sigma_pixels": 0.8,
     "gaussian_radius_pixels": 3,
@@ -25,7 +25,7 @@ PARAMETERS = {
     "minimum_correlation": 0.80,
     "minimum_peak_margin": 0.01,
     "peak_exclusion_radius_pixels": 3,
-    "window_pixels": 64,
+    "window_pixels": 56,
     "maximum_shift_pixels": 16,
     "minimum_windows": 3,
     "maximum_window_deviation_pixels": 0.5,
@@ -61,6 +61,73 @@ def cfog_features(values, valid):
     output = (np.roll(output, 1, axis=0) + 2 * output + np.roll(output, -1, axis=0)) / 4
     output[:, ~support] = 0
     return output, support
+
+
+LAYOUT = {
+    "method": "reference_CFOG_support_four_tiles_v2",
+    "preserve_qualified_corners": True,
+    "minimum_summed_channel_variance": 1e-8,
+    "maximum_templates": 4,
+    "overlapping_templates": False,
+    "selection_uses_moving_pixels_or_matches": False,
+    "ranking": "qualified_count, minimum_qualified_coverage, total_qualified_coverage, y, x",
+}
+
+
+def select_cfog_windows(features, support):
+    """Select four disjoint windows from actual descriptor support before matching."""
+    size, pad = PARAMETERS["window_pixels"], PARAMETERS["maximum_shift_pixels"]
+    features, support = np.asarray(features), np.asarray(support)
+    if (
+        features.ndim != 3
+        or features.shape[0] != PARAMETERS["orientation_channels"]
+        or features.shape[1:] != support.shape
+        or support.dtype != bool
+        or min(support.shape) < 2 * (size + pad)
+        or not np.isfinite(features[:, support]).all()
+    ):
+        raise ValueError("finite features and supported grid of at least 144 pixels required")
+    counts = _sums(support, size)
+    safe = np.maximum(counts, 1)
+    variance = np.zeros_like(counts)
+    for channel in features:
+        channel = np.where(support, channel, 0)
+        mean = _sums(channel, size) / safe
+        variance += np.maximum(_sums(channel * channel, size) / safe - mean * mean, 0)
+    qualified = (counts >= size * size * PARAMETERS["minimum_valid_fraction"]) & (
+        variance >= LAYOUT["minimum_summed_channel_variance"]
+    )
+    height, width = support.shape
+    corners = [(y, x) for y in (pad, height - size - pad) for x in (pad, width - size - pad)]
+    if sum(bool(qualified[y, x]) for y, x in corners) >= PARAMETERS["minimum_windows"]:
+        origins, layout = corners, "qualified_corners"
+    else:
+        nh, nw = height - 2 * (size + pad) + 1, width - 2 * (size + pad) + 1
+        positions = ((0, 0), (0, size), (size, 0), (size, size))
+        tile_counts = np.stack(
+            [counts[pad + y : pad + y + nh, pad + x : pad + x + nw] for y, x in positions]
+        )
+        tile_ok = np.stack(
+            [qualified[pad + y : pad + y + nh, pad + x : pad + x + nw] for y, x in positions]
+        )
+        number = tile_ok.sum(0)
+        minimum = np.where(tile_ok, tile_counts, np.inf).min(0)
+        minimum[number == 0] = 0
+        total = np.where(tile_ok, tile_counts, 0).sum(0)
+        yy, xx = np.indices(number.shape)
+        order = np.lexsort(
+            (xx.ravel(), yy.ravel(), -total.ravel(), -minimum.ravel(), -number.ravel())
+        )
+        y, x = int(yy.ravel()[order[0]] + pad), int(xx.ravel()[order[0]] + pad)
+        origins = [(y, x), (y, x + size), (y + size, x), (y + size, x + size)]
+        layout = "translated_four_tiles"
+    return {
+        "layout": layout,
+        "origins_yx": [list(origin) for origin in origins],
+        "reference_qualified": [bool(qualified[y, x]) for y, x in origins],
+        "reference_valid_fractions": [float(counts[y, x] / size**2) for y, x in origins],
+        "parameters": LAYOUT,
+    }
 
 
 def feature_ncc(template, search, tvalid, svalid):
@@ -146,9 +213,7 @@ def audit_cfog(reference, moving, reference_valid, moving_valid, *, gsd):
         raise ValueError("corresponding grids and finite positive GSD required")
     left, lmask = cfog_features(reference, reference_valid)
     right, rmask = cfog_features(moving, moving_valid)
-    # Freeze the same reference-only layout as the baseline; descriptor support is
-    # enforced in matching, without double-eroding the layout qualification mask.
-    selection = select_windows(reference, reference_valid)
+    selection = select_cfog_windows(left, lmask)
     size, pad = PARAMETERS["window_pixels"], PARAMETERS["maximum_shift_pixels"]
     windows = []
     for y, x in selection["origins_yx"]:
