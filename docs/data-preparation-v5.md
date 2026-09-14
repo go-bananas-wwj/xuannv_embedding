@@ -1775,3 +1775,22 @@ download_route，最多2包、每包8个range连接保持。
 [ModelScope官方下载实现](https://github.com/modelscope/modelscope_hub/blob/main/src/modelscope_hub/_download.py)。
 采用有界并发、续传和终态校验，不直接替换SDK或改变发布清单版本。实际证据放在
 报告目录diagnostics/download_throughput，包含受控测速、源锁引用及切换验证。
+
+
+### 国内直连的生产验证（2026-09-14 02:29 UTC）
+
+直连代码e82722618f8b5dace9cb05ab901bee8e6931ee6d已推送wwj并核对远端。
+工作树722项、干净快照510项测试通过，两套Black、Ruff、仓库门禁和构建通过。
+切换保留64个数据分段的891,289,600字节，逐段旧内容摘要复核不变。已有16包
+完整文件继续本地复核；16包均已有完整提取/像素解码证明。协调器接续新下载
+进程，并保留在途云推理子进程，训练授权仍为false。
+
+相同2包×8连接配置，旧代理线路60秒窗口0.839MB/s；直连120秒窗口1.415MB/s，
+约1.69倍（提升69%）。直连两个独立60秒窗口分别1.328/1.503MB/s；5次连接快照
+均没有本机代理连接。该结果是本机相邻时段的实际观察，不保证全国数据下载
+始终同速，也不能把小文件约10倍差距写成全量提速。下一项可独立优化的等待
+是每两包后串行解压/解码：13/14包结束到15/16包开始曾间隔507.1秒。
+
+证据：报告目录diagnostics/download_throughput/production_route_verification.json
+及preserved_bytes_verification.json；完整历史下载状态保留在同目录重启前快照，
+避免把本次本地缓存复核的时间当作原始网络下载时间。
