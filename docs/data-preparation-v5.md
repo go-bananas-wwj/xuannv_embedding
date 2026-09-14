@@ -1847,3 +1847,110 @@ archive_integrity.json；只选limit时不能声称64包完成。旧完成报告
 preserved_bytes_verification.json、deployment_verification.json和qa16_verification.json。
 后续继续观察新包的下载/解码重叠，并将兼容的历史质量证据纳入扩展年度索引。
 数据验收状态仍为incomplete，训练授权仍为false。
+
+
+### 后台下载管理脚本（2026-09-14，按用户要求）
+
+下载使用独立进程会话，标准输入关闭、日志写数据盘；关闭当前对话或终端不影响
+该后台任务。实际入口为报告目录`download_background.sh`，不带参数或传`status`
+只查看状态，传`start`在已有同源直连下载存活时原样返回，不重启、不重复下载。
+主下载器仍是已提交的统一xuannv CLI，包含两包并发、断点续传、重试上限、SHA
+及解码检查。部署配置位于同目录`download_background.config.json`，记录实际路径
+和解释器，不含Token；凭据如有需要仅继承既有环境，不输出或写入配置。
+
+本次验证：原进程identity 1659653:497968731与会话ID一致，父进程为1；依次执行
+start/status均返回原进程，未创建新下载任务。16包已验证、17/18包继续下载、
+当前无失败。不需要当前对话持续轮询。脚本不自动无限重启失败下载，失败状态和
+现有重试上限保留。首次启动会把日志写入报告目录download_background.log；
+本次复用已有任务，日志仍在diagnostics/download_overlap/download_overlap_worker.log。
+
+可复用部署脚本原文如下（实际路径仅在数据盘JSON配置中；下载逻辑没有复制）：
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+# Deployment-only wrapper. All download/retry/validation logic remains in xuannv CLI.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "$SCRIPT_DIR/download_background.py" "${1:-status}"
+```
+
+```python
+"""Deployment launcher only; source locking, transfers and retries belong to xuannv."""
+import datetime
+import fcntl
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+root = Path(__file__).resolve().parent
+config = json.loads((root / 'download_background.config.json').read_text())
+report = Path(config['report_root'])
+marker = report / 'download_worker.json'
+
+
+def inspect():
+    saved = json.loads(marker.read_text()) if marker.exists() else {}
+    pid = saved.get('pid')
+    try:
+        parts = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
+        identity = f'{pid}:{parts[19]}'
+        if identity != saved.get('identity') or parts[0] == 'Z':
+            return None
+        args = Path(f'/proc/{pid}/cmdline').read_bytes().decode().strip('\0').split('\0')
+        if args[args.index('--stage') + 1] != 'ingest':
+            raise RuntimeError('recorded process is not an ingest worker')
+        if args[args.index('--source-root') + 1] != config['source_root']:
+            raise RuntimeError('recorded process uses a different source root')
+        if args[args.index('--download-route') + 1] != 'direct':
+            raise RuntimeError('recorded process is not using the direct route')
+        return {'pid': pid, 'identity': identity, 'state': parts[0],
+                'session_id': int(parts[3]), 'independent_session': int(parts[3]) == pid}
+    except FileNotFoundError:
+        return None
+
+
+def status():
+    progress_file = report / 'acquisition_progress.json'
+    progress = json.loads(progress_file.read_text()) if progress_file.exists() else {}
+    return {'worker': inspect(), 'progress_status': progress.get('status'),
+            'downloaded_archives': progress.get('downloaded_archives'),
+            'validated_archives': progress.get('validated_archives'),
+            'downloading_pair': progress.get('downloading_pair', []),
+            'failures': progress.get('failures', []), 'download_route': 'direct',
+            'training_authorized': False}
+
+
+if len(sys.argv) != 2 or sys.argv[1] not in ['start', 'status']:
+    raise SystemExit('usage: download_background.sh start|status')
+if sys.argv[1] == 'start':
+    # Serialize launch attempts. The CLI independently owns its existing data writer lock.
+    with (report / '.background-download-launch.lock').open('a') as launch_lock:
+        fcntl.flock(launch_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if inspect() is None:
+            with (Path(config['source_root']) / '.prepare.lock').open('a') as data_lock:
+                fcntl.flock(data_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            args = [config['python'], '-m', 'xuannv_embedding.cli', 'data', 'prepare-v5',
+                    '--stage', 'ingest', '--download-route', 'direct']
+            for key in ['source_root', 'dataset_root', 'report_root', 'base_root']:
+                args += ['--' + key.replace('_', '-'), config[key]]
+            env = dict(os.environ)
+            env.update(PYTHONPATH=str(Path(config['checkout']) / 'src'),
+                       LD_PRELOAD=config['preload'], OMP_NUM_THREADS='1',
+                       OPENBLAS_NUM_THREADS='1', MKL_NUM_THREADS='1')
+            for key in ['NO_PROXY', 'no_proxy']:
+                env[key] = ','.join(filter(None, [env.get(key, ''), 'modelscope.cn', '.modelscope.cn']))
+            with (report / 'download_background.log').open('ab') as log:
+                child = subprocess.Popen(args, cwd=config['checkout'], env=env,
+                                         stdin=subprocess.DEVNULL, stdout=log,
+                                         stderr=subprocess.STDOUT, start_new_session=True)
+            parts = Path(f'/proc/{child.pid}/stat').read_text().rsplit(')', 1)[1].split()
+            saved = {'pid': child.pid, 'identity': f'{child.pid}:{parts[19]}',
+                     'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                     'download_route': 'direct', 'training_authorized': False}
+            temporary = marker.with_suffix('.tmp')
+            temporary.write_text(json.dumps(saved, indent=2) + '\n')
+            temporary.replace(marker)
+print(json.dumps(status(), ensure_ascii=False, indent=2))
+```

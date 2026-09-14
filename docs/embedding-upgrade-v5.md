@@ -529,3 +529,14 @@ archive_integrity.json；只选limit时不能声称64包完成。旧完成报告
 preserved_bytes_verification.json、deployment_verification.json和qa16_verification.json。
 后续继续观察新包的下载/解码重叠，并将兼容的历史质量证据纳入扩展年度索引。
 数据验收状态仍为incomplete，训练授权仍为false。
+
+
+### 后台下载交付（2026-09-14）
+
+按用户要求整理报告目录download_background.sh的start/status入口，原直连
+下载已在独立后台会话存活，start重复调用复用原进程，当前对话无需持续等待。
+可复用脚本原文及部署、日志、运行验证见数据细则“后台下载管理脚本”章节。
+仍由统一xuannv CLI执行全部下载/解码逻辑，最多2包并发、断点及SHA检查不变；
+失败不会无限自动重启。当前16/64包完成，17/18包运行，不能作为完整验收。
+年度索引继承的回归草稿留在报告目录diagnostics/audit_inheritance，未改生产代码，
+待后续数据阶段继续实现；模型和训练仍未授权。
