@@ -222,6 +222,7 @@ def main(argv=None) -> int:
             "clear-training-calibration",
             "clear-band-audit",
             "highres-statistics",
+            "highres-eligibility",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
             "cfog-calibration",
@@ -274,6 +275,7 @@ def main(argv=None) -> int:
             "clear-training-calibration",
             "clear-band-audit",
             "highres-statistics",
+            "highres-eligibility",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
             "cfog-calibration",
@@ -292,6 +294,7 @@ def main(argv=None) -> int:
             "clear-training-calibration",
             "clear-band-audit",
             "highres-statistics",
+            "highres-eligibility",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
             "cfog-calibration",
@@ -362,6 +365,7 @@ def main(argv=None) -> int:
         "clear-training-calibration",
         "clear-band-audit",
         "highres-statistics",
+        "highres-eligibility",
         "alignment-diagnostics",
         "adaptive-alignment-calibration",
         "cfog-calibration",
@@ -410,6 +414,7 @@ def main(argv=None) -> int:
             "clear-training-calibration",
             "clear-band-audit",
             "highres-statistics",
+            "highres-eligibility",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
             "cfog-calibration",
@@ -517,6 +522,18 @@ def main(argv=None) -> int:
                 )
 
                 record["result"] = diagnose_alignment(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    args.quality_root,
+                    args.alignment_audit_root,
+                )
+            elif args.stage == "highres-eligibility":
+                from xuannv_embedding.data_process.v5_highres_eligibility import (
+                    run_highres_eligibility,
+                )
+
+                record["result"] = run_highres_eligibility(
                     args.dataset_root,
                     args.report_root,
                     args.sensor_family,
