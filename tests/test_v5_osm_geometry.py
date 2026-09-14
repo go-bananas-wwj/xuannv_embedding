@@ -110,10 +110,8 @@ def test_spatial_index_checks_raw_sources_dates_and_features_outside_target(tmp_
         SpatialIndex(reference, year=2020)
 
 
-def test_osm_geometry_full_audit_compares_all_fields_and_preserves_boundary_candidates(tmp_path):
+def _osm_fixture(tmp_path, include_edge=True):
     import hashlib
-    import json
-    from pathlib import Path
 
     import pandas as pd
     import zarr
@@ -135,7 +133,10 @@ def test_osm_geometry_full_audit_compares_all_fields_and_preserves_boundary_cand
         }
     )
     registry.to_parquet(data / "registry/national_62000.parquet", index=False)
-    refs = {str(y): _spatial_index(tmp_path / f"{y}.sqlite", y) for y in [2020, 2021]}
+    refs = {
+        str(y): _spatial_index(tmp_path / f"{y}.sqlite", y, include_edge=include_edge)
+        for y in [2020, 2021]
+    }
     current = _spatial_index(tmp_path / "current.sqlite", 2026, include_edge=False)
     base = tmp_path / "osm.zarr"
     root = zarr.open_group(str(base), mode="w")
@@ -206,6 +207,18 @@ def test_osm_geometry_full_audit_compares_all_fields_and_preserves_boundary_cand
         },
     )
     first = audit_osm_geometry(data, report)
+    return data, report, root, first
+
+
+def test_osm_geometry_full_audit_compares_all_fields_and_preserves_boundary_candidates(tmp_path):
+    import json
+    from pathlib import Path
+
+    import pandas as pd
+
+    from xuannv_embedding.data_process.v5_osm_geometry import audit_osm_geometry
+
+    data, report, root, first = _osm_fixture(tmp_path)
     assert first["compared_views"] == 4 and first["failed_views"] == 0
     assert first["boundary_changed_views"] == 4 and first["boundary_historical_added_pixels"] > 0
     assert first["boundary_candidates_authorized_as_labels"] is False

@@ -254,6 +254,7 @@ def main(argv=None) -> int:
             "target-geometry",
             "dem-geometry",
             "osm-geometry",
+            "osm-corrections",
             "dem-corrections",
             "visual-review",
             "followup",
@@ -483,6 +484,12 @@ def main(argv=None) -> int:
                     args.report_root,
                     max_patches=args.max_patches,
                 )
+            elif args.stage == "osm-corrections":
+                from xuannv_embedding.data_process.v5_osm_corrections import build_osm_corrections
+
+                if args.max_patches is not None:
+                    raise ValueError("OSM corrections require the complete scan scope")
+                record["result"] = build_osm_corrections(args.dataset_root, args.report_root)
             elif args.stage == "target-geometry":
                 from xuannv_embedding.data_process.v5_target_geometry import audit_target_geometry
 
