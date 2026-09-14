@@ -27,9 +27,9 @@ def test_missing_source_manifest_never_starts_quality():
     assert next_source_action(total=0, verified=0, cataloged=0, quality_status=None) is None
 
 
-@pytest.mark.parametrize("band_exit,partial_exit", [(0, 0), (1, 0), (0, 1)])
+@pytest.mark.parametrize("band_ready,partial_exit", [(True, 0), (False, 0), (False, 1)])
 def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
-    tmp_path, monkeypatch, band_exit, partial_exit
+    tmp_path, monkeypatch, band_ready, partial_exit
 ):
     from types import SimpleNamespace
 
@@ -67,7 +67,7 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
     monkeypatch.setattr(
         module,
         "band_inventory_finished",
-        lambda *args: band_exit == 0 and "band-alignment-parallel" in actions,
+        lambda *args: band_ready,
     )
 
     monkeypatch.setattr(
@@ -88,10 +88,6 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
             write_json(args.report_root / "grid_match_report.json", {"processed_archives": 1})
         elif action == "catalog-partial-bands":
             return SimpleNamespace(returncode=partial_exit)
-        elif action == "band-alignment-parallel":
-            assert command[command.index("--alignment-version") + 1] == "v5"
-            assert command[command.index("--sensor-family") + 1] == "jilin1"
-            return SimpleNamespace(returncode=band_exit)
         elif action == "jilin-quality":
             write_json(
                 args.dataset_root / "quality/cloud/jilin1/source.lock.json",
@@ -105,22 +101,29 @@ def test_finite_followup_ignores_pilot_completion_and_stops_before_training(
     result = module.follow_started_jobs(args)
     expected = ["catalog", "catalog-partial-bands"]
     if not partial_exit:
-        expected += ["band-alignment-parallel"] + ([] if band_exit else ["jilin-quality"])
+        expected += ["jilin-quality"]
     assert actions == expected
-    assert len(result["failures"]) == int(bool(band_exit or partial_exit))
+    assert len(result["failures"]) == int(bool(partial_exit))
     assert result["status"] == "stopped_for_remaining_data_gates"
     assert result["training_authorized"] is False
+    assert result["band_inventory_finished"] is band_ready
+    assert result["alignment_required_for_quality"] is False
 
 
-def test_followup_audits_each_catalog_before_cloud_without_repeating_finished_audit():
+def test_followup_quality_does_not_wait_for_optional_native_alignment():
     common = dict(total=64, verified=3, cataloged=3, quality_status=None)
-    assert next_source_action(**common, band_ready=False) == "band-alignment-parallel"
+    assert next_source_action(**common, band_ready=False) == "jilin-quality"
     assert next_source_action(**common, band_ready=True) == "jilin-quality"
     assert next_source_action(**{**common, "verified": 4}, band_ready=False) == "catalog"
     full = {**common, "verified": 64, "cataloged": 64}
-    assert next_source_action(**full, band_ready=False) == "band-alignment-parallel"
+    assert next_source_action(**full, band_ready=False) == "jilin-quality"
     assert next_source_action(**full, band_ready=True) == "jilin-quality"
-    assert next_source_action(**full, band_ready=False, band_running=True) is None
+    assert next_source_action(**{**full, "quality_status": "finished"}, band_ready=False) is None
+    assert next_source_action(**full, band_ready=False, band_running=True) == "jilin-quality"
+    assert (
+        next_source_action(**full, band_ready=False, band_running=True, quality_running=True)
+        is None
+    )
 
 
 def test_band_completion_requires_current_version_sources_code_and_output(tmp_path, monkeypatch):
@@ -159,7 +162,7 @@ def test_band_completion_requires_current_version_sources_code_and_output(tmp_pa
     assert not module.band_inventory_finished(tmp_path, summary, "current", "v5")
 
 
-def test_followup_refreshes_partial_bands_before_native_audit_or_cloud():
+def test_followup_refreshes_partial_bands_before_cloud():
     common = dict(total=64, verified=6, cataloged=6, quality_status=None)
     assert next_source_action(**common, partial_ready=False) == "catalog-partial-bands"
     assert (

@@ -29,8 +29,7 @@ def next_source_action(
         return "catalog"
     if total > 0 and verified > 0 and verified == cataloged and not partial_ready:
         return "catalog-partial-bands"
-    if total > 0 and verified > 0 and verified == cataloged and not band_ready:
-        return None if band_running else "band-alignment-parallel"
+    # Native alignment remains a separately recorded diagnostic, not a cloud-QA gate.
     if total > 0 and verified > 0 and verified == cataloged and quality_status is None:
         return None if quality_running else "jilin-quality"
     return None
@@ -275,15 +274,6 @@ def follow_started_jobs(args) -> dict:
             ]
             for field in ("source_root", "dataset_root", "report_root", "base_root"):
                 command += ["--" + field.replace("_", "-"), str(getattr(args, field))]
-            if action == "band-alignment-parallel":
-                command += [
-                    "--sensor-family",
-                    "jilin1",
-                    "--alignment-version",
-                    alignment_version,
-                    "--workers",
-                    str(args.workers),
-                ]
             if action == "jilin-quality":
                 command += ["--model-dir", str(args.model_dir), "--device-id", str(args.device_id)]
             write_json(
@@ -291,6 +281,8 @@ def follow_started_jobs(args) -> dict:
                 {
                     "status": "running",
                     "action": action,
+                    "alignment_required_for_quality": False,
+                    "band_inventory_finished": band_ready,
                     "verified_archives": verified,
                     "jobs_alive": alive,
                     "failures": failures,
@@ -319,6 +311,7 @@ def follow_started_jobs(args) -> dict:
             "verified_archives": verified,
             "cataloged_archives": cataloged,
             "band_inventory_finished": band_ready,
+            "alignment_required_for_quality": False,
             "partial_catalog_finished": partial_ready,
             "jilin_quality_finished": full_quality_status is not None,
             "alignment_version": alignment_version,
