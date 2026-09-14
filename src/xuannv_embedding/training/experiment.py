@@ -439,6 +439,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pilot", action="store_true")
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
+    p = sub.add_parser("queue")
+    p.add_argument("--plan", type=Path, required=True)
     p = sub.add_parser("fold-cache")
     p.add_argument("--cache", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
@@ -455,6 +457,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.training.experiment_schedule import main as follow_main
 
         follow_main(args.root)
+    elif args.action == "queue":
+        from xuannv_embedding.training.experiment_queue import main as queue_main
+
+        queue_main(args.plan)
     else:
         if args.epochs <= 0:
             parser.error("epochs must be positive")

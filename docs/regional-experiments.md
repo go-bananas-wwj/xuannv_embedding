@@ -62,3 +62,20 @@ one-tile buffer. Group 0 reproduces the original full development split. Fold ma
 pilot subsets; each resulting baseline is trained from scratch with the frozen hyperparameters.
 Results from these folds must not feed back into development model selection. They provide
 additional baseline checkpoints, not evidence that upgraded methods have been evaluated.
+
+## Continuous device queue
+
+`xuannv experiment queue --plan /data/experiment/continuation/plan.json` watches registered
+existing runs and dispatches additional independent baseline jobs as individual devices become
+available. The plan records devices, explicitly allowed resident process IDs, existing jobs,
+and an ordered list of new jobs with code/config/cache hashes and unique output/log/runtime paths.
+Optional `depends_on` names gate a job on successful completion of its dependencies.
+
+`queue_state.json` persists each launch and completion; `queue_status.json` records counts and
+failures or ten-minute progress stalls. A lock prevents duplicate controllers. Completed jobs
+are not relaunched on restart, and uncertain interrupted launches remain held for inspection.
+Existing source snapshots, configurations and caches are checked before launch. Each child
+uses spawn workers and an isolated runtime directory. Unknown device processes block dispatch;
+the controller does not terminate any training or resident process. Failed or stalled runs are
+recorded for inspection while independent jobs on other devices continue. Restart uses the same
+immutable plan; editing a live plan is rejected rather than silently altering an experiment.
