@@ -897,3 +897,34 @@ annual_highres_candidates.parquet、annual_highres_default_selection.parquet、c
 标签版本锁；复跑检查封存来源和输出，原文件不重写。报告为quarter_sample_index.json。
 状态只能是source_index_complete_quality_pending，sample_index_gate_passed=false、
 training_authorized=false，真实执行数量、完整门禁和提交另行记录。
+
+
+### 季度索引真实运行问题及旧审核格式兼容（2026-09-14）
+
+季度来源入口实现d023892e32727b114b660cd7c3aaec95bf48f9bc已push并核对远端。
+9项新增回归与候选/抽样测试合计28项通过；工作树777、干净快照565项及两套
+Black/Ruff/仓库门禁/build通过，各2个非失败弃用警告（既有依赖及空年度候选
+拼接）。实际全国运行于05:48:15以exit=1停止：旧S1/S2审核metadata_json没有shape，
+新适配器将它当作新版必填字段而报错；尚未发布季度正式输出。首次运行、输入和
+失败证据完整保留在报告目录diagnostics/quarter_index，后续核验任务因前置失败而
+退出，没有把失败任务当成仍运行或启动重复写入。
+
+已从Git核实原审核提交098cee7981700c7434ea5a1481744b2af066d10d，源码SHA为
+b3e143f33f81348a679b9c044b5dd9f16a98e691e40bad7eddd7daf6665efdcb。
+该版本实际逐张检查128×128、10米无旋转仿射、波段数、全国网格及像素解码，
+只是未在JSON记录shape。新兼容规则仅对这个精确生产代码指纹的S1/S2恢复已验证
+形状，并重查记录的10米仿射；未知生产器、异常仿射和Landsat缺失形状仍拒绝。
+这不是为未知产品默认填128；Landsat继续必须使用已完成v2审核的43×43记录。
+
+新增2项回归先失败、修复后与原季度/基础审核合计21项通过。原源审核及其SHA
+不改写；dense_archives另记生产代码SHA、explicit_shape_records和
+legacy_verified_shape_records，让每包形状依据可核对。数值比例、波段物理顺序和
+QA仍pending，当前来源索引不通过最终样本门禁。新完整检查和运行证据放在
+报告目录diagnostics/quarter_legacy，实际结果及修复提交另行记录。
+
+同期年度标签完整真实重跑于05:51:43结束：2,520视图重新读取，2份正式产物SHA
+和修改时间均不变；版本50bef033f7c1ca5592c7，锁SHA
+b3fab4f9a5604da910eedbe35106e4cdfaadeadd3f127782326938eb87010030。
+吉林一号候选统计62,698观测实际完整重跑于05:28:01结束，15份正式文件不变。
+这些结果分别位于diagnostics/target_reader/replay_verification.json和
+ diagnostics/candidate_statistics/jilin1_replay_verification.json；仍不代替完整B7/C1。

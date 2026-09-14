@@ -182,3 +182,51 @@ def test_highres_adapter_checks_sealed_member_lists(tmp_path, monkeypatch):
     seal_path.write_text(json.dumps(seal))
     with pytest.raises(ValueError, match="members"):
         module.load_highres_views(tmp_path / "data", config, Reader().registry.reset_index())
+
+
+def test_only_known_legacy_producer_can_supply_omitted_shape():
+    from xuannv_embedding.data_process.v5_quarter_index import audited_shape
+
+    legacy = "b3e143f33f81348a679b9c044b5dd9f16a98e691e40bad7eddd7daf6665efdcb"
+    meta = {"transform": [10, 0, 500000, 0, -10, 3001280]}
+    assert audited_shape(meta, "s1_local", legacy) == [128, 128]
+    assert audited_shape(meta, "s2_local", legacy) == [128, 128]
+    with pytest.raises(ValueError, match="shape evidence"):
+        audited_shape(meta, "s1_local", "unknown")
+    with pytest.raises(ValueError, match="shape evidence"):
+        audited_shape(meta, "landsat_local", legacy)
+    meta["transform"][0] = 20
+    with pytest.raises(ValueError, match="shape evidence"):
+        audited_shape(meta, "s1_local", legacy)
+
+
+def test_legacy_shape_recovery_uses_producer_evidence_without_rewriting_audits(
+    tmp_path, monkeypatch
+):
+    from xuannv_embedding.data_process import v5_quarter_index as module
+    from xuannv_embedding.data_process.v5_sources import sha256
+
+    data, report, config = fixture(tmp_path, monkeypatch)
+    path = (
+        Path(json.loads(config.read_text())["dense_audit_roots"]["s1_local"])
+        / "s1_local_2020_01.json"
+    )
+    receipt = json.loads(path.read_text())
+    table_path = Path(receipt["inventory_path"])
+    table = pd.read_parquet(table_path)
+    meta = json.loads(table.iloc[0].metadata_json)
+    meta.pop("shape")
+    table.at[0, "metadata_json"] = json.dumps(meta)
+    table.to_parquet(table_path, index=False)
+    receipt["inventory_sha256"] = sha256(table_path)
+    receipt["fingerprint"][
+        "code_sha256"
+    ] = "b3e143f33f81348a679b9c044b5dd9f16a98e691e40bad7eddd7daf6665efdcb"
+    path.write_text(json.dumps(receipt))
+    before = {p: sha256(p) for p in [path, table_path]}
+    result = module.build_quarter_index(data, report, config)
+    archives = pd.read_parquet(Path(result["output"]) / "dense_archives.parquet")
+    row = archives.loc[archives.archive_key.eq("s1_local:2020-01")].iloc[0]
+    assert row.legacy_verified_shape_records == 1 and row.explicit_shape_records == 0
+    assert before == {p: sha256(p) for p in before}
+    assert result["usable_base_observations"] == 0

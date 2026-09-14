@@ -112,6 +112,24 @@ def load_target_view(dataset_root, root):
     return files
 
 
+def audited_shape(metadata, product, producer_sha256):
+    if "shape" in metadata:
+        return metadata["shape"]
+    # Source audit 098cee7 checked 128x128 and 10m for every decoded S1/S2 raster,
+    # but did not serialize shape. This exact producer is the only legacy exception.
+    legacy = "b3e143f33f81348a679b9c044b5dd9f16a98e691e40bad7eddd7daf6665efdcb"
+    transform = np.asarray(metadata.get("transform", []))
+    if (
+        product in {"s1_local", "s2_local"}
+        and producer_sha256 == legacy
+        and transform.shape == (6,)
+        and transform[1] == transform[3] == 0
+        and np.allclose(transform[[0, 4]], [10, -10], rtol=0, atol=1e-9)
+    ):
+        return [128, 128]
+    raise ValueError("dense audit omits verified shape evidence")
+
+
 def dense_sources(config, registry):
     registry_hash = hashlib.sha256(
         registry[["patch_id", "split", "grid_epsg", "utm_bounds"]].to_json().encode()
@@ -151,10 +169,13 @@ def dense_sources(config, registry):
                 ):
                     raise ValueError("dense audit membership or monthly counts changed")
                 grid = STORED_GRIDS[product]
+                explicit_shapes = 0
                 for encoded in frame.metadata_json:
                     meta = json.loads(encoded)
+                    explicit_shapes += int("shape" in meta)
                     if (
-                        meta["shape"] != grid["shape"]
+                        audited_shape(meta, product, receipt["fingerprint"]["code_sha256"])
+                        != grid["shape"]
                         or len(meta["dtype"]) != BAND_COUNTS[product]
                         or meta["radiometry_status"] != "unverified"
                     ):
@@ -174,6 +195,9 @@ def dense_sources(config, registry):
                     "audit_path": str(path),
                     "audit_sha256": files[str(path)],
                     "physical_contract_verified": False,
+                    "producer_sha256": receipt["fingerprint"]["code_sha256"],
+                    "explicit_shape_records": explicit_shapes,
+                    "legacy_verified_shape_records": len(frame) - explicit_shapes,
                 }
                 sources.append(source_row)
                 retained = frame.sort_values("member_name").drop_duplicates("patch_id").copy()
