@@ -224,6 +224,7 @@ def main(argv=None) -> int:
             "highres-statistics",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
+            "cfog-calibration",
             "adaptive-alignment-review",
             "band-alignment",
             "band-alignment-parallel",
@@ -275,6 +276,7 @@ def main(argv=None) -> int:
             "highres-statistics",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
+            "cfog-calibration",
             "adaptive-alignment-review",
             "band-alignment",
             "band-alignment-parallel",
@@ -292,6 +294,7 @@ def main(argv=None) -> int:
             "highres-statistics",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
+            "cfog-calibration",
             "adaptive-alignment-review",
         }
         and args.quality_root is None
@@ -303,7 +306,7 @@ def main(argv=None) -> int:
     ):
         parser.error("--alignment-audit-root is required for alignment diagnostics")
     if (
-        args.stage in {"clear-band-audit", "adaptive-alignment-calibration"}
+        args.stage in {"clear-band-audit", "adaptive-alignment-calibration", "cfog-calibration"}
         and args.clear_calibration_root is None
     ):
         parser.error("--clear-calibration-root is required for clear band audit")
@@ -361,6 +364,7 @@ def main(argv=None) -> int:
         "highres-statistics",
         "alignment-diagnostics",
         "adaptive-alignment-calibration",
+        "cfog-calibration",
         "adaptive-alignment-review",
     }:
         lock_name = f".{args.stage}.{args.sensor_family}.lock"
@@ -408,6 +412,7 @@ def main(argv=None) -> int:
             "highres-statistics",
             "alignment-diagnostics",
             "adaptive-alignment-calibration",
+            "cfog-calibration",
             "adaptive-alignment-review",
         }:
             record_name = f"{args.stage}_{args.sensor_family}"
@@ -485,6 +490,16 @@ def main(argv=None) -> int:
                     args.alignment_audit_root,
                     args.adaptive_calibration_root,
                     args.exclusion_inputs,
+                )
+            elif args.stage == "cfog-calibration":
+                from xuannv_embedding.data_process.v5_cfog_calibration import calibrate_cfog
+
+                record["result"] = calibrate_cfog(
+                    args.dataset_root,
+                    args.report_root,
+                    args.sensor_family,
+                    args.quality_root,
+                    args.clear_calibration_root,
                 )
             elif args.stage == "adaptive-alignment-calibration":
                 from xuannv_embedding.data_process.v5_adaptive_calibration import calibrate_adaptive
