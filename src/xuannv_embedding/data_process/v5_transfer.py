@@ -31,13 +31,16 @@ def download_chunked(
     *,
     workers: int = 8,
     chunk_bytes: int = 16 * 1024 * 1024,
+    route: str = "environment",
 ) -> dict:
+    if route not in {"environment", "direct"}:
+        raise ValueError("invalid download route")
     if workers < 1 or workers > 8 or chunk_bytes <= 0:
         raise ValueError("invalid chunk transfer limits")
     directory.mkdir(parents=True, exist_ok=True)
     final = directory / spec.archive
     if final.exists():
-        return download_archive(spec, directory, revision)
+        return {**download_archive(spec, directory, revision), "download_route": route}
     parts = directory / (spec.archive + ".parts")
     parts.mkdir(exist_ok=True)
     lock = parts / "source.json"
@@ -65,6 +68,9 @@ def download_chunked(
                 target.write_bytes(original.read(end - start + 1))
                 write_json(target.with_suffix(".json"), {"sha256": sha256(target)})
     started = now()
+    # Explicit request proxies override environment settings, including on CDN redirects.
+    # Keep trust_env enabled so configured CA bundles and TLS verification still apply.
+    transport = {"proxies": {"http": "", "https": "", "all": ""}} if route == "direct" else {}
 
     stopped = Event()
 
@@ -100,6 +106,7 @@ def download_chunked(
                             headers={"Range": f"bytes={requested_start}-{end}"},
                             stream=True,
                             timeout=(30, 90),
+                            **transport,
                         )
                         check_response(response)
                         match = re.fullmatch(
@@ -188,4 +195,5 @@ def download_chunked(
         "started_at": started,
         "finished_at": now(),
         "range_workers": workers,
+        "download_route": route,
     }

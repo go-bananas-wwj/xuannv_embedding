@@ -145,7 +145,11 @@ def acquire(args: argparse.Namespace, source: dict) -> None:
             with ThreadPoolExecutor(max_workers=2) as pool:
                 jobs = {
                     pool.submit(
-                        download_chunked, spec, args.source_root / "packages", source["revision"]
+                        download_chunked,
+                        spec,
+                        args.source_root / "packages",
+                        source["revision"],
+                        route=args.download_route,
                     ): spec
                     for spec in pair
                 }
@@ -201,6 +205,12 @@ def acquire(args: argparse.Namespace, source: dict) -> None:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--download-route",
+        choices=["environment", "direct"],
+        default="environment",
+        help="ModelScope package network route; direct skips proxies for package requests only",
+    )
     parser.add_argument(
         "--stage",
         required=True,

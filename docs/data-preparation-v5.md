@@ -1754,3 +1754,24 @@ jilin14_statistics_replay_verification.json。该结果验证原QA统计的重�
 运行中的旧协调器须在确认进程身份和没有子任务后替换，已有下载/QA产物保留。
 源和QA相同的异常证据需在后续增量索引中继承；取消配准前置不允许把已知异常
 改写为合格或删除。嵌入模型与损失函数的实施仍以用户明确验收数据为前提。
+
+
+### A1 国内下载直连（2026-09-14；用户明确指定）
+
+统一入口download/ingest新增--download-route direct。该参数在每个影像包请求上
+显式禁用http/https/all代理，重定向至ModelScope官方CDN时继续直连；不改变全局
+代理设置，保留TLS校验与环境证书配置。通用默认environment保留原兼容行为，
+本部署使用direct。单包大小、revision、SHA及16MiB分段指纹不因线路变动而变化，
+已完成分段和合法.partial可续传，认证失败和最多3次重试限制保持。下载状态记录
+download_route，最多2包、每包8个range连接保持。
+
+诊断发现进程使用本机代理。相同文件相同1MiB数据经代理19.19/22.45秒，直连
+2.05秒，3次内容SHA一致；较大直连对照为4连接各16MiB，64MiB共62.76秒，
+4段SHA均与既有完整本地分段一致。大小与并发不同，不能据此前者宣称全量提速
+10倍。实际切换后另记录固定时间窗口的落盘字节增量与整包校验结果。现有两包
+完成后再串行解压/解码的等待另列优化项；本变更先解决明确的代理链路问题。
+
+依据：[Requests官方代理与会话说明](https://requests.readthedocs.io/en/latest/user/advanced/#proxies)、
+[ModelScope官方下载实现](https://github.com/modelscope/modelscope_hub/blob/main/src/modelscope_hub/_download.py)。
+采用有界并发、续传和终态校验，不直接替换SDK或改变发布清单版本。实际证据放在
+报告目录diagnostics/download_throughput，包含受控测速、源锁引用及切换验证。
