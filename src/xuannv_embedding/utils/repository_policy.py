@@ -7,7 +7,9 @@ import subprocess
 from pathlib import Path
 from urllib.parse import unquote
 
-from xuannv_embedding.config import Config
+import yaml
+
+from xuannv_embedding.config import Config, V2Config
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_TREE_BYTES = 25 * 1024 * 1024
@@ -123,6 +125,18 @@ def tracked_files(root: Path) -> list[Path]:
     return [Path(value) for value in output if value]
 
 
+def validate_config_file(path: Path) -> None:
+    """Validate a production config with the parser for its declared schema."""
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise PolicyError(f"无法读取配置 {path}: {exc}") from exc
+    if isinstance(document, dict) and document.get("schema_version") == "2":
+        V2Config.from_yaml(path)
+    else:
+        Config.from_yaml(path)
+
+
 def validate_repository(root: Path) -> dict[str, int]:
     files = tracked_files(root)
     validate_tree(root, files)
@@ -132,7 +146,7 @@ def validate_repository(root: Path) -> dict[str, int]:
         (root / "configs" / "examples").glob("*.yaml")
     )
     for path in configs:
-        Config.from_yaml(path)
+        validate_config_file(path)
     return {
         "tracked_files": len(files),
         "tracked_bytes": sum((root / path).stat().st_size for path in files),

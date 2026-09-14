@@ -22,6 +22,15 @@ def test_reconstruction_loss_l1_respects_mask() -> None:
     assert torch.allclose(reconstruction_loss(pred, target, mask), torch.tensor(3.0))
 
 
+def test_reconstruction_loss_accepts_temporal_single_channel_mask() -> None:
+    pred = torch.ones(2, 3, 4, 2, 2)
+    target = torch.zeros_like(pred)
+    mask = torch.ones(2, 3, 1, 2, 2)
+    mask[:, 1].zero_()
+
+    assert torch.allclose(reconstruction_loss(pred, target, mask), torch.tensor(1.0))
+
+
 def test_reconstruction_loss_ce_ignores_class_zero() -> None:
     pred = torch.randn(2, 3, 4, 4)
     target = torch.randint(0, 3, (2, 4, 4))

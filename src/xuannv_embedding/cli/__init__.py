@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from xuannv_embedding import __version__
-from xuannv_embedding.downstream.heads import STANDARD_HEAD_NAMES
 
 
 def _add_downstream_commands(subparsers: argparse._SubParsersAction) -> None:
+    from xuannv_embedding.downstream.heads import STANDARD_HEAD_NAMES
+
     downstream = subparsers.add_parser("downstream", help="训练或评测标准下游头")
     actions = downstream.add_subparsers(dest="downstream_command", required=True)
 
@@ -57,6 +59,7 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     data = subparsers.add_parser("data", help="网格、采样、物化、预处理与审计")
     actions = data.add_subparsers(dest="data_command", required=True)
     descriptions = {
+        "prepare-v5": "分阶段准备并验收 V5 数据（不训练）",
         "grid": "构建全国 1280 m 父网格",
         "registry": "生成全国采样 registry",
         "partition": "生成确定性的全国十等分",
@@ -64,6 +67,11 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
         "preprocess": "对齐并切分多源栅格",
         "manifest": "生成带摘要的 manifest v1",
         "validate": "审计 manifest 或父网格包",
+        "local-index": "索引本地 V2 月度 ZIP 与高分场景",
+        "preflight": "训练前审计 V2 数据合同与像元质量",
+        "statistics": "计算 V2 训练划分的 stored-DN 波段统计量",
+        "local-zarr-cache": "将本地 ZIP 顺序重打包为 smoke Zarr cache",
+        "highres-mini": "用真实本地高分、UDM2 和监督标签验证梯度链路",
     }
     for command, help_text in descriptions.items():
         action = actions.add_parser(command, help=help_text, add_help=False)
@@ -71,6 +79,11 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _run_data(args: argparse.Namespace) -> int:
+    if args.data_command == "prepare-v5":
+        from xuannv_embedding.data_process.v5_cli import main as prepare_main
+
+        return prepare_main(args.forwarded_args)
+
     from xuannv_embedding.data_process.cli import dispatch
 
     return dispatch(args.data_command, args.forwarded_args)
@@ -109,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:2] == ["data", "prepare-v5"]:
+        from xuannv_embedding.data_process.v5_cli import main as prepare_main
+
+        return prepare_main(arguments[2:])
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
     if args.command in {"data", "train", "export"}:

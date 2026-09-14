@@ -7,6 +7,7 @@ import pytest
 
 from xuannv_embedding.utils.repository_policy import (
     PolicyError,
+    validate_config_file,
     validate_markdown_links,
     validate_tree,
 )
@@ -72,3 +73,12 @@ def test_npu_extra_pins_the_locally_validated_torch_pair() -> None:
 
     assert "torch==2.6.0" in metadata["dependencies"]
     assert metadata["optional-dependencies"]["npu"] == ["torch-npu==2.6.0.post5"]
+
+
+def test_repository_policy_dispatches_v2_configs_by_schema_version(tmp_path: Path) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    source = project_root / "configs/production/china_v2_dense_2020_2021.yaml"
+    config_path = tmp_path / "v2.yaml"
+    config_path.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+
+    validate_config_file(config_path)
