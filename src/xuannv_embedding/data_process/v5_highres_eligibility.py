@@ -17,7 +17,8 @@ from xuannv_embedding.data_process.v5_rasters import select_annual
 from xuannv_embedding.data_process.v5_sources import now, sha256, write_json
 
 POLICY = {
-    "version": "highres_eligibility_v1",
+    "version": "highres_eligibility_v2",
+    "audit_inheritance": "unchanged_source_configuration_registry_bands_and_mask_receipt",
     "years": [2020, 2021],
     "alignment_unknown_can_be_reconstruction_candidate": True,
     "native_spectral_over_limit_excludes_QA_dependents": True,
@@ -155,6 +156,14 @@ def build_views(registry, rows, audit):
                     row.native_observation_id if record is not None else None
                 ),
                 "native_alignment_scope": record.scope if record is not None else "not_audited",
+                "native_alignment_evidence_root": (
+                    getattr(record, "inherited_from", None) if record is not None else None
+                ),
+                "native_alignment_inheritance": (
+                    getattr(record, "inheritance_scope", "same_QA_snapshot")
+                    if record is not None
+                    else "not_audited"
+                ),
                 "alignment_status": "unknown",
                 "alignment_scope": "absolute_and_cross_resolution_not_audited",
                 "offset_m": None,
@@ -212,15 +221,25 @@ def read_audit(root, family, reader):
         or sha256(paths[0]) != lock["inputs_sha256"]
     ):
         raise ValueError("native audit publication seal changed")
-    if (
-        lock["fingerprint"]["family"] != family
-        or lock["snapshot"]["quality_inputs_sha256"] != reader.files
-    ):
+    if lock["fingerprint"]["family"] != family:
         raise ValueError("native audit QA snapshot differs from eligibility snapshot")
     inputs, audit = pd.read_parquet(paths[0]), pd.read_parquet(paths[2])
     if inputs.observation_id.tolist() != audit.observation_id.tolist():
         raise ValueError("native audit output identities changed")
-    return audit, {str(p): sha256(p) for p in paths}
+    evidence = {str(p): sha256(p) for p in paths}
+    if lock["snapshot"]["quality_inputs_sha256"] != reader.files:
+        if family != "jilin1" or not hasattr(reader, "qa"):
+            raise ValueError("native audit QA snapshot differs from eligibility snapshot")
+        from xuannv_embedding.data_process.v5_audit_inheritance import inherit_jilin_audit
+
+        audit, inherited_files = inherit_jilin_audit(
+            root, inputs, audit, lock["snapshot"]["quality_inputs_sha256"], reader
+        )
+        evidence.update(inherited_files)
+    else:
+        audit["inherited_from"] = str(root)
+        audit["inheritance_scope"] = "same_QA_snapshot"
+    return audit, evidence
 
 
 def run_highres_eligibility(dataset_root, report_root, family, quality_root, audit_root=None):
@@ -239,6 +258,7 @@ def run_highres_eligibility(dataset_root, report_root, family, quality_root, aud
             name: sha256(Path(__file__).with_name(name))
             for name in [
                 "v5_highres_eligibility.py",
+                "v5_audit_inheritance.py",
                 "v5_highres_reader.py",
                 "v5_clear_intraband.py",
                 "v5_rasters.py",
@@ -287,6 +307,10 @@ def run_highres_eligibility(dataset_root, report_root, family, quality_root, aud
                 Counter(r for reasons in branches.exclusion_reasons for r in reasons)
             ),
             "native_alignment_status_counts": dict(Counter(branches.native_alignment_status)),
+            "native_alignment_inheritance_counts": dict(
+                Counter(branches.native_alignment_inheritance)
+            ),
+            "native_audit_observations": len(audit),
             "coverage": [
                 {
                     "year": int(key[0]),
