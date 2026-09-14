@@ -61,11 +61,19 @@ def run_highres_statistics(
     *,
     reservoir_size=4096,
     limit=None,
+    eligibility_root: Path | None = None,
 ):
     if reservoir_size <= 0 or (limit is not None and limit <= 0):
         raise ValueError("positive reservoir size and pilot limit required")
     reader = HighresQualityReader(dataset_root, family, quality_root)
-    rows, excluded = training_rows(reader.inventory)
+    selection = None
+    if eligibility_root is not None:
+        from xuannv_embedding.data_process.v5_candidate_statistics import CandidateSelection
+
+        selection = CandidateSelection(reader, eligibility_root)
+        rows, excluded = selection.rows, selection.excluded
+    else:
+        rows, excluded = training_rows(reader.inventory)
     available = len(rows)
     if limit is not None:
         rows = rows.head(limit)
@@ -76,6 +84,7 @@ def run_highres_statistics(
         for name in [
             "v5_highres_reader.py",
             "v5_highres_statistics.py",
+            "v5_candidate_statistics.py",
             "v5_statistics.py",
             "v5_clear_intraband.py",
             "v5_rasters.py",
@@ -87,6 +96,7 @@ def run_highres_statistics(
     }
     fingerprint = {
         "family": family,
+        "eligibility_view": selection.descriptor if selection else None,
         "quality_inputs_sha256": reader.files,
         "quality_configuration": reader.configuration,
         "code_sha256": code,
@@ -98,7 +108,11 @@ def run_highres_statistics(
         "limit": limit,
         "available_training_observations": available,
         "region_rule": "floor(longitude/5),floor(latitude/5):five_degree_cells",
-        "alignment_policy": "per-band QA-valid radiometric candidates; no pixel-fusion approval",
+        "alignment_policy": (
+            "sealed eligible candidates; known native over-limit excluded; no pixel-fusion approval"
+            if selection
+            else "per-band QA-valid radiometric candidates; no pixel-fusion approval"
+        ),
     }
     root = dataset_root / "statistics/train/highres" / family / _digest(fingerprint)[:20]
     inputs = root / "inputs.parquet"
@@ -126,9 +140,10 @@ def run_highres_statistics(
     bands = {}
     proofs = []
     contributions = defaultdict(lambda: np.zeros(3, dtype="int64"))
+    view_name = family + ("_candidates" if selection else "")
     progress = (
         report_root
-        / f"highres_statistics_{family}_{'full' if limit is None else 'pilot_'+str(limit)}.json"
+        / f"highres_statistics_{view_name}_{'full' if limit is None else 'pilot_'+str(limit)}.json"
     )
     for row in rows.itertuples():
         frame, proof = reader.read(row)
@@ -176,6 +191,8 @@ def run_highres_statistics(
                 },
             )
     reader.verify_unchanged()
+    if selection:
+        selection.verify_unchanged()
     if (
         any(sha256(Path(__file__).with_name(n)) != h for n, h in code.items())
         or sha256(inputs) != locked["inputs_sha256"]
@@ -197,6 +214,7 @@ def run_highres_statistics(
             "source_and_masks_sha256": proof_hash,
             "units": "native_stored_dn" if family == "gaofen" else "reflectance",
             "normalization_authorized": False,
+            "eligibility_view": selection.descriptor if selection else None,
             "scope": (
                 "QA-valid per-band radiometry; " "alignment and visual acceptance remain separate"
             ),
@@ -262,7 +280,12 @@ def run_highres_statistics(
         write_json(seal_path, seal)
     summary = {
         "execution_status": "finished",
-        "scope": "frozen_available_QA_catalog" if limit is None else "pilot",
+        "scope": (
+            ("frozen_eligible_candidate_view" if selection else "frozen_available_QA_catalog")
+            if limit is None
+            else "pilot"
+        ),
+        "eligibility_view": selection.descriptor if selection else None,
         "processed": len(rows),
         "available_training_observations": available,
         "excluded_observations": len(excluded),

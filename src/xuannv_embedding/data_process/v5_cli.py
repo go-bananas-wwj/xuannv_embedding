@@ -271,6 +271,7 @@ def main(argv=None) -> int:
     parser.add_argument("--model-dir", type=Path)
     parser.add_argument("--gaofen-source-catalog", type=Path)
     parser.add_argument("--quality-root", type=Path)
+    parser.add_argument("--eligibility-root", type=Path)
     parser.add_argument("--correction-root", type=Path)
     parser.add_argument("--clear-calibration-root", type=Path)
     parser.add_argument("--alignment-audit-root", type=Path)
@@ -585,6 +586,7 @@ def main(argv=None) -> int:
                     args.sensor_family,
                     args.quality_root,
                     limit=args.max_scenes,
+                    eligibility_root=args.eligibility_root,
                 )
             elif args.stage == "clear-band-audit":
                 from xuannv_embedding.data_process.v5_clear_audit import run_clear_audit
