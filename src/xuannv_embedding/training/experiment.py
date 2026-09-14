@@ -439,10 +439,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pilot", action="store_true")
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
+    p = sub.add_parser("fold-cache")
+    p.add_argument("--cache", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--test-group", type=int, choices=range(5), required=True)
     args = parser.parse_args(argv)
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers)
+    elif args.action == "fold-cache":
+        from xuannv_embedding.training.experiment_folds import derive_fold_cache
+
+        derive_fold_cache(args.cache, args.output, args.test_group)
     elif args.action == "follow":
         from xuannv_embedding.training.experiment_schedule import main as follow_main
 

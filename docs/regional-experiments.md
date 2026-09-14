@@ -53,3 +53,12 @@ Each full baseline runs in its own `runtime/<run-name>` directory beneath the ex
 Device compiler reports therefore stay outside the immutable source tree and do not overwrite
 reports from other runs. The registry records this working directory alongside each run.
 The controller does not implement or launch high-resolution adapters after the baselines finish.
+
+`xuannv experiment fold-cache --cache /data/experiment/cache --output /data/experiment/fold1
+--test-group 1` creates an independent cache manifest for a further spatial fold. Existing sample
+paths and checksums are reused without modifying the parent. Group k is held out for testing,
+group (k - 1) modulo 5 validates, and adjacent training tiles are removed using the original
+one-tile buffer. Group 0 reproduces the original full development split. Fold manifests omit
+pilot subsets; each resulting baseline is trained from scratch with the frozen hyperparameters.
+Results from these folds must not feed back into development model selection. They provide
+additional baseline checkpoints, not evidence that upgraded methods have been evaluated.
