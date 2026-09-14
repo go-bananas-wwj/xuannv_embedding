@@ -122,6 +122,11 @@ def validate_package(args: argparse.Namespace, spec: ArchiveSpec) -> dict:
 
 
 def acquire(args: argparse.Namespace, source: dict) -> None:
+    if args.stage == "ingest":
+        from xuannv_embedding.data_process.v5_acquisition import acquire_overlapped
+
+        acquire_overlapped(args, source, download_chunked, extract_archive, validate_package)
+        return
     specs = [ArchiveSpec(**item) for item in source["archives"]][: args.limit]
     status_path = args.source_root / "manifests/download_status.parquet"
     statuses = pd.read_parquet(status_path).to_dict("records") if status_path.exists() else []
