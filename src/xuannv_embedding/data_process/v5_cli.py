@@ -255,6 +255,7 @@ def main(argv=None) -> int:
             "dem-geometry",
             "osm-geometry",
             "osm-corrections",
+            "osm-correction-verify",
             "dem-corrections",
             "visual-review",
             "followup",
@@ -270,6 +271,7 @@ def main(argv=None) -> int:
     parser.add_argument("--model-dir", type=Path)
     parser.add_argument("--gaofen-source-catalog", type=Path)
     parser.add_argument("--quality-root", type=Path)
+    parser.add_argument("--correction-root", type=Path)
     parser.add_argument("--clear-calibration-root", type=Path)
     parser.add_argument("--alignment-audit-root", type=Path)
     parser.add_argument("--adaptive-calibration-root", type=Path)
@@ -337,6 +339,8 @@ def main(argv=None) -> int:
         )
     if args.stage == "target-geometry" and args.target_family is None:
         parser.error("--target-family is required for target geometry audit")
+    if args.stage == "osm-correction-verify" and args.correction_root is None:
+        parser.error("--correction-root is required for OSM reader verification")
     if args.max_patches is not None and args.max_patches <= 0:
         parser.error("--max-patches must be positive")
     if (
@@ -483,6 +487,14 @@ def main(argv=None) -> int:
                     args.dataset_root,
                     args.report_root,
                     max_patches=args.max_patches,
+                )
+            elif args.stage == "osm-correction-verify":
+                from xuannv_embedding.data_process.v5_osm_reader import verify_osm_reader
+
+                if args.max_patches is not None:
+                    raise ValueError("OSM reader verification requires complete correction scope")
+                record["result"] = verify_osm_reader(
+                    args.dataset_root, args.report_root, args.correction_root
                 )
             elif args.stage == "osm-corrections":
                 from xuannv_embedding.data_process.v5_osm_corrections import build_osm_corrections
