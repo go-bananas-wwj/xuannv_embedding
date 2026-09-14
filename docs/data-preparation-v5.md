@@ -2211,3 +2211,29 @@ gaofen_refresh_worker.json、gaofen_chain_worker.json及对应日志；没有输
 1,717负例依赖复核通过，两份正式读取核验产物的SHA及修改时间不变。证据在
 报告目录diagnostics/osm_reader/replay_verification.json；该结果只完成OSM读取
 重现性，不替代全模态B7或C1。完整数据验收仍为incomplete，训练授权为false。
+
+
+### B4/B7：年度标签统一读取入口（2026-09-14）
+
+新增 `target-reader-verify`，必须传明确的 `--correction-root`，禁止用
+`--max-patches` 缩减修正核验范围。输入为原62,000位置/划分、年度标签manifest、
+CLCD/夜光/WorldCover完整源重建审核、DEM和负例修正版本，以及已完成负例依赖
+协调的OSM读取核验锁。原标签目录和修正生成器历史状态保持不变。
+
+AnnualTargetReader验证每年完整审核成员、来源年份及原归档SHA，读取实际32位置
+分块并对照原源重建回执的像元摘要。CLCD/夜光保留原v1生产代码指纹，WorldCover
+使用已完成v2审核，不把读取旧审核缓存写成使用新代码重建过来源。有效掩膜为布尔，
+类别代码受合同检查，无效值返回零但仍明确无效；2020、2021不互相代替。
+
+ValidatedTargetReader按16位置分组联合读取：三类年度地图、静态DEM、10m OSM
+正例/未知/可靠负例和2.5m原生正例视图。仅四个已有可靠负例任务在同年10m网格
+覆盖state=3，检测正负证据冲突；未知仍为0。禁止把10m负例上采样后伪装成2.5m
+监督。所有修正读取均复核实际数组和来源摘要；下一批不会永久信任旧像元缓存。
+
+统一核验选择全部OSM或DEM修正位置，加train/val/test各最多100个固定未修正
+对照，读取两年所有标签。实际数组摘要、有效/未知/正/负像元数和划分写入新数据
+目录 `quality/targets/reader/<fingerprint>/views.parquet`，最后发布
+`verification.lock.json`；来源、读取代码、选择列表全部锁定。重跑仍实际读取，
+要求记录相同且有效正式文件不重写。报告为 `target_reader_verification.json`，
+实时进度为 `target_reader_progress.json`。源码和完整门禁、真实运行结果另行记录。
+该入口只核验年度标签，不能代替季度影像全模态B7或完整C1，未授权训练。

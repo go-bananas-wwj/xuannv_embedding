@@ -117,7 +117,7 @@ def test_geometry_cli_requires_family_and_keeps_pilot_explicit(tmp_path, monkeyp
     ]
 
 
-def test_full_annual_reconstruction_reuses_chunks_and_detects_changed_target_bytes(tmp_path):
+def annual_fixture(tmp_path):
     import hashlib
     import zipfile
 
@@ -127,7 +127,6 @@ def test_full_annual_reconstruction_reuses_chunks_and_detects_changed_target_byt
     from rasterio.transform import from_origin
 
     from xuannv_embedding.data_process.v5_sources import sha256, write_json
-    from xuannv_embedding.data_process.v5_target_geometry import audit_target_geometry
 
     data, report = tmp_path / "data", tmp_path / "report"
     (data / "registry").mkdir(parents=True)
@@ -197,6 +196,14 @@ def test_full_annual_reconstruction_reuses_chunks_and_detects_changed_target_byt
         report / "target_source_audit.json",
         {"status": "source_audit_finished", "failed_sources": 0, "sources": references},
     )
+    return data, report, root
+
+
+def test_full_annual_reconstruction_reuses_chunks_and_detects_changed_target_bytes(tmp_path):
+    from xuannv_embedding.data_process.v5_sources import sha256
+    from xuannv_embedding.data_process.v5_target_geometry import audit_target_geometry
+
+    data, report, root = annual_fixture(tmp_path)
     first = audit_target_geometry(data, report, "clcd")
     assert first["processed_targets"] == 2 and first["failed_targets"] == 0
     assert first["scope"] == "full" and first["reused_targets"] == 0
