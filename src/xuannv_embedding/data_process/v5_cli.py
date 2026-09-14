@@ -257,6 +257,7 @@ def main(argv=None) -> int:
             "osm-corrections",
             "osm-correction-verify",
             "target-reader-verify",
+            "sample-index",
             "dem-corrections",
             "visual-review",
             "followup",
@@ -266,6 +267,7 @@ def main(argv=None) -> int:
     for key in ["source-root", "dataset-root", "report-root", "base-root"]:
         parser.add_argument("--" + key, type=Path, required=True)
     parser.add_argument("--limit", type=int, default=64, help="number of archive packages, 1..64")
+    parser.add_argument("--sample-inputs", type=Path)
     parser.add_argument("--dense-root", type=Path)
     parser.add_argument("--dense-audit-version", choices=["v1", "v2"], default="v1")
     parser.add_argument("--dense-product", choices=["s2_local", "s1_local", "landsat_local"])
@@ -346,6 +348,8 @@ def main(argv=None) -> int:
         and args.correction_root is None
     ):
         parser.error("--correction-root is required for target reader verification")
+    if args.stage == "sample-index" and args.sample_inputs is None:
+        parser.error("--sample-inputs is required for quarterly source indexing")
     if args.max_patches is not None and args.max_patches <= 0:
         parser.error("--max-patches must be positive")
     if (
@@ -492,6 +496,14 @@ def main(argv=None) -> int:
                     args.dataset_root,
                     args.report_root,
                     max_patches=args.max_patches,
+                )
+            elif args.stage == "sample-index":
+                from xuannv_embedding.data_process.v5_quarter_index import build_quarter_index
+
+                if args.max_patches is not None:
+                    raise ValueError("quarter indexing requires the complete registry")
+                record["result"] = build_quarter_index(
+                    args.dataset_root, args.report_root, args.sample_inputs
                 )
             elif args.stage == "target-reader-verify":
                 from xuannv_embedding.data_process.v5_target_reader import verify_target_reader

@@ -2271,3 +2271,44 @@ DEM、10m与2.5m OSM均经真实源缓存和修正数组读取，年份及原生
 影像/掩膜重读仍在后台执行。证据位于diagnostics/candidate_statistics中的
 jilin1_full_verification.json、jilin1_before_replay.json及jilin1_replay_worker.json。
 这不代表64包最终数据，也不批准云语义质量、标准化使用或训练。
+
+
+### B6：季度来源索引接入与待核验合同隔离（2026-09-14）
+
+旧construct_indexes再次要求alignment_status=passed，会删除已按新版政策保留的
+未知配准高分候选。本次改为显式candidate_qualified，严格像元融合资格单独保留；
+CLI只从已封存高分资格目录获得此标志，复核分支成员、合格成员、年度候选池和
+默认选择，不能仅改一个布尔值绕过原生波段超限、QA缺失或无效像元排除。
+
+实际入口为 `xuannv data prepare-v5 --stage sample-index --sample-inputs <来源JSON>`，
+仍需通用四根目录，禁止max-patches缩减全国范围。来源JSON必须恰含：
+
+- schema：quarter_source_index_v1。
+- dense_audit_roots：s1_local、s2_local、landsat_local各完整24月审核分片目录。
+- highres：gaofen和jilin1，各自明确eligibility_root与quality_root。
+- target_reader_root：已完成年度标签统一读取核验的不可变输出目录。
+
+基础输入读取72份完整解码回执与原观测表，校验表SHA、网格/划分、原生形状、
+每月文件数/缺失数、来源大小及原归档SHA记录；原始大归档SHA沿用完整扫描证据，
+此索引步骤不冒称重新解码全量影像，加载器仍必须检查实际成员像元。保留原v1
+S1/S2与Landsat v2生产指纹，不因使用新适配器而宣称旧扫描用新代码重跑。
+
+基础影像物理波段与缩放仍缺来源证明，当前适配器只接受既有contract_pending
+完整扫描，统一保留contract_status=pending、quality_status=pending。每个季度分别
+保存dense_inventory_ids（实际来源）、dense_observation_ids（可用来源，目前为空）、
+base_exclusion_reasons及missing_monthly_sources。未知合同与QA待核验不能冒充晴空，
+“有文件但隔离”和“缺文件”分开。后续有真实物理/质量合同后，需接入对应已验证
+读取结果并生成新版本；当前来源索引不能代替最终可训练样本索引或解除B6门禁。
+
+季度键仍为(patch_id,year,quarter)，年度标签只用同年；月度观测不越季度，区间
+结束时间不包含在区间内，闰年/年界正确。同年合格高分可复用四季度，每族最多
+4个默认场景，同时保留全部年度候选。低晴空率有有效像元的候选不再清零。
+各列表使用明确的字符串列表存储类型，某年没有高分也不会破坏跨年文件结构。
+
+输出为新数据目录 `observations/index/quarters/<fingerprint>/` 中的
+quarter_samples.parquet、dense_observations.parquet、dense_archives.parquet、
+annual_highres_candidates.parquet、annual_highres_default_selection.parquet、coverage.parquet
+及最后发布的output.lock.json。包含所有62,000位置、两年四季度及来源、代码和
+标签版本锁；复跑检查封存来源和输出，原文件不重写。报告为quarter_sample_index.json。
+状态只能是source_index_complete_quality_pending，sample_index_gate_passed=false、
+training_authorized=false，真实执行数量、完整门禁和提交另行记录。
