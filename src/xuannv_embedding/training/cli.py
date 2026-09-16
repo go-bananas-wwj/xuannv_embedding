@@ -261,6 +261,9 @@ def _setup_device(requested: str | None) -> tuple[torch.device, bool, int]:
         dist.init_process_group(backend="hccl")
         return torch.device(f"npu:{local_rank}"), True, local_rank
     if requested is not None:
+        if requested.split(":", 1)[0] == "npu":
+            import torch_npu  # noqa: F401
+
         device = torch.device(requested)
     else:
         try:
