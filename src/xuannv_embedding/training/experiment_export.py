@@ -38,6 +38,27 @@ def run(args: argparse.Namespace) -> None:
         if _sha(Path(record["path"])) != record["sha256"]:
             raise ValueError("cached sample checksum mismatch")
     system = build_training_system(config)
+    adaptation = training.get("adaptation")
+    if adaptation:
+        from xuannv_embedding.training.adaptation import initialize_adaptation
+
+        for path_key, digest_key in (
+            ("base_checkpoint", "base_checkpoint_sha256"),
+            ("base_config", "base_config_sha256"),
+        ):
+            if _sha(Path(adaptation[path_key])) != adaptation[digest_key]:
+                raise ValueError("adaptation base provenance changed")
+        initialize_adaptation(
+            system,
+            config,
+            argparse.Namespace(
+                initialize=Path(adaptation["base_checkpoint"]),
+                base_config=Path(adaptation["base_config"]),
+                freeze_base=adaptation["freeze_base"],
+                highres_encoding=adaptation["highres_encoding"],
+            ),
+            document["split"],
+        )
     state = load_training_checkpoint(
         args.checkpoint,
         model=system.model,
@@ -60,6 +81,7 @@ def run(args: argparse.Namespace) -> None:
         "dtype": "float32",
         "masking": "none; actual availability retained",
         "selection": "training validation loss; never test labels",
+        "adaptation": adaptation,
     }
     del state
     device, distributed, _ = _setup_device(args.device)

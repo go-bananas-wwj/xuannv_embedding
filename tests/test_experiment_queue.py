@@ -93,6 +93,25 @@ def test_uncertain_launch_is_not_requeued_after_controller_restart(tmp_path):
     assert queue.assignments(state["jobs"], [1]) == []
 
 
+def test_deferred_checkpoint_must_belong_to_its_declared_producer():
+    plan = {
+        "devices": [0],
+        "existing": [],
+        "jobs": [
+            {"name": "train", "output": "/train"},
+            {
+                "name": "export",
+                "output": "/export",
+                "depends_on": ["train"],
+                "checkpoint_from": "train",
+                "checkpoint": "/different/best.pt",
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match="producer"):
+        queue.validate_plan(plan)
+
+
 def test_launch_uses_spawn_and_isolated_runtime(tmp_path, monkeypatch):
     from types import SimpleNamespace
 

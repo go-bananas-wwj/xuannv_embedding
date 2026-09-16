@@ -77,6 +77,14 @@ def validate_plan(plan: dict) -> None:
     names, outputs = [j["name"] for j in jobs], [j["output"] for j in jobs]
     if len(set(names)) != len(names) or len(set(outputs)) != len(outputs):
         raise ValueError("queue names and output directories must be unique")
+    by_name = {j["name"]: j for j in jobs}
+    for job in jobs:
+        if job.get("checkpoint_from"):
+            parent = job["checkpoint_from"]
+            if parent not in job.get("depends_on", []) or parent not in by_name:
+                raise ValueError("deferred checkpoint requires its producer dependency")
+            if Path(job["checkpoint"]) != Path(by_name[parent]["output"]) / "best.pt":
+                raise ValueError("deferred checkpoint must be the producer's best.pt")
     resolved = {j["name"] for j in plan["existing"]}
     unresolved = list(plan["jobs"])
     while unresolved:
@@ -141,8 +149,13 @@ def launch(job: dict, device: int) -> None:
         f"npu:{device}",
     ]
     if job.get("action") == "export":
-        if _sha(Path(job["checkpoint"])) != job["checkpoint_sha256"]:
+        actual_sha = _sha(Path(job["checkpoint"]))
+        expected_sha = job.get("checkpoint_sha256")
+        if expected_sha is None and not job.get("checkpoint_from"):
+            raise ValueError("export requires a checkpoint hash or registered producer")
+        if expected_sha is not None and actual_sha != expected_sha:
             raise ValueError("registered export checkpoint changed")
+        job["checkpoint_sha256"] = actual_sha
         command += ["--checkpoint", job["checkpoint"]]
     else:
         command += ["--epochs", str(job["epochs"])]

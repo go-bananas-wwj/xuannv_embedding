@@ -49,7 +49,14 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
             sample.update(patch_id=f"p{i}", region="haidian")
             f = cache / f"{i}.pt"
             torch.save(sample, f)
-            records.append({"path": str(f), "sha256": _sha(f)})
+            records.append(
+                {
+                    "path": str(f),
+                    "sha256": _sha(f),
+                    "patch_id": f"p{i}",
+                    "bounds": [i * 16, 0, (i + 1) * 16, 16],
+                }
+            )
         (cache / "cache.json").write_text(
             json.dumps(
                 {
@@ -100,3 +107,18 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
         torch.testing.assert_close(v, adapted["criterion"][k], rtol=0, atol=0)
     assert adapted["model"]["branches.extra.correction.weight"].abs().sum() > 0
     assert json.loads((args.output / "run.json").read_text())["initialization"] == "registered_base"
+    from xuannv_embedding.training.experiment_export import run as export_run
+
+    destination = tmp_path / "export"
+    export_run(
+        argparse.Namespace(
+            config=args.config,
+            cache=args.cache,
+            checkpoint=args.resume,
+            output=destination,
+            device="cpu",
+            batch_size=1,
+        )
+    )
+    assert json.loads((destination / "status.json").read_text())["patches"] == 4
+    assert json.loads((destination / "manifest.json").read_text())["adaptation"]["freeze_base"]
