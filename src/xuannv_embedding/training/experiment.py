@@ -95,14 +95,16 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prepare(config_path: Path, root: Path, workers: int) -> None:
+def prepare(config_path: Path, root: Path, workers: int, *, include_highres: bool = False) -> None:
     root.mkdir(parents=True, exist_ok=True)
     if (root / "cache.json").exists():
         raise FileExistsError("prepared cache already exists; use a new output directory")
     config = Config.from_yaml(config_path)
     if len(config.data.datasets) != 1:
         raise ValueError("prepare currently requires one region")
-    if any(s.role == "highres" for s in config.model.input_sources.values()):
+    if not include_highres and any(
+        s.role == "highres" for s in config.model.input_sources.values()
+    ):
         raise ValueError("public baseline cache cannot include highres inputs")
     dataset = RegionRasterDataset(config, config.data.datasets[0])
     centers, bounds = [], []
@@ -134,7 +136,7 @@ def prepare(config_path: Path, root: Path, workers: int) -> None:
 
     def materialize(index: int) -> dict:
         sample = dataset[index]
-        if sample["highres_frames"]:
+        if sample["highres_frames"] and not include_highres:
             raise ValueError("unexpected highres content in public baseline")
         destination = samples / f"{index:06d}.pt"
         temp = destination.with_suffix(".partial")
@@ -212,7 +214,15 @@ def run(args: argparse.Namespace) -> None:
     device, distributed, _ = _setup_device(args.device)
     if distributed:
         raise ValueError("independent experiments require one process per device, not DDP")
-    system = build_training_system(config).to(device)
+    system = build_training_system(config)
+    adaptation = None
+    if getattr(args, "initialize", None) is not None:
+        from xuannv_embedding.training.adaptation import initialize_adaptation
+
+        if getattr(args, "base_config", None) is None:
+            raise ValueError("adaptation requires --base-config")
+        adaptation = initialize_adaptation(system, config, args, document["split"])
+    system = system.to(device)
     optimizer = build_optimizer(system, config.training.lr, config.training.weight_decay)
     scheduler = build_scheduler(optimizer, config.training.warmup_epochs, config.training.epochs)
     scaler = _grad_scaler(device, config.training.amp)
@@ -237,13 +247,15 @@ def run(args: argparse.Namespace) -> None:
         "device": str(device),
         "seed": config.experiment.seed,
         "lr": config.training.lr,
-        "initialization": "scratch",
+        "initialization": "registered_base" if adaptation else "scratch",
+        "adaptation": adaptation,
         "pilot": args.pilot,
         "epochs": args.epochs,
         "train_indices": split[prefix + "train"],
         "validation_indices": split[prefix + "validation"],
         "selection": "unmasked validation total loss at fixed final objective weights",
         "parameters": sum(p.numel() for p in system.parameters()),
+        "trainable_parameters": sum(p.numel() for p in system.parameters() if p.requires_grad),
     }
     if resume is None:
         _json(args.output / "run.json", metadata)
@@ -257,6 +269,7 @@ def run(args: argparse.Namespace) -> None:
             "train_indices",
             "validation_indices",
             "git_sha",
+            "adaptation",
         ):
             if previous[key] != metadata[key]:
                 raise ValueError(f"resume provenance mismatch: {key}")
@@ -429,6 +442,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--include-highres", action="store_true")
     p = sub.add_parser("run")
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--cache", type=Path, required=True)
@@ -437,6 +451,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--epochs", type=int, default=20)
     p.add_argument("--resume", type=Path)
     p.add_argument("--pilot", action="store_true")
+    p.add_argument("--initialize", type=Path)
+    p.add_argument("--base-config", type=Path)
+    p.add_argument("--freeze-base", action="store_true")
+    p.add_argument("--highres-encoding", choices=["native", "resample"], default="native")
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
     p = sub.add_parser("export")
@@ -455,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     torch.set_num_threads(1)
     if args.action == "prepare":
-        prepare(args.config, args.output, args.workers)
+        prepare(args.config, args.output, args.workers, include_highres=args.include_highres)
     elif args.action == "export":
         from xuannv_embedding.training.experiment_export import run as export_run
 

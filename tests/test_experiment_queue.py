@@ -55,6 +55,17 @@ def test_stall_is_detected_even_when_process_is_alive(tmp_path, monkeypatch):
     assert queue.observe(job, now=1000) == "running"
 
 
+def test_export_completion_requires_manifest_and_all_patches(tmp_path, monkeypatch):
+    job = {"action": "export", "pid": 10, "output": str(tmp_path), "epochs": 0}
+    monkeypatch.setattr(queue, "_alive", lambda pid: False)
+    (tmp_path / "status.json").write_text('{"state":"complete","patches":3,"total":3}')
+    assert queue.observe(job, now=0) == "failed"
+    (tmp_path / "manifest.json").write_text("{}")
+    assert queue.observe(job, now=0) == "complete"
+    (tmp_path / "status.json").write_text('{"state":"complete","patches":2,"total":3}')
+    assert queue.observe(job, now=0) == "failed"
+
+
 def test_plan_rejects_duplicate_destinations_and_changed_plan(tmp_path):
     plan = {
         "devices": [0, 1],

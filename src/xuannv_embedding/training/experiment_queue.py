@@ -48,6 +48,11 @@ def observe(job: dict, *, now: float) -> str:
     path = destination / "status.json"
     status = json.loads(path.read_text()) if path.exists() else {}
     alive = _alive(job["pid"])
+    if job.get("action") == "export" and status.get("state") == "complete":
+        manifest = destination / "manifest.json"
+        if not manifest.is_file() or status.get("patches", 0) != status.get("total", -1):
+            return "failed"
+        return "finishing" if alive else "complete"
     if status.get("state") == "complete" and status.get("epoch") == job["epochs"]:
         if not all(
             (destination / n).is_file() and (destination / n).stat().st_size > 0
@@ -125,7 +130,7 @@ def launch(job: dict, device: int) -> None:
         "import multiprocessing as mp; mp.set_start_method('spawn'); "
         "from xuannv_embedding.cli import main; raise SystemExit(main())",
         "experiment",
-        "run",
+        job.get("action", "run"),
         "--config",
         job["config"],
         "--cache",
@@ -134,9 +139,30 @@ def launch(job: dict, device: int) -> None:
         job["output"],
         "--device",
         f"npu:{device}",
-        "--epochs",
-        str(job["epochs"]),
     ]
+    if job.get("action") == "export":
+        if _sha(Path(job["checkpoint"])) != job["checkpoint_sha256"]:
+            raise ValueError("registered export checkpoint changed")
+        command += ["--checkpoint", job["checkpoint"]]
+    else:
+        command += ["--epochs", str(job["epochs"])]
+        if job.get("pilot"):
+            command += ["--pilot"]
+        if job.get("adaptation"):
+            a = job["adaptation"]
+            for name in ("initialize", "base_config"):
+                if _sha(Path(a[name])) != a[name + "_sha256"]:
+                    raise ValueError(f"registered adaptation {name} changed")
+            command += [
+                "--initialize",
+                a["initialize"],
+                "--base-config",
+                a["base_config"],
+                "--highres-encoding",
+                a["highres_encoding"],
+            ]
+            if a["freeze_base"]:
+                command += ["--freeze-base"]
     with Path(job["log"]).open("x") as log:
         process = subprocess.Popen(
             command,
