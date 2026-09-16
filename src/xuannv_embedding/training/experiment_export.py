@@ -1,0 +1,106 @@
+"""Export registered checkpoints from their exact immutable spatial-fold caches."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import time
+from dataclasses import asdict
+from pathlib import Path
+
+from torch.utils.data import DataLoader
+
+from xuannv_embedding.config import Config
+from xuannv_embedding.data.raster_dataset import collate_region_batch
+from xuannv_embedding.export.embedding import export_embedding_batches
+from xuannv_embedding.training.checkpoint import load_training_checkpoint
+from xuannv_embedding.training.cli import _git_sha, _setup_device, build_training_system
+from xuannv_embedding.training.experiment import CachedSamples, _json, _sha
+
+
+def validate_export_identity(run: dict, *, config_sha: str, cache_sha: str) -> None:
+    for key, expected in (("config_sha256", config_sha), ("cache_sha256", cache_sha)):
+        if run.get(key) != expected:
+            raise ValueError(f"export {key} differs from the training registration")
+
+
+def run(args: argparse.Namespace) -> None:
+    if args.batch_size < 1:
+        raise ValueError("batch_size must be positive")
+    config = Config.from_yaml(args.config)
+    cache_path = args.cache / "cache.json"
+    document = json.loads(cache_path.read_text())
+    training = json.loads((args.checkpoint.parent / "run.json").read_text())
+    validate_export_identity(training, config_sha=_sha(args.config), cache_sha=_sha(cache_path))
+    if args.output.exists():
+        raise FileExistsError("export output exists; use a new directory")
+    for record in document["records"]:
+        if _sha(Path(record["path"])) != record["sha256"]:
+            raise ValueError("cached sample checksum mismatch")
+    system = build_training_system(config)
+    state = load_training_checkpoint(
+        args.checkpoint,
+        model=system.model,
+        expected_config_sha256=_sha(args.config),
+        expected_source_schema={k: asdict(v) for k, v in config.model.input_sources.items()},
+        expected_regions=[d.region for d in config.data.datasets],
+    )
+    if state["git_sha"] != training["git_sha"]:
+        raise ValueError("checkpoint training code identity mismatch")
+    metadata = {
+        "export_git_sha": _git_sha(),
+        "training_git_sha": state["git_sha"],
+        "checkpoint": str(args.checkpoint),
+        "checkpoint_sha256": _sha(args.checkpoint),
+        "checkpoint_epoch": state["epoch"] + 1,
+        "config_sha256": _sha(args.config),
+        "cache_sha256": _sha(cache_path),
+        "split": document["split"],
+        "months": list(config.data.months),
+        "dtype": "float32",
+        "masking": "none; actual availability retained",
+        "selection": "training validation loss; never test labels",
+    }
+    del state
+    device, distributed, _ = _setup_device(args.device)
+    if distributed:
+        raise ValueError("export requires an independent single-device process")
+    args.output.mkdir(parents=True)
+    _json(args.output / "run.json", metadata)
+    started = time.monotonic()
+    paths = []
+    try:
+        loader = DataLoader(
+            CachedSamples(document, list(range(len(document["records"])))),
+            batch_size=args.batch_size,
+            num_workers=0,
+            collate_fn=collate_region_batch,
+        )
+        for batch in loader:
+            written = export_embedding_batches(
+                system.model, [batch], args.output / "embeddings", device=device
+            )
+            paths.extend(written)
+            status = {
+                "state": "running",
+                "patches": len(paths),
+                "total": len(document["records"]),
+                "elapsed_seconds": time.monotonic() - started,
+            }
+            _json(args.output / "status.json", status)
+            if len(paths) % 20 == 0:
+                print(json.dumps(status), flush=True)
+        _json(
+            args.output / "manifest.json",
+            {
+                **metadata,
+                "records": [
+                    {"patch_id": r["patch_id"], "bounds": r["bounds"], "path": str(p)}
+                    for r, p in zip(document["records"], paths, strict=True)
+                ],
+            },
+        )
+        _json(args.output / "status.json", {**status, "state": "complete"})
+    except BaseException as exc:
+        _json(args.output / "status.json", {"state": "failed", "error": repr(exc)})
+        raise

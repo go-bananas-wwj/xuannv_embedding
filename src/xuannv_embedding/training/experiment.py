@@ -439,6 +439,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pilot", action="store_true")
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
+    p = sub.add_parser("export")
+    p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--cache", type=Path, required=True)
+    p.add_argument("--checkpoint", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--device", required=True)
+    p.add_argument("--batch-size", type=int, default=1)
     p = sub.add_parser("queue")
     p.add_argument("--plan", type=Path, required=True)
     p = sub.add_parser("fold-cache")
@@ -449,6 +456,10 @@ def main(argv: list[str] | None = None) -> int:
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers)
+    elif args.action == "export":
+        from xuannv_embedding.training.experiment_export import run as export_run
+
+        export_run(args)
     elif args.action == "fold-cache":
         from xuannv_embedding.training.experiment_folds import derive_fold_cache
 
