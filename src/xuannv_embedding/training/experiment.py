@@ -457,6 +457,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--highres-encoding", choices=["native", "resample"], default="native")
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
+    p = sub.add_parser("probe")
+    p.add_argument("--cache", type=Path, required=True)
+    p.add_argument("--embeddings", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--device", default="cpu")
     p = sub.add_parser("export")
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--cache", type=Path, required=True)
@@ -474,6 +479,10 @@ def main(argv: list[str] | None = None) -> int:
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers, include_highres=args.include_highres)
+    elif args.action == "probe":
+        from xuannv_embedding.downstream.development import run as probe_run
+
+        probe_run(args)
     elif args.action == "export":
         from xuannv_embedding.training.experiment_export import run as export_run
 
