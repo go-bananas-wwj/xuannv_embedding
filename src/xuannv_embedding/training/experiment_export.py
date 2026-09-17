@@ -122,6 +122,15 @@ def run(args: argparse.Namespace) -> None:
                 ],
             },
         )
+        if getattr(args, "probe_output", None):
+            from xuannv_embedding.training.probe_followup import launch_probe
+
+            launch_probe(
+                args.output,
+                args.cache,
+                args.probe_output,
+                args.probe_slots or args.probe_output.parent / "cpu_slots",
+            )
         _json(args.output / "status.json", {**status, "state": "complete"})
     except BaseException as exc:
         _json(args.output / "status.json", {"state": "failed", "error": repr(exc)})

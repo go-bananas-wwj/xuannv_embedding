@@ -79,6 +79,12 @@ def validate_plan(plan: dict) -> None:
         raise ValueError("queue names and output directories must be unique")
     by_name = {j["name"]: j for j in jobs}
     for job in jobs:
+        if job.get("initialize_from"):
+            parent = job["initialize_from"]
+            if parent not in job.get("depends_on", []) or parent not in by_name:
+                raise ValueError("deferred initialization requires its producer dependency")
+            if Path(job["adaptation"]["initialize"]) != Path(by_name[parent]["output"]) / "best.pt":
+                raise ValueError("deferred initialization must use the producer best.pt")
         if job.get("checkpoint_from"):
             parent = job["checkpoint_from"]
             if parent not in job.get("depends_on", []) or parent not in by_name:
@@ -157,6 +163,8 @@ def launch(job: dict, device: int) -> None:
             raise ValueError("registered export checkpoint changed")
         job["checkpoint_sha256"] = actual_sha
         command += ["--checkpoint", job["checkpoint"]]
+        if job.get("probe_output"):
+            command += ["--probe-output", job["probe_output"], "--probe-slots", job["probe_slots"]]
     else:
         command += ["--epochs", str(job["epochs"])]
         if job.get("pilot"):
@@ -164,7 +172,11 @@ def launch(job: dict, device: int) -> None:
         if job.get("adaptation"):
             a = job["adaptation"]
             for name in ("initialize", "base_config"):
-                if _sha(Path(a[name])) != a[name + "_sha256"]:
+                actual = _sha(Path(a[name]))
+                expected = a.get(name + "_sha256")
+                if expected is None and name == "initialize" and job.get("initialize_from"):
+                    a[name + "_sha256"] = actual
+                elif actual != expected:
                     raise ValueError(f"registered adaptation {name} changed")
             command += [
                 "--initialize",

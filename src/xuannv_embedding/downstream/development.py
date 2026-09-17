@@ -65,6 +65,13 @@ def knn_logits(train_x, train_y, query_x, device):
 
 
 def run(args):
+    from xuannv_embedding.training.probe_followup import cpu_slot
+
+    with cpu_slot(getattr(args, "slot_directory", None)):
+        _run(args)
+
+
+def _run(args):
     torch.set_num_threads(2)
     cache_path = args.cache / "cache.json"
     cache = json.loads(cache_path.read_text())

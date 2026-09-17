@@ -56,6 +56,7 @@ class IncrementalHighResModel(nn.Module):
         super().__init__()
         self.base = base
         self.freeze_base = freeze_base
+        self.frozen_sources: set[str] = set()
         self.embed_dim = base.embed_dim
         self.branches = nn.ModuleDict(
             {s: HighResResidual(c, base.embed_dim, native=native) for s, c in sources.items()}
@@ -67,10 +68,27 @@ class IncrementalHighResModel(nn.Module):
             self.base.requires_grad_(False)
             self.base.eval()
 
+    def extend(self, sources, targets, *, native: bool, freeze_existing: bool):
+        if set(sources) & set(self.branches) or set(targets) & set(self.new_decoders):
+            raise ValueError("new sources and decoders must not overwrite existing modules")
+        if not sources or not targets:
+            raise ValueError("extension requires new sources and targets")
+        self.requires_grad_(not freeze_existing)
+        self.freeze_base = freeze_existing
+        self.frozen_sources = set(self.branches) if freeze_existing else set()
+        for source, channels in sources.items():
+            self.branches[source] = HighResResidual(channels, self.embed_dim, native=native)
+        for name, channels in targets.items():
+            self.new_decoders[name] = ContinuousDecoder(self.embed_dim, channels)
+        self.train(self.training)
+        return self
+
     def train(self, mode=True):
         super().train(mode)
         if self.freeze_base:
             self.base.eval()
+        for source in self.frozen_sources:
+            self.branches[source].eval()
         return self
 
     def forward(

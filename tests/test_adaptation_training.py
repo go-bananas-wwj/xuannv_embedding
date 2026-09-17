@@ -122,3 +122,33 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
     )
     assert json.loads((destination / "status.json").read_text())["patches"] == 4
     assert json.loads((destination / "manifest.json").read_text())["adaptation"]["freeze_base"]
+    second_raw = copy.deepcopy(adapted_raw)
+    second_raw["model"]["input_sources"]["another"] = {"channels": 1, "role": "highres"}
+    second_raw["model"]["target_heads"]["another_recon"] = {
+        "source": "another",
+        "channels": 1,
+        "loss_type": "continuous",
+        "weight": 0.35,
+    }
+    second_raw["data"]["datasets"][0]["source_map"]["another"] = "another"
+    second = setup("second", second_raw)
+    second.initialize = args.output / "latest.pt"
+    second.base_config = args.config
+    second.freeze_base = True
+    second.highres_encoding = "native"
+    run(second)
+    state = torch.load(second.output / "best.pt", weights_only=True)
+    for k, v in adapted["model"].items():
+        torch.testing.assert_close(v, state["model"][k], rtol=0, atol=0)
+    output = tmp_path / "second_export"
+    export_run(
+        argparse.Namespace(
+            config=second.config,
+            cache=second.cache,
+            checkpoint=second.output / "best.pt",
+            output=output,
+            device="cpu",
+            batch_size=1,
+        )
+    )
+    assert json.loads((output / "status.json").read_text())["state"] == "complete"

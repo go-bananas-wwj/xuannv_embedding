@@ -112,6 +112,27 @@ def test_deferred_checkpoint_must_belong_to_its_declared_producer():
         queue.validate_plan(plan)
 
 
+def test_deferred_adaptation_parent_must_match_dependency():
+    plan = {
+        "devices": [0],
+        "existing": [],
+        "jobs": [
+            {"name": "first", "output": "/first"},
+            {
+                "name": "second",
+                "output": "/second",
+                "depends_on": ["first"],
+                "initialize_from": "first",
+                "adaptation": {"initialize": "/wrong/best.pt"},
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match="producer"):
+        queue.validate_plan(plan)
+    plan["jobs"][1]["adaptation"]["initialize"] = "/first/best.pt"
+    queue.validate_plan(plan)
+
+
 def test_launch_uses_spawn_and_isolated_runtime(tmp_path, monkeypatch):
     from types import SimpleNamespace
 

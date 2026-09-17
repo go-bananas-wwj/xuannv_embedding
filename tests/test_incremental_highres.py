@@ -57,3 +57,38 @@ def test_invalid_highres_values_cannot_contaminate_valid_features():
     b = branch(z, dirty, mask)
     torch.testing.assert_close(a, b, rtol=0, atol=0)
     torch.testing.assert_close(a[:, :, :, :4], z[:, :, :, :4], rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("freeze", [True, False])
+def test_extending_a_learned_source_preserves_initial_output_and_freezes_only_old_modules(freeze):
+    model = IncrementalHighResModel(
+        Base(), {"first": 3}, {"first_recon": 3}, native=True, freeze_base=True
+    )
+    nn.init.normal_(model.branches["first"].correction.weight, std=0.01)
+    frames = {"s": torch.randn(2, 1, 2, 8, 8)}
+    masks, times = {"s": torch.ones(2, 1)}, torch.ones(2, 1)
+    high = {"first": torch.randn(2, 3, 24, 24)}
+    valid = {"first": torch.ones(2, 1, 24, 24)}
+    expected = model(frames, masks, times, high, valid).embedding_map.detach()
+    old = {k: v.clone() for k, v in model.state_dict().items()}
+    model.extend({"second": 1}, {"second_recon": 1}, native=True, freeze_existing=freeze)
+    assert list(model.branches) == ["first", "second"]
+    model.train()
+    assert all(p.requires_grad != freeze for p in model.base.parameters())
+    assert all(p.requires_grad != freeze for p in model.branches["first"].parameters())
+    assert all(p.requires_grad for p in model.branches["second"].parameters())
+    high["second"] = torch.randn(2, 1, 16, 16)
+    valid["second"] = torch.ones(2, 1, 16, 16)
+    output = model(frames, masks, times, high, valid)
+    torch.testing.assert_close(output.embedding_map, expected, rtol=0, atol=0)
+    opt = torch.optim.AdamW(model.parameters(), lr=0.01)
+    sum(v.square().mean() for v in output.reconstructions.values()).backward()
+    opt.step()
+    if freeze:
+        for k, v in old.items():
+            torch.testing.assert_close(v, model.state_dict()[k], rtol=0, atol=0)
+        valid["second"].zero_()
+        actual = model(frames, masks, times, high, valid).embedding_map
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    else:
+        assert any(not torch.equal(v, model.state_dict()[k]) for k, v in old.items())
