@@ -24,77 +24,22 @@ torchrun --standalone --nproc-per-node=8 -m xuannv_embedding.cli train \
 `scripts/npu/launch_6card.sh` 6 卡）都只设置默认卡数并转发给共用的 `scripts/launch_ddp.sh`；
 `NPROC_PER_NODE` 可覆盖卡数。
 
-### 多节点 24 卡
+### 8 卡训练
 
-本节是最小可用路径。分层验收流程、故障速查与 ACP 迁移要求见 `docs/multi-node/`。
-
-先复制 `scripts/cuda/cluster.env.example` 为 `scripts/cuda/cluster.env` 并填入 rank 0 的
-`MASTER_ADDR`、`MASTER_PORT` 与节点数。该文件不入库：节点地址属于站点内部拓扑。环境变量优先于
-文件取值，因此临时改拓扑无需改文件。
-
-RoCE 相关设置集中在 `scripts/cuda/env_roce.sh`，两个入口脚本都会自动载入。换集群时逐项复核：
-`NCCL_IB_HCA` 需指向高速网卡（不指定时 NCCL 可能选中低速 bond 口），`NCCL_IB_GID_INDEX` 需对应
-RoCE v2（用 `grep -r . /sys/class/infiniband/mlx5_0/ports/1/gid_attrs/types/` 确认编号），
-`NCCL_SOCKET_IFNAME` 需是各节点互通的那张网卡。
-
-先跑通信自检，再跑训练——它不加载模型也不读数据，能把网络问题与训练侧问题分开：
+当前正式训练统一使用单节点 8 卡。年度 5 米方案与阶段门禁见
+[年度技术报告](xuannv_annual5m_report.tex)。启动器固定为：
 
 ```bash
-NODE_RANK=0 scripts/cuda/check_24card.sh   # 在 MASTER_ADDR 那台
-NODE_RANK=1 scripts/cuda/check_24card.sh
-NODE_RANK=2 scripts/cuda/check_24card.sh
+scripts/cuda/launch.sh CONFIG --output /path/out/checkpoint.pt
 ```
 
-自检通过后在每个节点各运行一次训练入口，只有 `NODE_RANK` 不同：
+先用 synthetic smoke 验证运行时，再对正式年度数据执行短跑。短跑至少记录每卡峰值显存、
+有效样本与目标计数、数据等待时间、吞吐、有限 loss、梯度有限性、checkpoint 原子写入和严格恢复。
+正式长训只有在缺模态 batch、PAN 原生网格和吉林一号原生网格都能稳定前反向后才启动。
 
-```bash
-NODE_RANK=0 scripts/cuda/launch_24card.sh configs/production/haidian_p10c_v1.yaml \
-  --output /path/out/checkpoint.pt
-```
-
-各节点镜像不一致时，裸 `torchrun` 可能解析到系统 Python 或镜像自带的另一套 torch，症状是
-`ModuleNotFoundError: xuannv_embedding`。`env_roce.sh` 会把 `XUANNV_PYTHON` 指向共享盘上的
-解释器，`scripts/launch_ddp.sh` 优先用它启动；镜像化运行时按实际路径覆盖该变量。
-`env_roce.sh` 同时固化 `XUANNV_GIT_SHA`，因为镜像内通常没有 `.git`，缺少它训练会拒绝启动。
-
-### RoCE 需要容器放开锁页内存
-
-RDMA 要把通信缓冲区锁页注册。若实例的 `ulimit -l` 很小或缺少 `CAP_IPC_LOCK`，
-握手能成功（rendezvous 走普通 socket），但第一次 all_reduce 会失败：
-
-```
-NCCL WARN Call to ibv_reg_mr_iova2 failed
-ncclSystemError: ... Call to ibv_reg_mr_iova2 failed
-```
-
-先按下面三项自查；`CapEff` 为 0 或 `ulimit -l` 的 hard limit 很小时，容器内无法自行提升，
-需要在实例/Pod 配置里放开（memlock 设为 unlimited，并授予 IPC_LOCK）：
-
-```bash
-ulimit -l; ulimit -Hl                 # 期望 unlimited
-grep CapEff /proc/self/status         # 需包含 CAP_IPC_LOCK（bit 14）
-ls /sys/kernel/mm/memory_peers/       # GPUDirect 对端内存模块，应有 nv_mem
-```
-
-在放开之前，可以先退回 TCP 跑通多节点流程，代价是带宽显著下降（实测约为 RoCE 的四分之一）。
-把 `NCCL_SOCKET_IFNAME` 指向高速网卡而非管理口，否则会退到最慢的那张：
-
-```bash
-NCCL_NET=Socket NCCL_SOCKET_IFNAME=<互通高速网卡> \
-  NODE_RANK=0 scripts/cuda/check_24card.sh
-```
-
-必须用 `NCCL_NET=Socket`：`NCCL_IB_DISABLE=1` 只关 NCCL 内置的 IB transport，环境装有厂商
-网络插件时（日志显示 `Using network IBext_v8` 之类）仍会走 IB verbs 并继续失败。生效的标志
-是日志出现 `Using network Socket`。
-
-环境变量优先于 `env_roce.sh` 的默认值，因此不必改文件。若容器所在产品形态本身不开放
-capabilities（如 Serverless 类容器实例），RDMA 无法通过调参获得，见 `docs/multi-node/`。
-
-卡数变化时注意全局 batch：全局 batch = 卡数 × `data.batch_size` ×
-`training.gradient_accumulation_steps`。要在 24 卡上保持与 8 卡基线相同的全局 batch（8×3×2=48），
-可设 `data.batch_size: 2` 且 `gradient_accumulation_steps: 1`，此时 `lr` 与 `warmup_epochs`
-无需改动；若全局 batch 变了，学习率需要同步复核。
+全局 batch = 8 × `data.batch_size` × `training.gradient_accumulation_steps`。例如
+`batch_size: 3`、`gradient_accumulation_steps: 2` 时为48。改变单卡 batch 或累积步数后，
+必须重新核对学习率、warmup和有效目标数，不能只保持名义 epoch 数。
 
 分布式后端按设备类型自动选择：CUDA 用 nccl、NPU 用 hccl、CPU 用 gloo。CUDA AMP 在支持 bf16 的
 硬件上使用 bfloat16 并且不启用 GradScaler（bf16 不需要 loss scaling），仅在硬件不支持 bf16 时

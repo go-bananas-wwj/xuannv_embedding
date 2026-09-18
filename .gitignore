@@ -20,5 +20,10 @@ dist/
 *.pth
 *.ckpt
 
-# 站点相关的多节点参数（节点地址属于内部拓扑，不入库）
-scripts/cuda/cluster.env
+# Generated technical-report artifacts; the editable TeX source stays in Git.
+/docs/xuannv_annual5m_report.pdf
+/docs/xuannv_annual5m_report.aux
+/docs/xuannv_annual5m_report.log
+/docs/xuannv_annual5m_report.out
+/docs/xuannv_annual5m_report.toc
+/docs/xuannv_annual5m_report.synctex.gz

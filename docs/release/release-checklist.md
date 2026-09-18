@@ -60,12 +60,6 @@ python scripts/release/run_model_gates.py \
 # 单机 8 卡
 scripts/cuda/launch.sh configs/production/haidian_p10c_v1.yaml \
   --output /path/out/checkpoint.pt
-
-# 三节点 24 卡：在每个节点各运行一次，只有 NODE_RANK 不同
-NODE_RANK=0 scripts/cuda/launch_24card.sh configs/production/haidian_p10c_v1.yaml \
-  --output /path/out/checkpoint.pt
 ```
 
-24 卡用 `launch_24card.sh` 而不是 `launch.sh`：前者会载入 `scripts/cuda/env_roce.sh`
-（RoCE 网卡、`XUANNV_PYTHON`、`XUANNV_GIT_SHA`）并从 `scripts/cuda/cluster.env` 读取节点
-拓扑。用 `launch.sh` 加环境变量拼多节点会缺掉这些设置。分层验收流程见 `docs/multi-node/`。
+当前正式训练仅维护单节点 8 卡入口。年度模型在长训前还需通过真实数据短跑和严格恢复门禁。

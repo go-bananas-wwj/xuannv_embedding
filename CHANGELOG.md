@@ -12,19 +12,10 @@
 - 发布模型门禁改为加速器无关，包装脚本更名为 `scripts/release/run_model_gates.py`。
 - DDP 启动器固定训练解释器，避免各节点镜像解析到另一套 torch。
 
-### 多节点 24 卡
-
-- 新增 `scripts/cuda/env_roce.sh`（RoCE 网卡、GID、`XUANNV_PYTHON`、`XUANNV_GIT_SHA`）与不入库的
-  `scripts/cuda/cluster.env`（节点拓扑）。
-- 新增 `scripts/cuda/check_multinode.py` 与 `check_24card.sh`：不加载模型的 NCCL 自检
-  （建组、all_reduce 数值、all_gather 唯一性、带宽）。
-- 新增 `scripts/cuda/launch_24card.sh` 三节点 24 卡训练入口。
-
 ### 文档
 
-- 新增 `docs/multi-node/`：分层验收清单、NCCL 故障速查、ACP 迁移要求。
-- 记录 RoCE 需要容器放开锁页内存，以及 `NCCL_IB_DISABLE=1` 挡不住厂商外部网络插件
-  （需 `NCCL_NET=Socket` 才能真正退回 TCP）。
+- 正式 CUDA 训练统一为单节点 8 卡，删除不再维护的历史多节点路线。
+- 全国年度 5m 方案合并为一份可编辑技术报告，并登记 v6 数据证据。
 - 发布清单按加速器平台分节；说明空间重采样由登记权重冻结。
 - 新增 `AGENTS.md` 项目指南。
 
