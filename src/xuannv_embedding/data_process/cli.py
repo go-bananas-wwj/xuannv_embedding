@@ -235,4 +235,50 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
         return manifest_main(argv)
     if command == "validate":
         return validate_main(argv)
+    if command == "catalog":
+        from xuannv_embedding.data_process.highres_catalog import main
+
+        return main(list(argv))
+    if command == "finalize-catalog":
+        from xuannv_embedding.data_process.finalize_catalog import main
+
+        return main(list(argv))
+    if command == "p0":
+        from xuannv_embedding.data_process.p0 import main
+
+        return main(list(argv))
+    if command == "prepare-observations":
+        from xuannv_embedding.data_process.prepare_observations import main
+
+        return main(list(argv))
+    if command == "pair-observations":
+        from xuannv_embedding.data_process.pair_observations import main
+
+        return main(list(argv))
+    if command == "quality-annual":
+        from xuannv_embedding.data_process.annual_quality import main
+
+        return main(list(argv))
+    if command == "cloud-annual":
+        from xuannv_embedding.data_process.cloud_quality import main
+
+        return main(list(argv))
+    if command == "check-annual":
+        from xuannv_embedding.data.annual_dataset import main
+
+        return main(list(argv))
+
+    if command == "pan-annual":
+        from xuannv_embedding.data_process.pan_annual import main
+
+        return main(list(argv))
+
+    if command == "cloud-highres":
+        from xuannv_embedding.data_process.highres_cloud import main
+
+        return main(list(argv))
+    if command == "release-quality":
+        from xuannv_embedding.data_process.release_quality import main
+
+        return main(list(argv))
     raise ValueError(f"未知 data command: {command}")

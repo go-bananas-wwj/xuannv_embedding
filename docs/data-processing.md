@@ -20,6 +20,13 @@ xuannv data materialize  从冻结 catalog 物化多源栅格
 xuannv data preprocess   对齐并切 patch
 xuannv data manifest     生成 manifest v1 与 sidecar
 xuannv data validate     审计 manifest 或父网格包
+xuannv data catalog      从本地高分归档建立观测目录与低分配对缓存
+xuannv data finalize-catalog      抽样验收并发布已物化目录
+xuannv data prepare-observations  校验观测、生成掩膜和年度索引
+xuannv data pair-observations     配对同期高低分观测并验证读取
+xuannv data quality-annual        执行年度观测初筛并重算统计量
+xuannv data release-quality       完成云影、配准、重复和放行门禁
+xuannv data check-annual          抽样读取年度原生网格数据
 ```
 
 每个命令使用 `--help` 查看精确参数。`grid` 和 `materialize` 拒绝覆盖完成目录；批次先写入临时
@@ -38,3 +45,12 @@ fingerprint 覆盖 patch 身份与两套坐标边界、月份、物化策略、�
 
 数据、catalog cache、Zarr、Shape、统计量与审计输出都放在仓库之外。Git 只保存代码、配置、
 schema 和小型证据摘要。
+
+当前正式年度数据入口是
+`/data/heyuhang/processed/national_annual5m_quality_v6`。其合同和保守训练质检已经通过：六份
+manifest 共抽读600个真实样本，父格、文件、原始产品和高分像元跨集合冲突均为零，训练统计量从
+最终train元数据重算。Landsat因缺少云影QA暂不进入该版本；无法可靠确认相对配准的高分观测已隔离。
+这表示数据可用于模型开发和8卡训练联调，不表示云影准确率或绝对定位精度已经独立认证。
+
+正式方案、质量限制与训练顺序见[年度5m技术报告](xuannv_annual5m_report.tex)，机器证据索引见
+[report-evidence.json](report-evidence.json)。

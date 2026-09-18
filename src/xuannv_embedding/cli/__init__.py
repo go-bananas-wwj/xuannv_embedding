@@ -64,6 +64,17 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
         "preprocess": "对齐并切分多源栅格",
         "manifest": "生成带摘要的 manifest v1",
         "validate": "审计 manifest 或父网格包",
+        "catalog": "生成高分观测目录与小规模缓存",
+        "finalize-catalog": "抽样验收并发布已完成物化的数据目录",
+        "prepare-observations": "校验解压观测、生成像素掩码与逐年训练索引",
+        "pair-observations": "配对同期高低分观测并验证真实 loader",
+        "quality-annual": "筛选年度观测、隔离异常并重算训练统计量",
+        "cloud-annual": "生成可恢复的 S2 云影筛选候选数据",
+        "pan-annual": "全量审计2m全色观测并接入年度候选清单",
+        "cloud-highres": "按波长识别5m光学波段并生成云影筛选候选",
+        "release-quality": "年度数据云影、地物对齐和重复划分收尾验收",
+        "check-annual": "抽样验收年度原生网格和变长观测读取器",
+        "p0": "从观测 pilot 准备真实 P0 训练数据",
     }
     for command, help_text in descriptions.items():
         action = actions.add_parser(command, help=help_text, add_help=False)
@@ -88,6 +99,12 @@ def _run_export(args: argparse.Namespace) -> int:
     return export_main(args.forwarded_args)
 
 
+def _run_diagnostics(args: argparse.Namespace) -> int:
+    from xuannv_embedding.training.p0_diagnostics import main
+
+    return main(args.forwarded_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建不依赖可选运行组件的顶层命令解析器。"""
     parser = argparse.ArgumentParser(
@@ -100,6 +117,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_downstream_commands(subparsers)
     train = subparsers.add_parser("train", help="运行 P10C 训练或发布 smoke", add_help=False)
     train.set_defaults(handler=_run_train)
+    diagnostics = subparsers.add_parser(
+        "diagnose", help="真实 P0 观测与训练合同诊断", add_help=False
+    )
+    diagnostics.set_defaults(handler=_run_diagnostics)
     export = subparsers.add_parser(
         "export", help="从严格 checkpoint 导出 embedding", add_help=False
     )
@@ -111,7 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
-    if args.command in {"data", "train", "export"}:
+    if args.command in {"data", "train", "export", "diagnose"}:
         args.forwarded_args = unknown
     elif unknown:
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")
