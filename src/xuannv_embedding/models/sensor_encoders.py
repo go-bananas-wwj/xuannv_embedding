@@ -220,7 +220,13 @@ class NativeResolutionHighResEncoder(nn.Module):
         num_groups = 8 if out_channels % 8 == 0 else out_channels
         self.norm3 = nn.GroupNorm(num_groups, out_channels)
 
-    def forward(self, x: torch.Tensor, target_size: tuple[int, int] | None = None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        target_size: tuple[int, int] | None = None,
+        *,
+        encode_before_resize: bool = False,
+    ) -> torch.Tensor:
         """前向传播。
 
         Args:
@@ -231,9 +237,11 @@ class NativeResolutionHighResEncoder(nn.Module):
             输出张量，形状 ``(B, out_channels, H_target, W_target)``。
         """
         target_size = target_size if target_size is not None else self.target_size
-        if x.shape[-2:] != target_size:
+        if not encode_before_resize and x.shape[-2:] != target_size:
             x = F.interpolate(x, size=target_size, mode="bilinear", align_corners=False)
         x = F.gelu(self.norm1(self.conv1(x)))
         x = F.gelu(self.norm2(self.conv2(x)))
         x = F.gelu(self.norm3(self.conv3(x)))
+        if x.shape[-2:] != target_size:
+            x = F.interpolate(x, size=target_size, mode="bilinear", align_corners=False)
         return x

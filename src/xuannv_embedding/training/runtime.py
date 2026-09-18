@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from contextlib import nullcontext
+from time import perf_counter
 from typing import Any, Callable
 
 import torch
@@ -69,12 +70,14 @@ class TrainingSystem(nn.Module):
         self.criterion = criterion
 
     def forward(self, batch: dict[str, Any]) -> dict[str, torch.Tensor]:
+        optional = {key: batch[key] for key in ("highres_months", "output_months") if key in batch}
         output = self.model(
             batch["source_frames"],
             batch["source_masks"],
             batch["timestamps"],
             batch.get("highres_frames"),
             batch.get("highres_masks"),
+            **optional,
         )
         return self.criterion(
             output,
@@ -104,6 +107,7 @@ def train_steps(
     amp: bool,
     scheduler: Any | None = None,
     epoch_end_callback: Callable[[int], None] | None = None,
+    step_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, float | int]:
     """训练有限个 epoch，并返回可序列化的发布门禁摘要。"""
     if epochs <= 0 or gradient_accumulation_steps <= 0:
@@ -117,12 +121,22 @@ def train_steps(
     batch_count = 0
     optimizer_steps = 0
     loss_sum = 0.0
+    started = perf_counter()
+    previous_end = started
+    data_wait_seconds = 0.0
+    sample_count = 0
+    gradient_norm = 0.0
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     end_epoch = start_epoch + epochs - 1
     for epoch in range(start_epoch, end_epoch + 1):
         _unwrap(system).criterion.set_epoch(epoch)
         pending = 0
         for raw_batch in batches:
+            batch_started = perf_counter()
+            data_wait_seconds += batch_started - previous_end
+            sample_count += int(raw_batch["timestamps"].shape[0])
             batch = _move(raw_batch, device)
             with _autocast(device, amp):
                 losses = system(batch)
@@ -137,6 +151,13 @@ def train_steps(
             batch_count += 1
             loss_sum += float(losses["total"].detach().float().cpu())
             if pending == gradient_accumulation_steps:
+                if scaler is not None:
+                    scaler.unscale_(optimizer)
+                gradient_norm = float(
+                    torch.nn.utils.clip_grad_norm_(
+                        system.parameters(), float("inf"), error_if_nonfinite=True
+                    )
+                )
                 if scaler is None:
                     optimizer.step()
                 else:
@@ -145,6 +166,24 @@ def train_steps(
                 optimizer.zero_grad(set_to_none=True)
                 optimizer_steps += 1
                 pending = 0
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            previous_end = perf_counter()
+            if step_callback is not None:
+                step_callback(
+                    {
+                        "batch": batch_count,
+                        "optimizer_steps": optimizer_steps,
+                        "loss": float(losses["total"].detach().float().cpu()),
+                        "reconstruction": float(
+                            losses.get("recon", losses["total"]).detach().float().cpu()
+                        ),
+                        "gradient_norm": gradient_norm,
+                        "elapsed_seconds": previous_end - started,
+                        "data_wait_seconds": data_wait_seconds,
+                        "step_seconds": previous_end - batch_started,
+                    }
+                )
         if pending:
             if scaler is None:
                 optimizer.step()
@@ -167,4 +206,13 @@ def train_steps(
         "batches": batch_count,
         "optimizer_steps": optimizer_steps,
         "loss": loss_sum / batch_count,
+        "elapsed_seconds": perf_counter() - started,
+        "data_wait_seconds": data_wait_seconds,
+        "samples_per_rank": sample_count,
+        "peak_allocated_bytes": (
+            torch.cuda.max_memory_allocated(device) if device.type == "cuda" else 0
+        ),
+        "peak_reserved_bytes": (
+            torch.cuda.max_memory_reserved(device) if device.type == "cuda" else 0
+        ),
     }

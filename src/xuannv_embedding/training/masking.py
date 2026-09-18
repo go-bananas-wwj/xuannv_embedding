@@ -77,9 +77,9 @@ def _drop_highres_source(
     else:
         keep = (torch.rand(batch_size, device=frames.device) >= prob).to(frames.dtype)
     dropped = 1.0 - keep
-    frames = frames * keep[:, None, None, None]
+    frames = frames * keep.reshape(batch_size, *([1] * (frames.ndim - 1)))
     if drop_masks:
-        masks = masks * keep[:, None, None, None]
+        masks = masks * keep.reshape(batch_size, *([1] * (masks.ndim - 1)))
     return frames, masks, dropped.mean().detach()
 
 
@@ -212,13 +212,16 @@ def _drop_spatial_blocks(
             keep = active[:, None, None, None] * keep + (1.0 - active[:, None, None, None])
             keep_masks[key] = keep
         keep = keep_masks[key]
-        highres_frames[source] = frames * keep
+        highres_frames[source] = frames * (keep[:, None] if frames.ndim == 5 else keep)
         if drop_highres_masks and source in highres_masks:
-            highres_masks[source] = highres_masks[source] * F.interpolate(
+            resized_keep = F.interpolate(
                 keep,
                 size=highres_masks[source].shape[-2:],
                 mode="nearest",
             )
+            if highres_masks[source].ndim == 5:
+                resized_keep = resized_keep[:, None]
+            highres_masks[source] = highres_masks[source] * resized_keep
         dropped_sum = dropped_sum + (1.0 - keep).mean().detach()
         dropped_count += 1
 

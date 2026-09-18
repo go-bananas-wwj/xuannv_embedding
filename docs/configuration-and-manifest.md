@@ -6,6 +6,16 @@
 不得使用 `_base_`。解析器拒绝未知字段和 YAML 重复键，也不把字符串强制转换成布尔值或数值；
 学习率、权重、概率、温度和区域采样权重必须满足各自的有限值及正/非负范围。
 
+P0 可通过 `data.target_months` 指定 `data.months` 的有序无重复子集；完整时间轴与
+`num_months/ref_year/ref_month` 保持一致，loader 只读取目标月，模型按明确的月度索引输出。
+默认空列表保持原有全部月份行为。
+
+`data.highres_mode` 默认 `legacy`，保留旧高分单帧路径；设为 `observations` 时，loader
+保留高分帧并输出 `highres_months`，模型进行按月、无序集合残差融合，空支持严格回退到同权重低分输出。
+`data.highres_max_observations` 默认为 4，是每个 source、每个父格的上限，超过时必须在 manifest
+生成阶段明确选帧。每条高分路径的月份表示分配的目标月，实际采集日和时间差另存观测目录；
+不要直接把采集日期文件名当作跨月候选的目标月。高分帧先在存储网格编码，再对齐特征。
+
 `model.input_sources` 的每个规范槽位显式声明：
 
 ```yaml
@@ -14,6 +24,11 @@ input_sources:
   highres_optical: {channels: 3, role: highres}
   highres_sar: {channels: 1, role: highres}
 ```
+
+年度 v6 manifest 通过 `provenance.observations` 保存变长原生高分观测：每条记录带有目标月份、
+源文件、通道数、原生高宽、有效掩膜、质量状态和处理版本。PAN 保留 `1×640×640`，吉林一号多光谱
+保留 `6×256×256`；loader 不在离线阶段把二者强行缩放成同一数组。缺失高分分支用空列表和
+`availability=0` 表达，模型必须显式处理缺失，不能把零占位解释为零值观测。
 
 每个 `data.datasets` 项声明 `region`、`manifest_path`、`statistics_dir`、`patch_grid_path`、
 `source_map`、`supervised_label_roots` 和 `sampling_weight`。例如物理源

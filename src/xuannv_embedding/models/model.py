@@ -19,6 +19,7 @@ from xuannv_embedding.models.blocks import (
 from xuannv_embedding.models.bottleneck import VMFBottleneck
 from xuannv_embedding.models.decoders import CategoricalDecoder, ContinuousDecoder
 from xuannv_embedding.models.highres_fusion import AvailabilityAwareFusion
+from xuannv_embedding.models.observation_fusion import fuse_observations
 from xuannv_embedding.models.sensor_encoders import (
     NativeResolutionHighResEncoder,
     SensorEncoderBank,
@@ -198,6 +199,9 @@ class AEFModel(nn.Module):
         timestamps: torch.Tensor,
         highres_frames: dict[str, torch.Tensor] | None = None,
         highres_masks: dict[str, torch.Tensor] | None = None,
+        *,
+        highres_months: dict[str, torch.Tensor] | None = None,
+        output_months: torch.Tensor | None = None,
     ) -> AEFOutput:
         """AEFModel 前向传播。
 
@@ -291,6 +295,17 @@ class AEFModel(nn.Module):
             feats, global_timestamps, combined_mask
         )  # (B, T_month, H', W', embed_dim), (B, T_month)
 
+        if output_months is not None:
+            if output_months.ndim != 2 or output_months.shape[0] != B:
+                raise ValueError("output_months must have shape B,M")
+            selected_indices = self.monthly_embed._yyyymm_to_index(output_months)
+            if bool(((selected_indices < 0) | (selected_indices >= self.num_months)).any()):
+                raise ValueError("output_months outside configured monthly bins")
+            month_index = selected_indices[:, :, None, None, None].expand(
+                -1, -1, *monthly_feats.shape[2:]
+            )
+            monthly_feats = monthly_feats.gather(1, month_index)
+
         # 5) 逐月恢复到原始分辨率。precision_scale=1 时避免无意义的上采样再缩回。
         Bm, M, Hh, Wh, D = monthly_feats.shape
         if (Hh, Wh) == input_size:
@@ -304,7 +319,24 @@ class AEFModel(nn.Module):
         embedding_map = mu_up.permute(0, 1, 4, 2, 3)  # (B, T_month, D, H, W)
 
         # 6) 可选高分辨率 availability-aware 融合（逐月重复同一高分辨率特征）。
-        if highres_frames and self.highres_fusion_to_embedding:
+        if highres_frames and self.highres_fusion_to_embedding and highres_months is not None:
+            if highres_masks is None:
+                raise ValueError("Observation fusion requires highres_masks")
+            if output_months is None:
+                offsets = torch.arange(M, device=embedding_map.device) + self.ref_month - 1
+                output_months = ((self.ref_year + offsets // 12) * 100 + offsets % 12 + 1)[
+                    None
+                ].expand(Bm, -1)
+            embedding_map = fuse_observations(
+                embedding_map,
+                highres_frames,
+                highres_masks,
+                highres_months,
+                output_months,
+                self.highres_encoders,
+                self.highres_fusion,
+            )
+        elif highres_frames and self.highres_fusion_to_embedding:
             if highres_masks is None:
                 raise ValueError("提供 highres_frames 时必须同时提供 highres_masks")
             base_feat = embedding_map.reshape(Bm * M, D, H, W)

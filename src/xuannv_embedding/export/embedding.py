@@ -49,12 +49,18 @@ def export_embedding_batches(
             patch_ids = batch.get("patch_ids")
             if not isinstance(patch_ids, list) or not patch_ids:
                 raise ValueError("导出 batch 必须包含非空 patch_ids")
+            optional = {}
+            if "output_months" in batch:
+                optional["output_months"] = batch["output_months"].to(target_device)
+            if "highres_months" in batch:
+                optional["highres_months"] = _move_mapping(batch["highres_months"], target_device)
             output = model(
                 _move_mapping(batch["source_frames"], target_device),
                 _move_mapping(batch["source_masks"], target_device),
                 batch["timestamps"].to(target_device),
                 _move_mapping(batch.get("highres_frames", {}), target_device),
                 _move_mapping(batch.get("highres_masks", {}), target_device),
+                **optional,
             )
             embedding = output.embedding_map.detach().float().cpu().numpy()
             if embedding.ndim != 5 or embedding.shape[0] != len(patch_ids):

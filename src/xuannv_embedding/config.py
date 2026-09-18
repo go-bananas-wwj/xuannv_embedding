@@ -257,6 +257,9 @@ class DataConfig:
     batch_size: int = 4
     num_workers: int = 8
     patch_size: int = 128
+    target_months: list[str] = field(default_factory=list)
+    highres_mode: Literal["legacy", "observations"] = "legacy"
+    highres_max_observations: int = 4
 
     def dataset_for_region(self, region: str) -> RegionDatasetConfig:
         matches = [dataset for dataset in self.datasets if dataset.region == region]
@@ -710,7 +713,16 @@ def _parse_data(value: Any, model: ModelConfig) -> DataConfig:
     raw = _strict(
         value,
         "data",
-        allowed={"months", "datasets", "batch_size", "num_workers", "patch_size"},
+        allowed={
+            "months",
+            "datasets",
+            "batch_size",
+            "num_workers",
+            "patch_size",
+            "target_months",
+            "highres_mode",
+            "highres_max_observations",
+        },
         required={"months", "datasets"},
     )
     if not isinstance(raw["months"], list):
@@ -726,12 +738,27 @@ def _parse_data(value: Any, model: ModelConfig) -> DataConfig:
     regions = [dataset.region for dataset in datasets]
     if len(set(regions)) != len(regions):
         raise ConfigError("data.datasets 区域名称重复")
+    target_months = raw.get("target_months", [])
+    if not isinstance(target_months, list) or any(
+        not isinstance(month, str) or month not in months for month in target_months
+    ):
+        raise ConfigError("data.target_months 必须是 data.months 的子集")
+    if target_months != sorted(set(target_months)):
+        raise ConfigError("data.target_months 包含重复或顺序冲突")
+    highres_mode = _string(raw.get("highres_mode", "legacy"), "data.highres_mode")
+    if highres_mode not in {"legacy", "observations"}:
+        raise ConfigError("data.highres_mode 必须是 legacy 或 observations")
     return DataConfig(
         months=months,
         datasets=datasets,
         batch_size=_positive_int(raw.get("batch_size", 4), "data.batch_size"),
         num_workers=_non_negative_int(raw.get("num_workers", 8), "data.num_workers"),
         patch_size=_positive_int(raw.get("patch_size", 128), "data.patch_size"),
+        target_months=list(target_months),
+        highres_mode=highres_mode,
+        highres_max_observations=_positive_int(
+            raw.get("highres_max_observations", 4), "data.highres_max_observations"
+        ),
     )
 
 

@@ -235,6 +235,7 @@ def build_region_batch_stream(
                 shuffle=sampler is None,
                 sampler=sampler,
                 num_workers=config.data.num_workers,
+                persistent_workers=config.data.num_workers > 0,
                 collate_fn=collate_region_batch,
                 pin_memory=True,
                 drop_last=False,
@@ -384,6 +385,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     config = Config.from_yaml(args.config)
     git_sha = _git_sha()
+    code_digest = hashlib.sha256()
+    package_root = Path(__file__).resolve().parents[1]
+    for source_path in sorted(package_root.rglob("*.py")):
+        code_digest.update(source_path.relative_to(package_root).as_posix().encode())
+        code_digest.update(source_path.read_bytes())
+    source_code_sha256 = code_digest.hexdigest()
     device, distributed, local_rank = _setup_device(args.device)
     torch.manual_seed(config.experiment.seed + (dist.get_rank() if distributed else 0))
     system = build_training_system(config).to(device)
@@ -468,6 +475,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if distributed:
             dist.barrier()
 
+    def report_step(metrics: dict[str, Any]) -> None:
+        if rank == 0 and (metrics["batch"] == 1 or metrics["batch"] % 25 == 0):
+            print(json.dumps({"progress": metrics}), flush=True)
+
     summary = train_steps(
         wrapped,
         batches,
@@ -479,12 +490,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         gradient_accumulation_steps=config.training.gradient_accumulation_steps,
         amp=config.training.amp and not args.no_amp,
         epoch_end_callback=save_periodic,
+        step_callback=report_step,
     )
+    local_metrics = dict(summary)
+    rank_metrics = [local_metrics]
+    if distributed:
+        rank_metrics = [None] * dist.get_world_size()
+        dist.all_gather_object(rank_metrics, local_metrics)
+    global_samples = sum(item["samples_per_rank"] for item in rank_metrics)
+    wall_seconds = max(item["elapsed_seconds"] for item in rank_metrics)
     summary.update(
         {
             "world_size": dist.get_world_size() if distributed else 1,
             "spatial_size": args.spatial_size,
             "device_type": device.type,
+            "source_code_sha256": source_code_sha256,
+            "global_samples": global_samples,
+            "wall_seconds": wall_seconds,
+            "global_samples_per_second": global_samples / wall_seconds,
+            "max_rank_peak_allocated_bytes": max(
+                item["peak_allocated_bytes"] for item in rank_metrics
+            ),
+            "rank_metrics": rank_metrics,
         }
     )
     if rank == 0:
