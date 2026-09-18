@@ -1,0 +1,235 @@
+{
+  "report": "xuannv_annual5m_report.tex",
+  "report_version": "1.4",
+  "verified_date": "2026-09-18",
+  "scope": "v6全国年度5m训练数据合同、PAN与高分质量筛选、全量相对配准诊断、跨清单重复审计和600个真实样本读取；未训练表征模型，不构成独立科学精度认证。",
+  "evidence": {
+    "E1": {
+      "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
+      "sha256": "a3abd9210180a4ecf4c8e959daf6be1be4434fad6546908d61c2f9a7db4c292c"
+    },
+    "E2": {
+      "path": "/data/heyuhang/processed/national_annual5m_quality_v3/run.json",
+      "sha256": "c0b051ca8245ccb4751801939bd1a0b1b57a7fe0d3dcc99b56f7f30c3927333c"
+    },
+    "E3": {
+      "path": "/data/heyuhang/processed/national_annual5m_quality_v6/loader-check.json",
+      "sha256": "f1a2718ce78cf50915f3f64c7d9294a6e7966162d620900bbde8f3af00e9d2e6"
+    },
+    "E4": {
+      "path": "/data/heyuhang/processed/national_training_v1/summary.json",
+      "sha256": "7fdbc48bc06ec1d18f1ceed06a3ce9cea4032338e9fc7d242c04284e6c734f6c"
+    },
+    "E5": {
+      "git_baseline": "79685b9fee3e5159a9f5c88bb2700b2da5d007a7",
+      "working_tree": "dirty; baseline SHA alone does not identify the inspected code",
+      "files": [
+        {
+          "path": "src/xuannv_embedding/models/model.py",
+          "sha256": "bc28886778698a7fdd06d86e904cce0870134b5ff745caed1a39bb8fdc2ca954"
+        },
+        {
+          "path": "src/xuannv_embedding/models/blocks.py",
+          "sha256": "cd30763026a852ef2124fd7ac040e894a03b15068f8a0f5004d688b051e2556e"
+        },
+        {
+          "path": "src/xuannv_embedding/models/sensor_encoders.py",
+          "sha256": "180d5768382c1485a47319db65734418eacaffc140c3de09b59154609e1f54aa"
+        },
+        {
+          "path": "src/xuannv_embedding/models/observation_fusion.py",
+          "sha256": "2c060a2d3b71f0904c531e1ea3ffb42835e502670bb23fc6a35d5626ffa6887d"
+        },
+        {
+          "path": "src/xuannv_embedding/models/bottleneck.py",
+          "sha256": "8d61a92641eb24b504724216962f2add50b7e3a7d7b5504a056ae18830e9e64d"
+        },
+        {
+          "path": "src/xuannv_embedding/data/annual_dataset.py",
+          "sha256": "7f87132b1d7aea78c70ee1dc44e2bf93755ff702ffefe5c0ee94728b104caf6d"
+        },
+        {
+          "path": "src/xuannv_embedding/data_process/annual_quality.py",
+          "sha256": "c0a14e0483465f863bba3a5dd80ab9c53a91c5d4e2b974367c235fe9e915e744"
+        },
+        {
+          "path": "src/xuannv_embedding/data_process/cloud_quality.py",
+          "sha256": "24f3a9e381ffcee93fcaf773993dc09a2bba130ebb73bad6cba74364df499b94"
+        },
+        {
+          "path": "src/xuannv_embedding/config.py",
+          "sha256": "635526326b92e82bd45a213d7eecf1e66bcaaf1fe160964aa627d58972363745"
+        },
+        {
+          "path": "src/xuannv_embedding/data_process/pan_annual.py",
+          "sha256": "5f2d4b2269ed40f260bc932d1be975c917a3ea0afe54dcb02011bb930ef77f63"
+        },
+        {
+          "path": "src/xuannv_embedding/data_process/highres_cloud.py",
+          "sha256": "db4484eb5c4928b224bd43cf9ad99f4fad28a50370e35e58e2d9454558f88c80"
+        },
+        {
+          "path": "src/xuannv_embedding/data_process/cli.py",
+          "sha256": "ebd0053c26dd247cb143f49269f7144b77644417dae444ef1f6ce9b27e4f4dc0"
+        },
+        {
+          "path": "src/xuannv_embedding/cli/__init__.py",
+          "sha256": "df8c369e9483e4155054eaa37675565f0e262f4eb03870be3d51b011c589f079"
+        }
+      ]
+    },
+    "E6": {
+      "path": "/data/heyuhang/processed/national_annual5m_quality_v6/pan-screening-summary.json",
+      "sha256": "2d1a2d0ac3689b31c2569c1ba0e6f7ec707c5fcbeaf5873dec38b794d0807943"
+    },
+    "E7": {
+      "path": "/data/heyuhang/processed/national_annual5m_quality_v6/run.json",
+      "sha256": "b89419f3f1f8f61b19f012861df1136f53da9d8db888113855605d9b34b916e4",
+      "files": [
+        {
+          "path": "/data/heyuhang/processed/national_annual5m_quality_v6/contract-check.json",
+          "sha256": "235535119f66c8a3ccd83bdd8cd7184a32c16beeaae36116a4caf899e7653b11"
+        },
+        {
+          "path": "/data/heyuhang/processed/national_annual5m_quality_v6/release-readiness.json",
+          "sha256": "8070701b30005e77ca35e400170df94211c18a27a25aaba75b099b8d82bff281"
+        },
+        {
+          "path": "/data/heyuhang/processed/national_annual5m_quality_v6/checksums.json",
+          "sha256": "984d78108f1527ccfc2be8fcb34bd3f914540835ae78c3d6cbd052870158b63e"
+        },
+        {
+          "path": "/data/heyuhang/processed/gaofen_pan2m_audit_v1/jilin_cloud_diagnostic_review.json",
+          "sha256": "19a3d2afeb7c4963e478de0d76c1500a4ad65662eb30a9934b0d61d481485123"
+        },
+        {
+          "path": "/data/heyuhang/processed/gaofen_pan2m_audit_v1/validation-tests.log",
+          "sha256": "2ce4e1e2fd71e77ccfccb0f7a9e837aa7d02bf5697025f4364047a1426f3a352"
+        }
+      ]
+    },
+    "E8": {
+      "files": [
+        {
+          "path": "/data/heyuhang/processed/national_annual5m_quality_v6/registration-full-summary.json",
+          "sha256": "c3578a864dbf26e6ba0322af17f5c3e544ce3b97fe0a1ee76e218acff33ef07c"
+        },
+        {
+          "path": "/data/heyuhang/processed/national_annual5m_quality_v6/visual-review.json",
+          "sha256": "e8f19a2ef8bf4dec66d83d3ecafb77e40e7a101e816a0da1c7f98dc5ccc9b0a0"
+        }
+      ],
+      "scope": "全量高分相对配准结果和目视诊断；用于定义保守隔离边界，不替代地面控制点或独立精度验证。"
+    }
+  },
+  "verified_metrics": {
+    "manifests": {
+      "2020.test.manifest.jsonl": 6230,
+      "2020.train.manifest.jsonl": 50560,
+      "2020.validation.manifest.jsonl": 4940,
+      "2021.test.manifest.jsonl": 6230,
+      "2021.train.manifest.jsonl": 50560,
+      "2021.validation.manifest.jsonl": 4939
+    },
+    "ms5m_supported_samples": {
+      "2020.test.manifest.jsonl": 1340,
+      "2020.train.manifest.jsonl": 9872,
+      "2020.validation.manifest.jsonl": 990,
+      "2021.test.manifest.jsonl": 1168,
+      "2021.train.manifest.jsonl": 7424,
+      "2021.validation.manifest.jsonl": 687
+    },
+    "pan2m_supported_samples": {
+      "2020.test.manifest.jsonl": 1517,
+      "2020.train.manifest.jsonl": 10663,
+      "2020.validation.manifest.jsonl": 931,
+      "2021.test.manifest.jsonl": 1909,
+      "2021.train.manifest.jsonl": 13338,
+      "2021.validation.manifest.jsonl": 1447
+    },
+    "branch_support_samples": {
+      "2020.test.manifest.jsonl": {
+        "ms_only": 980,
+        "both": 360,
+        "pan_only": 1157,
+        "lowres_only": 3733
+      },
+      "2020.train.manifest.jsonl": {
+        "both": 2632,
+        "ms_only": 7240,
+        "lowres_only": 32657,
+        "pan_only": 8031
+      },
+      "2020.validation.manifest.jsonl": {
+        "both": 204,
+        "ms_only": 786,
+        "pan_only": 727,
+        "lowres_only": 3223
+      },
+      "2021.test.manifest.jsonl": {
+        "pan_only": 1507,
+        "ms_only": 766,
+        "both": 402,
+        "lowres_only": 3555
+      },
+      "2021.train.manifest.jsonl": {
+        "lowres_only": 32240,
+        "ms_only": 4982,
+        "pan_only": 10896,
+        "both": 2442
+      },
+      "2021.validation.manifest.jsonl": {
+        "pan_only": 1209,
+        "both": 238,
+        "lowres_only": 3043,
+        "ms_only": 449
+      }
+    },
+    "pan2m_selected_observations": {
+      "GF1B_PAN_c1": 1790,
+      "GF6_PAN_c1": 28128,
+      "GF1C_PAN_c1": 1065,
+      "GF1D_PAN_c1": 2364
+    },
+    "pan2m_full_payload_audit": {
+      "numeric_candidate": 142059,
+      "excluded": 20002
+    },
+    "ms5m_cloud_counts": {
+      "accepted": 102569,
+      "no_clear_pixels": 6689
+    },
+    "cloud_screening_counts": {
+      "accepted": 1358421,
+      "no_clear_pixels": 93059
+    },
+    "source_observation_counts": {
+      "s1": 1388221,
+      "s2": 1358421,
+      "JL1GP01_PMS1": 6323,
+      "JL1GP01_PMS2": 6858,
+      "JL1GP02_PMS1": 8098,
+      "JL1GP02_PMS2": 4087,
+      "GF1B_PAN": 1790,
+      "GF6_PAN": 28128,
+      "GF1C_PAN": 1065,
+      "GF1D_PAN": 2364
+    },
+    "cross_split_conflicts": {"parent": 0, "file": 0, "product": 0, "pixels": 0},
+    "loader_samples_read": 600,
+    "training_ready": true,
+    "annual_model_ready": false,
+    "scientific_quality_validated": false
+  },
+  "loader_samples_read": 600,
+  "build": {
+    "engine": "Tectonic 0.15.0",
+    "binary_sha256": "4df19452c202c5bef9f7c7e4a01a3f2b9d5199f0a1f73b70b4fe1bffbc9837f6",
+    "source": "https://github.com/tectonic-typesetting/tectonic/releases/tag/tectonic%400.15.0",
+    "tex_bundle": "tlextras-2022.0r0",
+    "fonts": "Fandol via TeX bundle; embedded in PDF"
+  },
+  "targeted_tests_passed": 37,
+  "report_source_sha256": "10ce3fd80b32ae5c5171433e16919da7721b47ab6519f846060eeef010ecc28c",
+  "report_pdf_sha256": "c60f365e7c9a885d81309c25d797e4ad8335887159328e76c48476c5a4c35eba"
+}

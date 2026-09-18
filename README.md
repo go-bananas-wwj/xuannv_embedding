@@ -68,11 +68,11 @@ xuannv downstream evaluate --dataset task.npz --folds folds.json --fold 0 \
 
 ## 文档
 
+- [全国年度 5m 技术报告维护](docs/report-maintenance.md)：唯一方案正文为可编辑 LaTeX，PDF 由源码生成；与已实现的月度生产基线分开说明。
 - [架构与模块边界](docs/architecture.md)
 - [配置和 manifest 合同](docs/configuration-and-manifest.md)
 - [全国数据处理](docs/data-processing.md)
 - [训练、导出与下游评测](docs/training-export-downstream.md)
-- [多节点 24 卡训练](docs/multi-node/README.md)
 - [海淀模型卡](docs/production/haidian-model-card.md)
 - [海淀评测证据](docs/production/haidian-evidence.md)
 - [哈尔滨迁移证据与限制](docs/production/harbin-transfer.md)

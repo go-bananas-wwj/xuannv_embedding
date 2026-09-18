@@ -1,0 +1,624 @@
+% Editable source of truth. Compile from docs/ with: make report
+% Update the evidence date and bibliography when changing scientific claims.
+\documentclass[UTF8,fontset=fandol,zihao=5,a4paper]{ctexart}
+\usepackage[margin=22mm,top=23mm,bottom=23mm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,booktabs,tabularx,array,enumitem}
+\usepackage[table]{xcolor}
+\usepackage{graphicx,tikz,caption,fancyhdr,hyperref,xurl}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+\definecolor{ink}{HTML}{18354A}
+\definecolor{teal}{HTML}{087E8B}
+\definecolor{gold}{HTML}{B67827}
+\definecolor{pale}{HTML}{EDF5F7}
+\definecolor{muted}{HTML}{586975}
+\hypersetup{colorlinks=true,linkcolor=teal,citecolor=teal,urlcolor=teal,
+ pdftitle={玄女：全国年度5米地理嵌入技术报告},pdfauthor={heyuhang},bookmarksnumbered=true}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small\color{muted}玄女 / 年度 5m 地理嵌入}
+\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.4}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\ctexset{section={format=\Large\bfseries\color{ink}},subsection={format=\large\bfseries\color{ink}}}
+\setlength{\parskip}{4pt}
+\setlength{\emergencystretch}{3em}
+\setlist{nosep,leftmargin=1.6em,topsep=4pt}
+\renewcommand{\arraystretch}{1.25}
+\captionsetup{font=small,labelfont=bf,justification=raggedright,singlelinecheck=false}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\status}[1]{\textcolor{teal}{\textbf{#1}}}
+\newcommand{\note}[1]{\par\smallskip\noindent\colorbox{pale}{\parbox{0.95\linewidth}{\small #1}}\par\smallskip}
+\newcommand{\source}[1]{\par{\footnotesize\color{muted}依据：#1}\par}
+\newcommand{\shape}[1]{\ensuremath{#1}}
+\newcommand{\reportpage}{\clearpage}
+\tikzset{box/.style={draw=teal!65,fill=pale,rounded corners=2pt,align=center,
+ font=\small,inner sep=6pt},goldbox/.style={box,draw=gold,fill=gold!7},
+ arr/.style={-{Latex[length=2mm]},draw=ink,line width=.65pt},
+ labeltext/.style={font=\footnotesize,text=muted,align=center}}
+
+\begin{document}
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\thispagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2pt}
+\begin{tikzpicture}[remember picture,overlay]
+\fill[ink] (current page.north west) rectangle ([yshift=-4mm]current page.north east);
+\begin{scope}[shift={([xshift=-56mm,yshift=-24mm]current page.north east)}]
+\draw[step=6mm,teal!13,line width=.3pt] (0,0) grid (30mm,-30mm);
+\fill[teal!10] (6mm,-6mm) rectangle (12mm,-12mm);
+\fill[teal!20] (18mm,-18mm) rectangle (24mm,-24mm);
+\draw[teal!35,line width=.7pt] (12mm,-12mm) rectangle (24mm,-24mm);
+\end{scope}
+\end{tikzpicture}
+\vspace*{5mm}
+{\sffamily\bfseries\large\color{teal}XUANNV EMBEDDING\par}
+\vspace{39mm}
+{\fontsize{30}{40}\selectfont\bfseries\color{ink}全国年度 5 米\par 地理嵌入技术报告\par}
+\vspace{7mm}
+{\large\color{muted}多源遥感表征与联合训练方案\par}
+\vspace{13mm}
+{\color{teal}\rule{18mm}{1pt}\par}
+\vspace{8mm}
+{\large\color{ink}作者\enspace\sffamily heyuhang\par}
+\vfill
+{\color{ink!20}\rule{\linewidth}{.4pt}\par}
+\vspace{3mm}
+{\small\color{muted}v1.4\hfill 2026-09-18\par}
+\end{titlepage}
+
+\pagenumbering{roman}
+\hypersetup{pageanchor=true}
+\setcounter{tocdepth}{1}
+\tableofcontents
+\vfill
+\note{阅读顺序：第1节了解决策；第2--3节确认数据事实；第4--8节审阅方法与训练；
+第9--10节评估实验与生产；附录用于追溯证据和维护文档。标注为实测样例的质量检查图来自本轮数据，其余架构与网格图为原理图。}
+\reportpage
+\pagenumbering{arabic}
+
+\section{目标、核心决策与适用范围}
+\subsection{要解决的问题}
+项目目标是把多源年内遥感观测压缩成可复用的密集地理表征，使下游分类、分割等任务可以在冻结嵌入上训练小型预测头。
+每个父格输出 \shape{64\times256\times256}，空间步长为5m。向量各维由训练共同形成，没有预先指定的“道路维”或“建筑维”。
+设计借鉴 AEF 的多源时空表示和紧凑球面嵌入，但不声称完整复现 AEF，或已经达到其性能\cite{aef}。
+
+\subsection{本版确定的选择}
+\noindent\begin{tabularx}{\linewidth}{@{}p{3cm}Y@{}}
+\toprule
+设计选择 & 技术理由与约束\\\midrule
+三分支、一次联合解码 & 低分提供时序语义；多光谱提供局部光谱和空间结构；PAN补充细结构。先各自编码，再对齐融合。\\
+固定年度、固定5m输出 & 与现有年度观测和明确产品目标对应，便于建立可验证的第一版合同。\\
+端到端训练 & 主干、编码器、年度聚合、联合解码器共同更新；不要求独立训练并永久冻结上采样器。\\
+高分可缺失 & 训练模拟删帧、缺模态，推理区分实际高分支持；不以低分复制品填满高分分支。\\
+单节点8卡 & 用真实数据测吞吐和显存，再确定骨干容量、观测预算与总训练步数。\\\bottomrule
+\end{tabularx}
+
+\subsection{产品边界}
+\textbf{5m网格不等于普遍具有真实5m信息分辨率。} 在无同期高分观测的位置，细节由低分输入和学到的先验推断；
+多个细结构可能对应近似相同的粗观测，因此无法保证唯一恢复。即使存在高分，云影、几何误差和时间差也可能限制收益。
+每份产品同时交付有效性与高分支持信息。
+
+年度嵌入概括一个自然年的观测，不等同于年末快照。年内真实变化不能被一致性损失无条件消除。
+全国1\%采样只解决训练与验证数据来源，生产全国连续覆盖仍须准备全国输入。
+
+\note{\status{当前状态}：v6年度数据合同已通过最终门禁，可用于模型开发和8卡训练联调；
+低分月度主干、高分观测融合接口和原生网格年度读取器已有代码基础。完整年度三分支训练闭环、
+独立科学质量认证及下游收益仍待实现或验证。}
+\source{仓库模型与数据实现 [E5]；当前数据摘要 [E1--E3]。证据编号见附录。}
+
+\reportpage
+\section{现有数据与质量状态}
+\subsection{核验口径}
+当前正式入口为 \texttt{national\_annual5m\_quality\_v6}，覆盖2020、2021两年。
+它继承既有低分时序，增加Gaofen 2m PAN并完成吉林一号5m云筛选、全量高分相对配准诊断；不是重新采样的全国网格。
+PAN身份根据原始产品名中的PAN标识及日期一致性登记，保留原生640$\times$640数组；不将存储DN宣称为已标定反射率。
+
+\begin{table}[h]
+\caption{v6年度正式清单规模。支持表示通过本版保守筛选并存在可读观测，不表示独立科学精度已经验证。}
+\centering\small
+\begin{tabular}{lrrrrrr}
+\toprule 年份 & train & validation & test & 5m支持 & 2m支持 & 三路齐备\\\midrule
+2020 & 50,560 & 4,940 & 6,230 & 11,862 & 13,111 & 3,196\\
+2021 & 50,560 & 4,939 & 6,230 & 9,279 & 16,694 & 3,082\\\midrule
+合计 & 101,120 & 9,879 & 12,460 & 21,141 & 29,805 & 6,278\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\caption{v6最终保留观测。计数是清单中的观测条目，不等于独立原始卫星景数量。}
+\centering\small
+\begin{tabular}{lrr}
+\toprule 分支 & 来源 & 保留观测数\\\midrule
+低分时序 & Sentinel-1 / Sentinel-2 & 1,388,221 / 1,358,421\\
+5m多光谱 & JL1GP01 PMS1 / PMS2 & 6,323 / 6,858\\
+5m多光谱 & JL1GP02 PMS1 / PMS2 & 8,098 / 4,087\\
+2m PAN & GF1B / GF6 / GF1C / GF1D & 1,790 / 28,128 / 1,065 / 2,364\\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{本轮新增处理与隔离}
+2m关联目录中142,059条PAN有唯一同景MUX，8卡推理后122,057条通过数值、云影面积和内容对齐筛选；
+另有12,056条无法唯一配对，均不进入正式清单。全量跨集合检查按test、validation、train优先级处理，
+并对文件摘要、原始景标识和高分像元摘要做重复隔离。
+
+吉林一号四类六波段来源按文件记录的中心波长提取红、绿、近红外，以登记的OmniCloudMask v4运行8卡筛选\cite{ocm}。
+102,569条吉林一号观测完成来源标签和原始像元摘要核验；其余高分观测按云影、面积和内容配准规则分别登记。
+缺少近红外的五波段来源未纳入本轮清单。v6最终清单保留1,358,421条S2观测；云筛选结果沿用已登记的v3运行证据，不把模型输出当作云影真值。
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=7mm]
+\node[box,text width=3.6cm] (raw){181,304条\\2m目录记录};
+\node[box,text width=3.6cm,right=of raw] (numeric){179,632条\\数值与网格通过};
+\node[goldbox,text width=3.6cm,right=of numeric] (selected){122,057条\\PAN筛选通过观测};
+\draw[arr](raw)--(numeric);\draw[arr](numeric)--(selected);
+\end{tikzpicture}
+\caption{PAN处理计数。候选入选不等于云影、辐射与地物配准已通过科学验证。[E6]}
+\end{figure}
+
+\subsection{放行边界}
+六份清单各抽读100个样本；统计量仅由train内保留观测计算。读取检查不替代云影准确率或地标配准评估。
+PAN缺少经验证的云影QA；光学模型对积雪、山地阴影仍需专项复核。
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{4cm}Y@{}}
+\toprule 放行标识 & 当前值与意义\\\midrule
+\texttt{training\_ready} & true：数据合同、统计量、重复审计和600个真实样本读取已通过；不代表模型已训练。\\
+{\scriptsize\texttt{scientific\_quality\_validated}} & false：质量规则和产品语义仍待科学验证。\\
+\texttt{annual\_model\_ready} & false：年度模型接口与训练闭环尚待完成。\\\bottomrule
+\end{tabularx}
+\source{[E1、E3、E8] v6摘要、读取检查与合同门禁；[E2] S2历史运行；核验于2026-09-18。}
+
+\reportpage
+\subsection{本版质量筛选的依据与限制}
+\textbf{PAN云影处理。} 全色影像本身缺少红、绿、近红外三通道，不能直接当作OmniCloudMask输入。
+本版按父格和原始景标识，关联唯一的同景四波段MUX；按产品惯例读取蓝、绿、红、近红外，
+并核对通道、范围、网格、文件摘要及样例\cite{ocm,gfguide}。
+142,059组进入8卡处理；12,056条无法唯一配对的PAN隔离。8m云、影和无效区向外扩展一个像元，
+按相同地理范围传播至2m网格，再与PAN数值有效掩膜相交。PAN/MUX内容对齐无法确认或偏移超过8m时不用该观测；
+保留高分观测须至少20\%预测晴空面积。阈值是本项目的保守工程规则，不是论文提供的精度保证。
+
+\textbf{相对配准诊断。} 在10m诊断网格，将高分与同月S2的有效结构边缘作掩膜归一化互相关；
+要求峰值不低于0.35、与非邻近峰的差不低于0.025，且四个局部块至少两个同意整体平移。
+256,684条全部登记结果：65,154条可测量且偏移不超过10m，91,589条较大偏移；其余无法可靠判定或重叠不足的观测按最终规则隔离，合计登记为99,939条高分相对配准未解决。
+后两类均隔离。该诊断没有独立地面控制点，也不估计局部非刚性畸变；不能据此宣称达到5m绝对或亚像素定位精度。
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{/data/heyuhang/processed/national_annual5m_quality_v6/review/report-registration.png}
+\caption{实测配准样例R04：同月S2、高分PAN、边缘叠加、诊断平移后的叠加。检测到约51m相对位移。
+右图仅用于核查；本版隔离观测，没有自动移动原始影像。[E8]}
+\end{figure}
+
+\textbf{云模型的局限。} 已查看42组云影样例及18组配准图。样例中积雪和地形阴影被误屏蔽，
+因此不能把模型标签写成云影真值，也不能从这些定向抽例计算准确率。
+本版保留保守掩膜，不凭RGB自动恢复雪地；相应的季节、地形和高分覆盖损失须随训练评估报告。
+Landsat缺少云影QA，本版不进入训练输入；原文件仍保留。
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{/data/heyuhang/processed/national_annual5m_quality_v6/review/report-snow.png}
+\caption{实测云筛选样例C31：同景MUX的RGB、云影预测叠加、近红外、PAN。
+积雪地形保有纹理却被大范围屏蔽，说明保守筛选会损失可用观测；此例不提供定量误差率。[E8]}
+\end{figure}
+\source{[E8]全量诊断记录、可追溯图像及目视记录；OmniCloudMask仅提供模型方法，不能替代本区域验证。}
+
+\reportpage
+\section{从原始观测到训练样本}
+\subsection{数据处理的职责边界}
+离线处理负责观测身份、数值含义、质量与索引；模型负责学习特征。保留原始分辨率及实际存储网格，
+不把影像提前统一缩放到5m再声称使用原生尺度编码。高分原始归档、候选版本与隔离记录保持可追溯。
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=4mm]
+\node[box,text width=12.7cm] (a){来源登记：归档摘要、产品、波段、单位、日期与时间支持期};
+\node[box,text width=12.7cm,below=of a] (b){像元质量：有限值、NoData、产品QA、云影与饱和检查};
+\node[box,text width=12.7cm,below=of b] (c){几何与谱系：CRS、transform、真实内容配准、同景派生关系};
+\node[box,text width=12.7cm,below=of c] (d){空间划分：父格与年份绑定；训练区独立统计量；边界缓冲};
+\node[box,text width=12.7cm,below=of d] (e){年度manifest：原生数组、逐像元mask、变长高分观测、版本摘要};
+\node[goldbox,text width=12.7cm,below=of e] (f){读取与训练验收：真实batch、前反向、8卡短跑、科学质量门禁};
+\foreach \src/\dst in {a/b,b/c,c/d,d/e,e/f}\draw[arr](\src)--(\dst);
+\end{tikzpicture}
+\caption{数据放行与训练验收流程。v6已完成来源至年度manifest和真实读取门禁；模型前反向与8卡短跑属于下一阶段。}
+\end{figure}
+
+每条观测至少包含来源ID、父格、日期精度及内容支持期、产品族、波段顺序、单位与缩放、
+CRS、transform、有效mask、质量状态、文件摘要和处理版本。只知道月合成的代表日期，不能据此宣称具有逐日观测。
+坏包、未知语义与真实缺测分别登记；云影未验证不能写成“晴空”。
+当前PAN的有效率仅表示数值有效，不能与S2、吉林一号的预测晴空比例等同。
+新版是共享\texttt{data\_root}下的索引型数据集：迁移时须连同清单引用的影像、历史版本掩膜和统计量一起转移。
+
+\subsection{数据放行后的验证任务}
+\begin{enumerate}
+\item \textbf{产品语义与辐射}：核实各来源波段、单位、scale/offset。统计标准化不能替代辐射标定。
+\item \textbf{质量泛化}：S2与吉林一号云筛选需跨区域、季节、地物人工抽验；该模型不能直接套用于单通道PAN。
+\item \textbf{绝对定位}：全量高分已完成相对配准诊断并隔离无法确认者；仍需独立地面控制点或权威底图评估绝对精度。
+\item \textbf{低分谱系}：高分文件、产品和像元跨集合冲突为零；低分合成影像缺少完整原始景身份，不能宣称全传感器场景级隔离。
+\item \textbf{训练闭环}：年度读取器保留PAN原生网格；正式训练仍需年度三分支运行时及8卡真实数据短跑。
+\end{enumerate}
+\source{[E1] known\_limits与remaining\_model\_work；[E5]年度读取器；[E7--E8]合同、配准与质量记录。}
+
+\reportpage
+\section{完整模型：三分支与一次联合解码}
+\label{sec:architecture}
+主数据流沿用已确定的年度方案。图中省略batch与观测数量维度，采用“通道$\times$高$\times$宽”。
+128、32为起步宽度，尚非实测最优参数；输入尺寸以同一1280m父格、规则对齐网格为例。
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=5mm]
+\node[box,text width=3.8cm,minimum height=12mm] (l0) at (0,0){S2 / S1 / Landsat\\年内时序与mask};
+\node[box,text width=3.8cm,minimum height=12mm] (m0) at (5,0){5m 多光谱观测集合\\$C_5\times256\times256$};
+\node[box,text width=3.8cm,minimum height=12mm] (p0) at (10,0){2m PAN 观测集合\\$1\times640\times640$};
+\node[box,text width=3.8cm,minimum height=13mm] (l1) at (0,-1.8){分源 Stem\\STP 时空骨干};
+\node[box,text width=3.8cm,minimum height=13mm] (m1) at (5,-1.8){5m 专用空间编码器\\输出保持5m网格};
+\node[box,text width=3.8cm,minimum height=13mm] (p1) at (10,-1.8){PAN 专用空间编码器\\$32\times640\times640$};
+\node[box,text width=3.8cm,minimum height=13mm] (l2) at (0,-3.6){掩膜与日期感知年度聚合\\$F_{10}:128\times128\times128$};
+\node[box,text width=3.8cm,minimum height=13mm] (m2) at (5,-3.6){逐景多光谱特征\\$128\times256\times256$};
+\node[box,text width=3.8cm,minimum height=13mm] (p2) at (10,-3.6){2m$\rightarrow$5m特征聚合\\通道投影与精化};
+\node[box,text width=3.8cm,minimum height=16mm] (l3) at (0,-5.5){插值到5m网格\\$L_5:128\times256\times256$};
+\node[box,text width=3.8cm,minimum height=16mm] (m3) at (5,-5.5){日期、质量感知集合聚合\\$G_{5,ms}:128\times256\times256$};
+\node[box,text width=3.8cm,minimum height=16mm] (p3) at (10,-5.5){日期、质量感知集合聚合\\$G_{5,pan}:128\times256\times256$};
+\node[goldbox,text width=12.5cm,minimum height=16mm] (f) at (5,-7.6){统一5m联合解码器：支持mask、质量控制、通道投影与空间融合\\$H_5:128\times256\times256$};
+\node[box,text width=8cm,minimum height=14mm] (v) at (5,-9.5){投影 + vMF瓶颈\\年度嵌入 $64\times256\times256$ + 独立有效性信息};
+\foreach \src/\dst in {l0/l1,l1/l2,l2/l3,m0/m1,m1/m2,m2/m3,p0/p1,p1/p2,p2/p3,f/v}\draw[arr](\src)--(\dst);
+\draw[arr](l3.south)--(0,-6.65)-|(f.north west);
+\draw[arr](m3)--(f);
+\draw[arr](p3.south)--(10,-6.65)-|(f.north east);
+\end{tikzpicture}
+\caption{主架构。高分既可作为可见输入，也可在遮挡后提供训练目标。跨模态只在统一解码器中融合；分支内部多尺度融合属于空间编码。}
+\end{figure}
+
+$L_5$是低分语义的网格对齐结果，不是已经读取高分的成品。固定插值没有可训练参数，但允许梯度回传。
+端到端训练意味着各可学习模块一起优化，不要求每个几何算子都有参数。不同分支的128维通道不天然语义对齐，须学习融合。
+\source{设计依据：AEF/STP\cite{aef}、AnySat\cite{anysat}；三分支合同与一次联合解码为本项目设计，收益待验证。}
+
+\reportpage
+\section{高分空间编码与 2m 到 5m 对齐}
+\subsection{空间骨干与时序骨干的分工}
+高分支线同样需要可训练骨干。卷积可以提取特征；浅层卷积足不足以支撑全国语义表征，则必须实验验证。
+主方案将高分建模拆成逐景空间编码和带日期的年度聚合，不要求原样复制低分STP。
+是否增加高分时空骨干，应依据每父格的有效观测数、季节覆盖和产品一致性决定。
+
+5m编码器的输入输出空间尺寸保持256$\times$256。起步使用产品专用输入投影、多个残差空间块与128通道输出。
+进一步比较多尺度骨干，利用浅层细节和深层上下文恢复5m网格。FPN提供多层级融合的结构依据，
+Swin提供窗口注意力的备选，并不保证任何一个在当前数据上更优\cite{fpn,swin}。
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=5mm]
+\node[box,text width=3cm] (a){细网格浅层\\边缘、局部纹理};
+\node[box,text width=3cm,right=6mm of a] (b){粗网格深层\\更大范围上下文};
+\node[goldbox,text width=4.2cm,right=6mm of b] (c){多尺度解码\\结合浅层与深层特征};
+\draw[arr](a)--(b);\draw[arr](b)--(c);
+\draw[arr](a.south)--++(0,-.5)-|(c.south);
+\end{tikzpicture}
+\caption{高分编码器的可选内部结构。主图规定外部接口；骨干层数和宽度由同预算消融选择。}
+\end{figure}
+
+\subsection{2m PAN 分支的明确接口}
+PAN按已验证的单波段产品处理，不复制为RGB。它先在原生网格编码为32$\times$640$\times$640，
+再聚合到32$\times$256$\times$256，最后在5m网格精化并扩展至128通道。
+2m位置数是5m的6.25倍，所以将大通道扩展放在降采样之后可作为节省计算的起点；实际显存仍需测量。
+
+若采用2m/4m/8m/16m多尺度骨干，本版要求其解码回原生32通道接口再进行5m对齐。
+直接从金字塔解码到5m也可试验，但必须登记为独立实现变体。通道扩展和尺寸变化本身不构成语义学习，
+特征是否有用取决于训练目标与独立评测。
+
+\subsection{有效掩膜从输入开始生效}
+编码前屏蔽无效数值，并将有效性作为条件或使用明确的掩膜卷积策略；编码后传播有效支持。
+只在最后乘mask不能保证云影、填充值已不污染邻域。归一化统计也应避免大量填充值支配结果。
+不同产品使用自己的辐射处理、统计量和输入投影；主干深层是否共享参数属于实验选择。
+\source{原生尺度编码参考AnySat\cite{anysat}；骨干与掩膜传播为本项目待实现设计。现有浅层编码器源码见[E5]。}
+
+\reportpage
+\subsection{非整数尺度转换：按地面交叠聚合}
+\label{sec:resample}
+2m到5m是2.5倍缩小，不能用固定2$\times$2或3$\times$3池化冒充严格对应。
+首版使用基于真实transform的面积交叠权重；CRS不同或存在旋转时，须先建立可靠的几何映射。
+图\ref{fig:overlap}给出轴对齐情况下的局部示例。
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=.82]
+\fill[teal!15](0,0) rectangle (5,5);
+\draw[step=2,gray!70] (0,0) grid (6,6);
+\draw[gold,line width=1.6pt](0,0) rectangle(5,5);
+\node at (1,1){4};\node at (3,1){4};\node at (4.5,1){2};
+\node at (1,3){4};\node at (3,3){4};\node at (4.5,3){2};
+\node at (1,4.5){2};\node at (3,4.5){2};\node at (4.5,4.5){1};
+\draw[<->] (0,-.5)--node[below]{5m 目标单元}(5,-.5);
+\draw[<->] (-.5,0)--node[left]{2m}( -.5,2);
+\node[box,text width=6.2cm,anchor=west] at (7,4.3){每个数字为交叠面积，单位m$^2$\\总和为25m$^2$};
+\node[box,text width=6.2cm,anchor=west] at (7,2.3){逐特征通道加权汇总\\不是直接平均原始亮度};
+\node[goldbox,text width=6.2cm,anchor=west] at (7,.3){无效面积不参与权重\\另存有效覆盖比例};
+\end{tikzpicture}
+\caption{2m与5m网格的面积交叠示意。其他像元需按自己的交叠计算，不能重复套用这一组权重。}
+\label{fig:overlap}
+\end{figure}
+
+对目标像元$j$、来源像元$i$、特征通道$c$，定义交叠面积$a_{ji}$、有效支持$m_i$和输入特征$f_{ic}$：
+\begin{equation}
+ g_{jc}=\frac{\sum_i a_{ji}m_i f_{ic}}{\sum_i a_{ji}m_i},\qquad
+ s_j=\frac{\sum_i a_{ji}m_i}{A_j}.
+\end{equation}
+分母为零时直接返回缺失状态，不能继续相除。$A_j$为目标单元面积，$s_j$是支持比例，
+不是模型置信度。分数mask只是有效支持的近似表达，不能宣称知道每个源像元内部无效区域的精确形状。
+
+固定几何权重下该运算对特征可微，梯度能够训练前面的PAN骨干。
+面积聚合有低通作用，但不等于理想抗混叠；需检查棋盘格、细线、位移和真实边界。
+先编码再聚合有机会保留细结构响应，但无法保证无损保留全部2m信息。
+
+\note{严格区分三个步骤：几何映射确定“在哪里”，空间骨干学习“是什么”，重采样确定“以什么网格表达”。
+数组尺寸正确不能代替地物配准，低分回聚一致也不能证明细节正确。}
+\source{本节是面积加权聚合的项目定义与几何推导，不归因于某篇神经网络论文；训练效果仍待实测。}
+
+\reportpage
+\section{年度集合聚合、融合与球面输出}
+\subsection{时间信息在聚合前进入模型}
+每景高分先形成5m特征，再结合实际日期、产品身份和质量指标进行掩膜注意力池化。
+打分器根据内容与元数据产生权重，无效观测在归一化前排除。单景可以使用；全缺时显式返回零占位与缺失mask，
+避免对全掩码序列做softmax产生NaN。
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\node[box,text width=3.4cm] (a) at (0,1.2){观测A特征 + 日期A};
+\node[box,text width=3.4cm] (b) at (0,0){观测B特征 + 日期B};
+\node[box,text width=3.4cm] (c) at (0,-1.2){观测C特征 + 日期C};
+\node[goldbox,text width=3.4cm] (pool) at (5,0){质量与支持控制\\集合注意力池化};
+\node[box,text width=3.3cm] (out) at (10,0){年度高分特征\\支持mask与观测数};
+\draw[arr](a.east)-|(pool.north);\draw[arr](b)--(pool);\draw[arr](c.east)-|(pool.south);\draw[arr](pool)--(out);
+\end{tikzpicture}
+\caption{年度观测集合聚合。影像、日期与mask一起置换不应改变结果；置换不变不等于忽略时间。}
+\end{figure}
+
+年内真实地物变化必须通过日期条件预测及验证表达，而非强制各日期高分特征相同。
+年度表征可总结季节轨迹，但注意力结构本身不保证模型真的使用日期；需做日期替换和读出消融。
+
+\subsection{统一解码与缺模态回退}
+三路特征形状相同，却没有天然对应的通道语义。将高分特征经过硬支持mask和可学习质量门控后，
+与$L_5$拼接，用1$\times$1投影和局部残差卷积得到$H_5$。可保留$L_5$直通路径、使用小残差初始化。
+门控不能重新激活硬mask拒绝的像元，也不保证自动拒绝所有坏观测。
+
+高分缺失时，其输入贡献为零，低分空间修正仍可工作，不要求$H_5=L_5$。
+本版将有效低分年度上下文作为产品放行条件；低分全缺时即使存在高分，也不自动发布可靠年度嵌入。
+高分独立推理须另设数据、训练与验收合同。
+
+\subsection{最终64维输出}
+通道投影与L2归一化统一放在vMF瓶颈；各分支不新增独立的L2瓶颈。训练用解码器读取该64维输出。
+现有实现使用环境空间高斯扰动后重新归一化，推理不加噪声，不能写成精确vMF采样。
+共享的\texttt{log\_kappa}也不是逐像元校准置信度。单位范数不能代替有效mask\cite{vmf}。
+\source{当前实现见[E5] bottleneck.py；集合聚合与三源融合为待实现设计。}
+
+\reportpage
+\section{训练信号与防止信息泄漏}
+\subsection{没有天然的5m嵌入真值}
+首版依赖真实观测自监督，不要求现成的5m教师特征或人工标签。训练时从年度观测中留出目标，
+其余观测产生嵌入，再由日期、产品条件头预测目标。监督信息来自影像本身，语义是否有用由独立下游任务判断。
+AEF提供来源重建的参考；TESSERA与Barlow Twins提供观测子集和冗余约束的参考\cite{aef,tessera,barlow}。
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\node[box,text width=3.2cm] (input) at (0,0){年内观测集合\\先留出目标};
+\node[box,text width=3.2cm] (model) at (4.5,0){可见输入\\三分支模型};
+\node[box,text width=3.2cm] (embed) at (9,0){64维年度嵌入\\唯一信息瓶颈};
+\node[goldbox,text width=4cm] (target) at (0,-2){被留出观测\\不进入输入、跳连与统计};
+\node[box,text width=4cm] (decode) at (9,-2){日期/产品条件读出\\预测低分及高分目标};
+\node[labeltext] (loss) at (4.5,-2){有效目标上的损失};
+\draw[arr](input)--(model);\draw[arr](model)--(embed);\draw[arr](input)--(target);\draw[arr](embed)--(decode);
+\draw[arr](target)--(loss);\draw[arr](decode)--(loss);
+\end{tikzpicture}
+\caption{训练信息流。空间编码器的内部跳连允许存在，但目标读出不得绕过64维瓶颈复制影像。}
+\end{figure}
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{2.7cm}YY@{}}
+\toprule 目标 & 监督与作用 & 限制\\\midrule
+低分遮挡预测 & 原生网格上的有效观测；保留光谱和时序信息 & 不能把放大的Landsat像元当独立高分真值\\
+高分遮挡预测 & 5m光谱；PAN聚合至5m的亮度或结构统计 & 不要求5m瓶颈无损还原2m全图\\
+子集一致性 & 同父格、同年度两个观测子集的公共语义 & 缺高分视图不逐5m像元强制细节相同\\
+冗余与坍塌控制 & 监测方差、相关性、有效秩；训练投影头 & 跨父格统计，相邻像元不能冒充独立样本\\
+可选辅助标签 & 有可靠时间和覆盖的地物标签 & 未知不作负例；与独立评测严格隔离\\\bottomrule
+\end{tabularx}
+
+损失权重、结构目标和抽样比例均为待标定配置。按有效目标数、产品和来源归一化，避免观测多的来源支配优化。
+自动边缘可能来自阴影或噪声，不能当作道路真值。训练统计量只来自训练区，不能重复使用目标内容拟合条件。
+
+\subsection{遮挡与谱系检查}
+空间遮挡在编码前、按地理位置映射到相关分支；同景别名、重采样派生及相关产品需登记，防止绕过留出规则。
+保留另一模态作为上下文时明确标为跨模态预测。实际日期不随机伪造；发生真实变化的区域不施加强细节一致性。
+
+\reportpage
+\section{训练顺序、8卡资源与可选升级}
+\subsection{从数据到可发布模型}
+\noindent\begin{tabularx}{\linewidth}{@{}p{2.5cm}YY@{}}
+\toprule 阶段 & 主要产物 & 进入下一阶段的依据\\\midrule
+G0 数据放行 & 产品/质量/配准与谱系审计、版本化manifest & 接口和科学质量证据分别齐备\\
+G1 模型闭环 & 年度接口、三分支前向与反向、缺模态处理 & 活跃分支有有限梯度，目标无泄漏\\
+G2 8卡短跑 & 吞吐、显存、有效样本与目标计数 & 真实I/O和缺模态DDP稳定，能够恢复\\
+G3 效果对照 & 固定空间留出、种子和下游头的消融结果 & 高分收益可重复、成本可接受\\
+G4 正式训练 & 固定结构与预算、训练划分长训 & 验证通过；最终test仅报告一次\\
+G5 全国生产 & 固定权重及输入版本的逐父格输出 & 几何、数值、支持状态和接缝验收\\\bottomrule
+\end{tabularx}
+
+可以短暂预热新增模块，再联合训练，但不设置“先练好并永久冻结上采样器”的硬依赖。
+已有权重仅在波段、预处理、时间、参数形状与来源一致时用于初始化；形状相同不等于语义兼容。
+全国1\%样本的validation/test始终留出，不因扩大训练而合并回训练集。
+
+\subsection{算力使用与可复现性}
+统一单节点8卡。按产品与尺寸分桶，限制单样本高分观测数，并跨轮次覆盖不同季节；
+生产和验证使用确定性选帧。采用混合精度、梯度累积和必要的激活检查点，容量依据实测调整。
+报告GPU小时、样本曝光、有效目标数与I/O等待，相同步数不代表相同计算量。
+
+可缓存原始数组、mask和几何权重，但不可固定可学习特征缓存后仍称骨干端到端更新。
+缺模态batch需检查DDP未使用参数处理，跨卡相关性统计与EMA按真实优化器步数更新。
+源码工作区存在未提交修改，checkpoint来源不能只写Git HEAD，须保存实际源码摘要。
+
+\subsection{升级只按单项实验进入主线}
+\noindent\begin{tabularx}{\linewidth}{@{}p{3cm}Y@{}}
+\toprule 候选方法 & 用途与边界\\\midrule
+DySample\cite{dysample} & 学习采样偏移，比较是否优于固定插值；偏移不改变产品地理网格，也不替代配准。\\
+FeatUp\cite{featup} & 借鉴高分引导与多视图一致性；跨传感器日期差不等同于同图增强，不采用全国逐图优化作为首版。\\
+I-JEPA / EMA\cite{ijepa} & 对应模块的缓慢更新教师提供潜在目标；不依赖外部教师，不自动保证目标正确或避免坍塌。\\
+多尺度骨干 & 比较上下文与细节收益；不同时改动所有分支、损失和采样策略。\\\bottomrule
+\end{tabularx}
+\source{资源策略为项目实施设计，尚无年度三分支正式模型的实测速度与显存结论。}
+
+\reportpage
+\section{验证方法、对照与停止条件}
+\subsection{验证什么，而不是仅看训练损失}
+\noindent\begin{tabularx}{\linewidth}{@{}p{1.2cm}YY@{}}
+\toprule 组别 & 模型/输入 & 要回答的问题\\\midrule
+A0 & 低分时序 + 固定5m网格解码 & 没有高分时的基础能力与成本\\
+A1 & A0 + 5m多光谱 & 光谱和高分结构是否带来收益\\
+A2 & A0 + 2m PAN & 全色细结构是否带来收益\\
+A3 & 完整三分支 & 两类高分是否互补\\
+B组 & 在优选模型上逐项改变骨干、损失或上采样 & 收益能否归因，开销是否值得\\\bottomrule
+\end{tabularx}
+
+各组使用相同的空间划分、标签、预测头和调参预算。至少两个预训练随机种子，报告各次结果而非只选最好一次。
+比较冻结嵌入上的地表覆盖、建筑、道路、水体等任务；可用性不足的标签先审计，不默认已经具备完整标注。
+采用任务适合的IoU、F1等指标，以及真实坐标边界评估。置信区间按空间块抽样，不能把相关像元当独立样本。
+
+高分收益至少区分：训练时见过高分的区域、空间独立区域、推理有高分与无高分。
+可以加入同年度AEF公开产品作为外部基线，但须先确认产品实际可用、标签与网格一致，不能把参考论文数字搬来作本地对照。
+
+\subsection{必须通过的反事实与接口检查}
+\begin{enumerate}
+\item 高分全缺、单源缺失、全部输入无效时，输出状态正确且无NaN；无效区域不能被当作有效产品。
+\item 同时置换影像、日期与mask，年度集合输出在数值容差内不变；重复观测不得重复加权。
+\item 修改被屏蔽像元和留出目标，不应通过未授权路径影响输入编码；同景派生文件同样受约束。
+\item 以已知位移和独立地标检查几何，检验父格边缘接缝；不得用允许任意平移的损失掩盖位置误差。
+\item 检查活跃分支梯度、门控饱和、有效秩、低分任务退化；与仅插值对照比较。
+\end{enumerate}
+
+\subsection{放行与停止}
+在效果实验前登记主指标、最低样本量、可接受低分退化和实际成本上限。当前没有证据支持写死“提升若干百分点”，
+也没有依据承诺训练时长。若高分只降低重建损失、未改善冻结表征，则不据此放行；
+若高分效果依赖配准错误、特定传感器或空间泄漏，先修数据与协议。
+缺少合格独立标签时，结论只能停留在工程可运行，不能宣称正式模型优于基线。
+\source{本节为待执行评测协议。已有月度pilot仅作接口背景，不能替代年度三分支的效果证据。}
+
+\reportpage
+\section{实现边界、生产交付与风险}
+\subsection{现有代码与待实施接口}
+\noindent\begin{tabularx}{\linewidth}{@{}p{2.6cm}YY@{}}
+\toprule 模块 & 已有代码基础 & 本方案待完成\\\midrule
+低分模型 & STP、月度聚合、插值卷积头 & 年度汇总与128通道接口，5m输出\\
+高分编码 & 浅层卷积，支持先编码后缩放 & PAN产品适配、骨干比较、mask传播与面积聚合\\
+观测融合 & 按目标月聚合和残差融合 & 日期/质量年度聚合、两类高分联合解码\\
+球面瓶颈 & 64维投影、归一化、训练扰动 & 接入年度路径与输出有效性\\
+年度数据 & 原生网格读取、2m接入、5m云筛选、全量高分相对配准与最终统计量 & 传感器语义复核、独立绝对定位评估及训练运行时连接\\
+训练与导出 & 严格配置/checkpoint、DDP、月度导出 & 年度监督、生产合同与8卡验收\\\bottomrule
+\end{tabularx}
+\source{[E5]是实际源码摘要；上表描述代码能力，不表示新模型已经运行成功。}
+
+\subsection{全国生产合同}
+每个父格和年份保存64$\times$256$\times$256嵌入，以及有效mask、5m多光谱支持、PAN支持、
+有效覆盖与观测数量。记录年份、CRS、transform、波段/来源注册表、时间规则、数据版本、统计量、配置与模型摘要。
+推理去掉重建头与一致性头，固定参数和统计量，关闭瓶颈噪声，不按地区继续训练。
+
+FP16单父格裸嵌入容量由64$\times$256$\times$256$\times$2字节计算为8MiB，另计掩膜、元数据及容器开销。
+全国容量须依据实际父格数测算，不把训练样本数当全国网格数。按块写出、校验后原子发布，失败可续跑；
+重叠区域和无效边缘采用固定规则。模型改变后必须区分版本，不能拼接未经对齐的不同嵌入空间。
+
+\subsection{主要风险及应对}
+\noindent\begin{tabularx}{\linewidth}{@{}p{3cm}Y@{}}
+\toprule 风险 & 处理与验证\\\midrule
+高分覆盖偏向某些地区 & 分层抽样与空间留出；分别评估推理有/无高分。\\
+纹理捷径与云影污染 & 有效QA、目标留出、独立语义评估；不能靠视觉锐利判断好坏。\\
+年度变化被平均抹除 & 日期条件预测、季节分桶；避免跨日期无条件一致性。\\
+多版本数据含义冲突 & 每条统计标明数据版本与证据；不同流水线不合并计数。\\
+复杂模块增加维护成本 & 先固定三分支基线；每次升级都保留可归因的消融与回退。\\\bottomrule
+\end{tabularx}
+
+\reportpage
+\section{参考工作与本项目的采用边界}
+本报告的结构组合属于项目设计。参考论文提供方法依据，不等于相关模型、预训练权重或下游收益已经在本地复现。
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{2.6cm}YY@{}}
+\toprule 工作 & 原方法要点 & 本项目采用位置及未直接采用部分\\\midrule
+AEF\cite{aef} & 多源时空表征，STP与紧凑球面嵌入；来源重建等目标 & 低分时序主干与64维输出的依据。三分支5m融合是本项目设计。\\
+AnySat\cite{anysat} & 尺度自适应空间编码器与JEPA，处理异构观测 & 原生尺度、产品投影和地面范围对齐。首版不声称复现其JEPA全目标。\\
+TESSERA\cite{tessera} & S1/S2时间序列，独立稀疏观测子集与修改的Barlow目标 & 观测子集一致性；扩展到高分缺失是项目设计，不是其空间上采样方法。\\
+Barlow Twins\cite{barlow} & 两视图交叉相关的对角一致与非对角冗余约束 & 训练投影头的候选正则；需处理像元相关与跨卡统计。\\
+FPN / Swin\cite{fpn,swin} & 多尺度横向连接；分层移位窗口注意力 & 高分空间骨干候选。PAN/多光谱不能直接等同RGB预训练输入。\\
+Scale-MAE\cite{scalemae} & GSD感知位置编码与多尺度/频率重建 & 保留物理尺度与结构目标的参考；未实现全方法前不称为使用该模型。\\
+vMF研究\cite{vmf} & 监督学习的球面几何与分布建模 & 瓶颈的数学背景；当前高斯投影实现不等于精确采样或校准不确定性。\\\bottomrule
+\end{tabularx}
+
+\subsection{方法选择由产品需求与数据条件驱动}
+固定年度5m产品需要同时表达年内语义和局部结构。低分时序主干利用较连续的年内观测，
+高分逐景编码器提取各自原生尺度上的空间信息；日期与质量感知聚合适配不规则观测，
+统一解码器在有支持的位置学习融合。上述分工构成本项目的主方案。
+
+5m多光谱与2m PAN具有不同的光谱信息、计算成本和质量条件，因此分别设置编码与支持mask。
+PAN先提取结构再按地面交叠聚合到5m，低分特征插值到同一网格，三路共同优化最终64维表征。
+固定几何对齐使网格含义可核验；留出观测预测提供训练信号；空间独立的冻结嵌入评测决定方案是否有效。
+
+\note{方法采用分为两层：主方案固定三分支接口、年度聚合和一次联合解码；多尺度骨干、学习上采样与EMA潜在目标
+作为单项消融候选。候选方法只有在独立验证中证明收益、并满足8卡资源预算后才进入正式配置。
+参考文献的作用是说明具体设计依据；组合后的效果仍需本项目实验验证。}
+
+\reportpage
+\addcontentsline{toc}{section}{参考文献}
+\begin{thebibliography}{99}\small
+\bibitem{aef} Christopher F. Brown et al. AlphaEarth Foundations: An embedding field model for accurate and efficient global mapping from sparse label data. 2025. \url{https://arxiv.org/abs/2507.22291}. 本报告方法核对以v1的架构及S16为依据。
+\bibitem{anysat} Guillaume Astruc et al. AnySat: One Earth Observation Model for Many Resolutions, Scales, and Modalities. CVPR, 2025. \url{https://arxiv.org/abs/2412.14123}.
+\bibitem{tessera} TESSERA: Temporal Embeddings of Surface Spectra for Earth Representation and Analysis. 2025. \url{https://arxiv.org/abs/2506.20380}. 本报告子集采样说明核对v1第1.3节及附录A.7。
+\bibitem{barlow} Jure Zbontar et al. Barlow Twins: Self-Supervised Learning via Redundancy Reduction. ICML, 2021. \url{https://proceedings.mlr.press/v139/zbontar21a.html}.
+\bibitem{fpn} Tsung-Yi Lin et al. Feature Pyramid Networks for Object Detection. CVPR, 2017. \url{https://arxiv.org/abs/1612.03144}.
+\bibitem{swin} Ze Liu et al. Swin Transformer: Hierarchical Vision Transformer using Shifted Windows. ICCV, 2021. \url{https://arxiv.org/abs/2103.14030}.
+\bibitem{scalemae} Scale-MAE: A Scale-Aware Masked Autoencoder for Multiscale Geospatial Representation Learning. ICCV, 2023. \url{https://arxiv.org/abs/2212.14532}.
+\bibitem{vmf} von Mises--Fisher Loss: An Exploration of Embedding Geometries for Supervised Learning. 2021. \url{https://arxiv.org/abs/2103.15718}.
+\bibitem{dysample} Wenze Liu et al. Learning to Upsample by Learning to Sample. ICCV, 2023. \url{https://arxiv.org/abs/2308.15085}.
+\bibitem{featup} Stephanie Fu et al. FeatUp: A Model-Agnostic Framework for Features at Any Resolution. ICLR, 2024. \url{https://arxiv.org/abs/2403.10516}.
+\bibitem{ijepa} Mahmoud Assran et al. Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture. CVPR, 2023. \url{https://arxiv.org/abs/2301.08243}.
+\bibitem{ocm} Nick Wright. OmniCloudMask, 作者实现及模型。\url{https://github.com/DPIRD-DMA/OmniCloudMask}. 本地运行版本及权重摘要以[E2]为准，不以仓库最新状态反推已运行版本。
+\bibitem{gfguide} SpaceWill. GaoFen-1 Satellite Imagery User Guide. 产品说明；用于传感器与波段惯例，不证明当前切片的处理精度。 \url{https://en.spacewillinfo.com/uploads/soft/210106/8-210106153534.pdf}.
+\end{thebibliography}
+
+\reportpage
+\appendix
+\section{本地证据登记与版本维护}
+\subsection{证据优先级与快照}
+本地状态使用实际产物和代码，方法论使用原论文，拟实施配置标明为设计。旧Markdown叙述与机器摘要冲突时，
+先核验版本与时间，不以“最新”字样自动覆盖证据。本版完成PAN筛选、吉林一号质量筛选、全量高分相对配准、
+跨集合重复审计和600个真实样本读取；没有训练表征模型。
+以下路径以服务器 \texttt{/data/heyuhang/processed/} 为基准；完整SHA-256及源码文件列表保存在
+\texttt{docs/report-evidence.json}，它是证据索引，不是第二份方案正文。
+
+\begingroup\small\renewcommand{\arraystretch}{1.1}
+\noindent\begin{tabularx}{\linewidth}{@{}p{.8cm}p{5.4cm}Y@{}}
+\toprule 编号 & 文件或证据 & 本报告使用范围\\\midrule
+E1 & \path{national_annual5m_quality_v6/summary.json} & 三路年度规模、支持计数、放行标识；不代表全量科学审计。\\
+E2 & \path{national_annual5m_quality_v3/run.json} & S2处理完成状态、总数、模型版本及处理规则。\\
+E3 & \path{national_annual5m_quality_v6/loader-check.json} & 六份清单各100次读取、逐来源原生尺寸；不推及未检查样本。\\
+E4 & \path{national_training_v1/summary.json} & 原catalog与父格背景；状态字段不替代后续年度放行。\\
+E5 & 仓库实际模型、年度读取器、质检代码 & 逐模块实现边界；源码摘要优先于仅Git基线。\\
+E6 & \path{national_annual5m_quality_v6/pan-screening-summary.json} & 同景MUX关联、云影传播、面积阈值和PAN筛选计数。\\
+E7 & \path{national_annual5m_quality_v6/run.json} 及合并核验记录 & 5m波段映射、模型与处理器摘要、合并输入版本及最终合同核验。\\
+E8 & \path{national_annual5m_quality_v6/registration-full-summary.json}、\path{pan-screening-summary.json}、\path{visual-review.json} & 全量相对配准、PAN筛选和目视诊断；用于说明隔离边界，不替代独立精度验证。\\\bottomrule
+\end{tabularx}
+\endgroup
+
+\subsection{唯一正文的维护方法}
+\begin{enumerate}
+\item 修改本 \texttt{xuannv\_annual5m\_report.tex}，同时更新版本、核验日期及受影响的证据/参考文献。
+\item 数量或状态变化时重新读取对应版本摘要，更新证据索引和图表；不得只改报告中的结果数字。
+\item 执行 \texttt{make -C docs report}，检查日志、引用、中文复制与图表边界。仓库不维护并行方案正文；历史材料仅保留外部归档。
+\end{enumerate}
+
+PDF是阅读与分发格式；可持续编辑的主文件是TeX。生成PDF不作为Git源码提交，
+以遵守仓库二进制制品策略；实际交付文件仍保留在本地。Tectonic/XeLaTeX依赖和缓存不进入仓库。
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{2cm}p{2.8cm}Y@{}}
+\toprule 版本 & 日期 & 变更\\\midrule
+v1.0 & 2026-09-17 & 建立年度5m三分支方案、数据证据与统一维护入口。\\
+v1.1 & 2026-09-17 & 完善封面与作者信息；围绕产品需求阐明方法选择，精简参考与证据范围。\\
+v1.2 & 2026-09-17 & 接入2m PAN候选，补做5m云筛选；更新三路支持、隔离记录与正式放行边界。\\
+v1.3 & 2026-09-18 & 完成v6全量高分配准诊断、PAN筛选、合同门禁和600样本读取；修正最终支持统计并明确训练放行边界。\\
+v1.4 & 2026-09-18 & 同步最终来源计数与代码边界，明确数据已放行而年度模型尚未就绪；清理并行历史文档和多节点旧路线。\\\bottomrule
+\end{tabularx}
+\end{document}
