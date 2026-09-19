@@ -12,6 +12,72 @@ from xuannv_embedding.training.cli import _git_sha
 from xuannv_embedding.training.experiment import _json, _sha
 
 
+def read_feature(path):
+    """Read a static map or the registered last month of a temporal export."""
+    path = Path(path)
+    if path.suffix == ".pt":
+        feature = torch.load(str(path), map_location="cpu", weights_only=True, mmap=True)
+        if not isinstance(feature, torch.Tensor):
+            raise ValueError("static embedding must be a tensor")
+        feature = feature.float()
+    else:
+        with np.load(path) as archive:
+            feature = torch.from_numpy(archive["embedding"][-1].astype(np.float32))
+    if feature.ndim != 3 or not torch.isfinite(feature).all():
+        raise ValueError("embedding must be finite [D,H,W]")
+    return feature
+
+
+def export_dinov3(args, cache, cache_path):
+    """Reference existing maps only after geographic and recipe audits pass."""
+    if args.source is None:
+        raise ValueError("DINOv3 requires the audit directory")
+    audit_path = args.source / "feature_manifest.json"
+    reproduction_path = args.source / "reproduction.json"
+    audit = json.loads(audit_path.read_text())
+    reproduction = json.loads(reproduction_path.read_text())
+    if audit.get("state") != "audited" or reproduction.get("state") != "verified":
+        raise ValueError("DINOv3 geographic and reproduction audits must pass")
+    source_records = {r["patch_id"]: r for r in audit["records"]}
+    if len(source_records) != len(audit["records"]):
+        raise ValueError("duplicate audited DINOv3 patch")
+    args.output.mkdir(parents=True)
+    records = []
+    for record in cache["records"]:
+        source = source_records[record["patch_id"]]
+        validate_grid({"shape": source["shape"][-2:], "bounds": source["bounds"]}, record["bounds"])
+        path = Path(source["path"])
+        if _sha(path) != source["sha256"]:
+            raise ValueError("audited DINOv3 features changed")
+        feature = read_feature(path)
+        if list(feature.shape) != source["shape"] or feature.shape[0] != 1024:
+            raise ValueError("unexpected DINOv3 tensor shape")
+        records.append({**record, "path": str(path), "sha256": source["sha256"]})
+        _json(args.output / "status.json", {"state": "running", "patches": len(records)})
+    _json(
+        args.output / "manifest.json",
+        {
+            "kind": "dinov3",
+            "git_sha": _git_sha(),
+            "cache_sha256": _sha(cache_path),
+            "months": audit["months"],
+            "split": cache["split"],
+            "records": records,
+            "feature_description": (
+                "DINOv3 ViT-L/16 SAT493M; twelve-date high-resolution optical average; "
+                "bilinear 10 m grid; no added feature normalization"
+            ),
+            "input_difference": (
+                "twelve available images rather than the regional model's six selected "
+                "observations; not an input-identical comparison"
+            ),
+            "audit_sha256": _sha(audit_path),
+            "reproduction_sha256": _sha(reproduction_path),
+        },
+    )
+    _json(args.output / "status.json", {"state": "complete", "patches": len(records)})
+
+
 def validate_grid(reference, bounds):
     if reference["shape"] != [128, 128] or not np.allclose(
         reference["bounds"], bounds, rtol=0, atol=1e-4
@@ -34,6 +100,8 @@ def run(args):
         raise FileExistsError("comparison export already exists")
     cache_path = args.cache / "cache.json"
     cache = json.loads(cache_path.read_text())
+    if args.kind == "dinov3":
+        return export_dinov3(args, cache, cache_path)
     source_records = {}
     if args.kind == "alphaearth":
         if args.source is None:

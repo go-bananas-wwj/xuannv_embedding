@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from scipy.ndimage import binary_erosion, distance_transform_edt
 
+from xuannv_embedding.downstream.comparison_features import read_feature
 from xuannv_embedding.downstream.development import TASKS, knn_logits, validate_development_split
 from xuannv_embedding.downstream.heads import build_head
 from xuannv_embedding.downstream.metrics import evaluate_binary
@@ -75,10 +76,7 @@ def _run(args):
         feature_record = manifest["records"][i]
         if feature_record["patch_id"] != record["patch_id"]:
             raise ValueError("feature and label patch order differ")
-        with np.load(feature_record["path"]) as archive:
-            features[i] = torch.from_numpy(archive["embedding"][-1].astype(np.float32))
-        if not torch.isfinite(features[i]).all():
-            raise ValueError("nonfinite held-out features")
+        features[i] = read_feature(feature_record["path"])
         labels[i] = {}
         for task, names in TASKS.items():
             y = torch.stack([sample["supervised_labels"][k] for k in names]).amax(dim=0)

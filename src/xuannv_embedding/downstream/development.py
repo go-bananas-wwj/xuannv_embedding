@@ -7,10 +7,10 @@ import json
 import time
 from pathlib import Path
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 
+from xuannv_embedding.downstream.comparison_features import read_feature
 from xuannv_embedding.downstream.heads import build_head
 from xuannv_embedding.downstream.metrics import evaluate_binary
 from xuannv_embedding.downstream.protocol import choose_validation_threshold
@@ -93,12 +93,8 @@ def _run(args):
         if _sha(Path(record["path"])) != record["sha256"]:
             raise ValueError("label cache changed")
         sample = torch.load(record["path"], weights_only=True, mmap=True)
-        with np.load(export["records"][index]["path"]) as archive:
-            # Predeclared last observation month, not selected using task accuracy.
-            feature = torch.from_numpy(archive["embedding"][-1].astype(np.float32))
-            if feature.ndim != 3 or not torch.isfinite(feature).all():
-                raise ValueError("probe embedding must be finite [D,H,W]")
-            images.append(feature)
+        # Predeclared last observation month, or the registered static product.
+        images.append(read_feature(export["records"][index]["path"]))
         patch_ids.append(record["patch_id"])
         for task, names in TASKS.items():
             y = torch.stack([sample["supervised_labels"][k] for k in names]).amax(dim=0)

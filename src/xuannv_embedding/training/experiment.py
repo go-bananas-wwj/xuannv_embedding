@@ -469,7 +469,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("comparison")
     p.add_argument("--cache", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--kind", choices=["raw", "alphaearth"], required=True)
+    p.add_argument("--kind", choices=["raw", "alphaearth", "dinov3"], required=True)
     p.add_argument("--source", type=Path)
     p = sub.add_parser("probe")
     p.add_argument("--cache", type=Path, required=True)
