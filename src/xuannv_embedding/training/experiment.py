@@ -458,6 +458,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--highres-encoding", choices=["native", "resample"], default="native")
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
+    p = sub.add_parser("cpu-queue")
+    p.add_argument("--plan", type=Path, required=True)
+    p = sub.add_parser("test-readout")
+    p.add_argument("--cache", type=Path, required=True)
+    p.add_argument("--embeddings", type=Path, required=True)
+    p.add_argument("--probe", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--slot-directory", type=Path)
+    p = sub.add_parser("comparison")
+    p.add_argument("--cache", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--kind", choices=["raw", "alphaearth"], required=True)
+    p.add_argument("--source", type=Path)
     p = sub.add_parser("probe")
     p.add_argument("--cache", type=Path, required=True)
     p.add_argument("--embeddings", type=Path, required=True)
@@ -483,6 +496,18 @@ def main(argv: list[str] | None = None) -> int:
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers, include_highres=args.include_highres)
+    elif args.action == "cpu-queue":
+        from xuannv_embedding.training.evaluation_queue import run as queue_run
+
+        queue_run(args.plan)
+    elif args.action == "test-readout":
+        from xuannv_embedding.downstream.final_evaluation import run as test_run
+
+        test_run(args)
+    elif args.action == "comparison":
+        from xuannv_embedding.downstream.comparison_features import run as comparison_run
+
+        comparison_run(args)
     elif args.action == "probe":
         from xuannv_embedding.downstream.development import run as probe_run
 
