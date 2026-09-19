@@ -188,6 +188,8 @@ def launch(job: dict, device: int) -> None:
             ]
             if a["freeze_base"]:
                 command += ["--freeze-base"]
+            if a.get("continue_base"):
+                command += ["--continue-base"]
     with Path(job["log"]).open("x") as log:
         process = subprocess.Popen(
             command,

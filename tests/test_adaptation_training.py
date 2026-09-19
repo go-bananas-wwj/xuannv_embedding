@@ -152,3 +152,34 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
         )
     )
     assert json.loads((output / "status.json").read_text())["state"] == "complete"
+    # Continuation controls retain exactly the existing source set, including an
+    # already adapted parent, but reset optimization for the same update budget.
+    for parent, raw_config, suffix in (
+        (base_args, raw, "public"),
+        (args, adapted_raw, "adapted"),
+    ):
+        continued = setup("continue_" + suffix, raw_config)
+        continued.initialize = parent.output / "latest.pt"
+        continued.base_config = parent.config
+        continued.freeze_base = False
+        continued.continue_base = True
+        continued.highres_encoding = "native"
+        run(continued)
+        registration = json.loads((continued.output / "run.json").read_text())
+        assert registration["adaptation"]["mode"] == "continue_existing_sources"
+        old = torch.load(continued.initialize, weights_only=True)["model"]
+        new = torch.load(continued.output / "best.pt", weights_only=True)["model"]
+        assert set(old) == set(new)
+        assert any(not torch.equal(old[k], new[k]) for k in old)
+        destination = tmp_path / ("continued_export_" + suffix)
+        export_run(
+            argparse.Namespace(
+                config=continued.config,
+                cache=continued.cache,
+                checkpoint=continued.output / "best.pt",
+                output=destination,
+                device="cpu",
+                batch_size=1,
+            )
+        )
+        assert json.loads((destination / "status.json").read_text())["state"] == "complete"

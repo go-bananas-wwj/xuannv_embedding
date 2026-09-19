@@ -454,6 +454,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--initialize", type=Path)
     p.add_argument("--base-config", type=Path)
     p.add_argument("--freeze-base", action="store_true")
+    p.add_argument("--continue-base", action="store_true")
     p.add_argument("--highres-encoding", choices=["native", "resample"], default="native")
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)

@@ -54,6 +54,7 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
                 base_config=Path(previous["base_config"]),
                 freeze_base=previous["freeze_base"],
                 highres_encoding=previous["highres_encoding"],
+                continue_base=previous.get("mode") == "continue_existing_sources",
             ),
             split,
             _ancestors=(*_ancestors, checkpoint_path),
@@ -79,7 +80,13 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
     if set(sources) != added:
         raise ValueError("only additional highres sources are supported")
     heads = {h: v.channels for h, v in config.model.target_heads.items() if v.source in sources}
-    if not sources or not heads:
+    continuing = getattr(args, "continue_base", False)
+    if continuing:
+        if added or config.model.target_heads != base_config.model.target_heads:
+            raise ValueError("continuation must retain exactly the parent source and target schema")
+        if args.freeze_base:
+            raise ValueError("continuation control must update existing parameters")
+    elif not sources or not heads:
         raise ValueError("adaptation requires highres inputs and reconstruction targets")
     if any(
         v.loss_type != "continuous"
@@ -89,7 +96,13 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
         raise ValueError("highres adaptation targets must be continuous")
     system.criterion.load_state_dict(state["criterion"], strict=True)
     system.criterion.requires_grad_(not args.freeze_base)
-    if isinstance(base.model, IncrementalHighResModel):
+    if continuing:
+        system.model = base.model
+        system.model.requires_grad_(True)
+        if isinstance(system.model, IncrementalHighResModel):
+            system.model.freeze_base = False
+            system.model.frozen_sources = set()
+    elif isinstance(base.model, IncrementalHighResModel):
         system.model = base.model.extend(
             sources,
             heads,
@@ -113,6 +126,7 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
         "base_git_sha": state["git_sha"],
         "freeze_base": args.freeze_base,
         "highres_encoding": args.highres_encoding,
+        "mode": "continue_existing_sources" if continuing else "add_sources",
         "new_sources": list(sources),
-        "source_order": list(system.model.branches),
+        "source_order": list(getattr(system.model, "branches", {})),
     }

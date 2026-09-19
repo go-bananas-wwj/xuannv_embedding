@@ -56,6 +56,7 @@ def run(args: argparse.Namespace) -> None:
                 base_config=Path(adaptation["base_config"]),
                 freeze_base=adaptation["freeze_base"],
                 highres_encoding=adaptation["highres_encoding"],
+                continue_base=adaptation.get("mode") == "continue_existing_sources",
             ),
             document["split"],
         )
