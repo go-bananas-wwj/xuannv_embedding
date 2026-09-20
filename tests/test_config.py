@@ -8,6 +8,27 @@ from xuannv_embedding.config import Config, ConfigError
 from xuannv_embedding.models import build_model
 
 
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"dim": 15, "heads": 4},
+        {"injection_blocks": [4, 2]},
+        {"injection_blocks": [2, 6]},
+        {"window_cells": 0},
+        {"unknown": 1},
+    ],
+)
+def test_transformer_adapter_rejects_invalid_settings(tmp_path, settings):
+    import yaml
+
+    raw = yaml.safe_load(_valid_config())
+    raw["model"]["highres_transformer"] = settings
+    path = tmp_path / "invalid.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError):
+        Config.from_yaml(path)
+
+
 def _valid_config() -> str:
     return """
 schema_version: "1"

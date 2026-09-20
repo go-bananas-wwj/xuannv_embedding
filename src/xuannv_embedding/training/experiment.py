@@ -234,7 +234,7 @@ def run(args: argparse.Namespace) -> None:
         if getattr(args, "base_config", None) is None:
             raise ValueError("adaptation requires --base-config")
         adaptation = initialize_adaptation(system, config, args, document["split"])
-    if config.data.monthly_highres and adaptation is None:
+    if (config.data.monthly_highres or config.model.highres_transformer) and adaptation is None:
         raise ValueError("monthly highres requires registered incremental adaptation")
     system = system.to(device)
     wrapped = (
@@ -291,7 +291,10 @@ def run(args: argparse.Namespace) -> None:
         "cache_sha256": _sha(args.cache / "cache.json"),
         "device": str(device),
         "world_size": world_size,
-        "global_batch_size": config.data.batch_size * world_size,
+        "global_batch_size": config.data.batch_size
+        * world_size
+        * config.training.gradient_accumulation_steps,
+        "global_micro_batch_size": config.data.batch_size * world_size,
         "train_sampler_padding": (len(sampler) * world_size - len(train)) if sampler else 0,
         "validation_sharding": "rank-strided, no padding or duplicate test/validation samples",
         "seed": config.experiment.seed,
@@ -474,7 +477,8 @@ def run(args: argparse.Namespace) -> None:
             "validation": global_means(validation_sums, seen),
             "validation_samples": len(split[prefix + "validation"]),
             "world_size": world_size,
-            "global_batch_size": config.data.batch_size * world_size,
+            "global_batch_size": config.data.batch_size * world_size * accumulation,
+            "global_micro_batch_size": config.data.batch_size * world_size,
         }
         if device.type == "npu":
             peaks = gather_objects(torch.npu.max_memory_allocated(device))
@@ -489,6 +493,8 @@ def run(args: argparse.Namespace) -> None:
             best = score
             save("best.pt", epoch, metrics)
         save("latest.pt", epoch, metrics)
+        if (epoch + 1) % config.training.save_every == 0:
+            save(f"epoch_{epoch + 1:04d}.pt", epoch, metrics)
         if rank == 0:
             print(
                 json.dumps(
@@ -529,7 +535,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-config", type=Path)
     p.add_argument("--freeze-base", action="store_true")
     p.add_argument("--continue-base", action="store_true")
-    p.add_argument("--highres-encoding", choices=["native", "resample"], default="native")
+    p.add_argument(
+        "--highres-encoding", choices=["native", "resample", "transformer"], default="native"
+    )
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
     p = sub.add_parser("cpu-queue")
@@ -546,6 +554,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--kind", choices=["raw", "alphaearth", "dinov3"], required=True)
     p.add_argument("--source", type=Path)
     p = sub.add_parser("probe")
+    p.add_argument("--heads", nargs="+", choices=["mlp", "conv3x3", "knn"])
+    p.add_argument(
+        "--tasks", nargs="+", choices=["building", "road", "water", "green", "playground"]
+    )
     p.add_argument("--cache", type=Path, required=True)
     p.add_argument("--embeddings", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)

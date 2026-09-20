@@ -73,6 +73,14 @@ def run(args):
 
 def _run(args):
     torch.set_num_threads(2)
+    selected_tasks = getattr(args, "tasks", None) or list(TASKS)
+    if len(set(selected_tasks)) != len(selected_tasks) or set(selected_tasks) - set(TASKS):
+        raise ValueError("probe tasks must be unique registered tasks")
+    tasks = {task: TASKS[task] for task in selected_tasks}
+    heads = getattr(args, "heads", None) or ["mlp", "conv3x3", "knn"]
+    if len(set(heads)) != len(heads) or set(heads) - {"mlp", "conv3x3", "knn"}:
+        raise ValueError("probe heads must be unique registered heads")
+    total = len(tasks) * 2 * len(heads)
     cache_path = args.cache / "cache.json"
     cache = json.loads(cache_path.read_text())
     export = json.loads((args.embeddings / "manifest.json").read_text())
@@ -87,7 +95,7 @@ def _run(args):
     if distributed:
         raise ValueError("probe requires an independent process")
     indices = split["train"] + split["validation"]
-    images, targets, patch_ids = [], {t: [] for t in TASKS}, []
+    images, targets, patch_ids = [], {t: [] for t in tasks}, []
     for n, index in enumerate(indices):
         record = cache["records"][index]
         if _sha(Path(record["path"])) != record["sha256"]:
@@ -96,7 +104,7 @@ def _run(args):
         # Predeclared last observation month, or the registered static product.
         images.append(read_feature(export["records"][index]["path"]))
         patch_ids.append(record["patch_id"])
-        for task, names in TASKS.items():
+        for task, names in tasks.items():
             y = torch.stack([sample["supervised_labels"][k] for k in names]).amax(dim=0)
             valid = all(bool(sample["supervised_label_masks"][k].all()) for k in names)
             targets[task].append(y if valid else torch.full_like(y, -1))
@@ -114,9 +122,10 @@ def _run(args):
         "scope": "development validation only; OSM-assisted; not independent final test",
         "budget_unit": "fully labeled patches including foreground and background; not polygons",
         "budgets": [5, 10],
-        "heads": ["mlp", "conv3x3", "knn"],
+        "heads": heads,
         "support_seed": 20260916,
         "head_seed": 41,
+        "tasks": list(tasks),
         "optimizer_steps": 100,
         "batch_size": 2,
         "lr": 0.001,
@@ -128,7 +137,7 @@ def _run(args):
     }
     _json(args.output / "run.json", metadata)
     rows = []
-    for task in TASKS:
+    for task in tasks:
         labels = torch.stack(targets[task]).float()
         train_y, val_y = labels[:count], labels[count:]
         for budget in metadata["budgets"]:
@@ -198,7 +207,7 @@ def _run(args):
                 _json(args.output / "results.json", {"metadata": metadata, "rows": rows})
                 _json(
                     args.output / "status.json",
-                    {"state": "running", "completed": len(rows), "total": 30},
+                    {"state": "running", "completed": len(rows), "total": total},
                 )
                 print(
                     json.dumps(
@@ -212,4 +221,6 @@ def _run(args):
                     ),
                     flush=True,
                 )
-    _json(args.output / "status.json", {"state": "complete", "completed": len(rows), "total": 30})
+    _json(
+        args.output / "status.json", {"state": "complete", "completed": len(rows), "total": total}
+    )

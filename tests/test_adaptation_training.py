@@ -13,8 +13,10 @@ from xuannv_embedding.training.cli import synthetic_batch
 from xuannv_embedding.training.experiment import _sha, public_base_config, run
 
 
-@pytest.mark.parametrize("monthly", [False, True])
-def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_path, monthly):
+@pytest.mark.parametrize("monthly,transformer", [(False, False), (True, False), (True, True)])
+def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(
+    tmp_path, monthly, transformer
+):
     torch.set_num_threads(1)
     raw = public_base_config(
         yaml.safe_load(Path("configs/production/haidian_p10c_v1.yaml").read_text()),
@@ -26,7 +28,7 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
         space_dim=16,
         time_dim=16,
         precision_dim=16,
-        num_blocks=1,
+        num_blocks=3 if transformer else 1,
         num_heads=2,
         time_attention_mode="none",
     )
@@ -85,6 +87,13 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
     run(base_args)
     adapted_raw = copy.deepcopy(raw)
     adapted_raw["data"]["monthly_highres"] = monthly
+    if transformer:
+        adapted_raw["model"]["highres_transformer"] = {
+            "dim": 16,
+            "heads": 2,
+            "injection_blocks": [1, 2],
+            "window_chunk": 32,
+        }
     adapted_raw["model"]["input_sources"]["extra"] = {"channels": 3, "role": "highres"}
     adapted_raw["model"]["target_heads"]["extra_recon"] = {
         "source": "extra",
@@ -97,7 +106,7 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
     args.initialize = base_args.output / "best.pt"
     args.base_config = base_args.config
     args.freeze_base = True
-    args.highres_encoding = "native"
+    args.highres_encoding = "transformer" if transformer else "native"
     run(args)
     args.resume = args.output / "latest.pt"
     args.epochs = 2
@@ -108,7 +117,8 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
         torch.testing.assert_close(v, adapted["model"]["base." + k], rtol=0, atol=0)
     for k, v in base["criterion"].items():
         torch.testing.assert_close(v, adapted["criterion"][k], rtol=0, atol=0)
-    assert adapted["model"]["branches.extra.correction.weight"].abs().sum() > 0
+    correction = "injectors.1.output.weight" if transformer else "branches.extra.correction.weight"
+    assert adapted["model"][correction].abs().sum() > 0
     assert json.loads((args.output / "run.json").read_text())["initialization"] == "registered_base"
     from xuannv_embedding.training.experiment_export import run as export_run
 
@@ -125,6 +135,8 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
     )
     assert json.loads((destination / "status.json").read_text())["patches"] == 4
     assert json.loads((destination / "manifest.json").read_text())["adaptation"]["freeze_base"]
+    if transformer:
+        return  # Multi-generation source extension is not part of this first transformer adapter.
     second_raw = copy.deepcopy(adapted_raw)
     second_raw["model"]["input_sources"]["another"] = {"channels": 1, "role": "highres"}
     second_raw["model"]["target_heads"]["another_recon"] = {

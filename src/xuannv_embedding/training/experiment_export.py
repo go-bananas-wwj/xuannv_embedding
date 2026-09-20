@@ -81,7 +81,11 @@ def run(args: argparse.Namespace) -> None:
         "months": list(config.data.months),
         "dtype": "float32",
         "masking": "none; actual availability retained",
-        "selection": "training validation loss; never test labels",
+        "selection": (
+            "fixed epoch snapshot; downstream selection must be registered separately"
+            if args.checkpoint.name.startswith("epoch_")
+            else "training validation loss; never test labels"
+        ),
         "adaptation": adaptation,
     }
     del state

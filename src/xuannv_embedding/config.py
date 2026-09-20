@@ -168,6 +168,18 @@ class STPConfig:
 
 
 @dataclass(frozen=True)
+class TransformerAdapterSettings:
+    dim: int = 128
+    heads: int = 4
+    layers: int = 2
+    injection_blocks: tuple[int, ...] = (2, 4)
+    patch_pixels: int = 2
+    window_cells: int = 4
+    reference_gsd_m: float = 10.0
+    window_chunk: int = 128
+
+
+@dataclass(frozen=True)
 class ModelConfig:
     embed_dim: int
     input_sources: dict[str, InputSourceConfig]
@@ -177,6 +189,7 @@ class ModelConfig:
     ref_year: int = 2025
     ref_month: int = 1
     stp: STPConfig = field(default_factory=STPConfig)
+    highres_transformer: TransformerAdapterSettings | None = None
 
     @property
     def sensor_channels(self) -> dict[str, int]:
@@ -431,6 +444,31 @@ def _parse_stp(value: Any) -> STPConfig:
     )
 
 
+def _parse_transformer(value: Any, stp: STPConfig) -> TransformerAdapterSettings | None:
+    if value is None:
+        return None
+    defaults = TransformerAdapterSettings()
+    raw = _strict(value, "model.highres_transformer", allowed=set(asdict(defaults)))
+    values = asdict(defaults)
+    for key, value in raw.items():
+        field_name = f"model.highres_transformer.{key}"
+        if key == "injection_blocks":
+            if not isinstance(value, list) or not value:
+                raise ConfigError(f"{field_name} requires a nonempty list")
+            values[key] = tuple(_positive_int(i, field_name) for i in value)
+        elif key == "reference_gsd_m":
+            values[key] = _positive_float(value, field_name)
+        else:
+            values[key] = _positive_int(value, field_name)
+    settings = TransformerAdapterSettings(**values)
+    if settings.dim % settings.heads:
+        raise ConfigError("highres_transformer dim must be divisible by heads")
+    blocks = settings.injection_blocks
+    if tuple(sorted(set(blocks))) != blocks or blocks[-1] >= stp.num_blocks:
+        raise ConfigError("highres_transformer injection_blocks must precede later STP blocks")
+    return settings
+
+
 def _parse_model(value: Any) -> ModelConfig:
     raw = _strict(
         value,
@@ -444,6 +482,7 @@ def _parse_model(value: Any) -> ModelConfig:
             "input_sources",
             "target_heads",
             "stp",
+            "highres_transformer",
         },
         required={"embed_dim", "num_months", "input_sources", "target_heads"},
     )
@@ -457,6 +496,7 @@ def _parse_model(value: Any) -> ModelConfig:
     target_heads = {name: _parse_target_head(name, head) for name, head in target_raw.items()}
     if not input_sources or not any(source.role == "temporal" for source in input_sources.values()):
         raise ConfigError("model.input_sources 至少需要一个 temporal source")
+    stp = _parse_stp(raw.get("stp", {}))
     return ModelConfig(
         embed_dim=_positive_int(raw["embed_dim"], "model.embed_dim"),
         input_sources=input_sources,
@@ -465,7 +505,8 @@ def _parse_model(value: Any) -> ModelConfig:
         num_months=_positive_int(raw["num_months"], "model.num_months"),
         ref_year=_positive_int(raw.get("ref_year", 2025), "model.ref_year"),
         ref_month=_positive_int(raw.get("ref_month", 1), "model.ref_month"),
-        stp=_parse_stp(raw.get("stp", {})),
+        stp=stp,
+        highres_transformer=_parse_transformer(raw.get("highres_transformer"), stp),
     )
 
 

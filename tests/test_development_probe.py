@@ -76,3 +76,19 @@ def test_probe_runs_all_heads_without_reading_test_features_or_labels(tmp_path):
     assert len(report["rows"]) == 30
     assert report["metadata"]["test_scored"] is False
     assert all(set(r["support_patch_ids"]) <= {f"p{i}" for i in range(10)} for r in report["rows"])
+    subset = tmp_path / "four_tasks"
+    run(
+        argparse.Namespace(
+            cache=cache,
+            embeddings=export,
+            output=subset,
+            device="cpu",
+            tasks=["building", "road", "water", "green"],
+            heads=["mlp"],
+        )
+    )
+    selected = json.loads((subset / "results.json").read_text())
+    assert len(selected["rows"]) == 8
+    assert {r["task"] for r in selected["rows"]} == {"building", "road", "water", "green"}
+    status = json.loads((subset / "status.json").read_text())
+    assert status["completed"] == status["total"] == 8

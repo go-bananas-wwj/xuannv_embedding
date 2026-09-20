@@ -6,6 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from xuannv_embedding.config import Config
+from xuannv_embedding.models.highres_transformer import HighResTransformerModel
 from xuannv_embedding.models.incremental_highres import IncrementalHighResModel
 from xuannv_embedding.training.checkpoint import load_training_checkpoint
 from xuannv_embedding.training.cli import build_training_system
@@ -18,7 +19,10 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
         raise ValueError("cyclic or excessively deep adaptation lineage")
     base_config = Config.from_yaml(args.base_config)
     for key, value in asdict(base_config.model).items():
-        if key not in {"input_sources", "target_heads"} and asdict(config.model)[key] != value:
+        if (
+            key not in {"input_sources", "target_heads", "highres_transformer"}
+            and asdict(config.model)[key] != value
+        ):
             raise ValueError(f"base architecture changed: {key}")
     for name, source in base_config.model.input_sources.items():
         if config.model.input_sources.get(name) != source:
@@ -81,6 +85,11 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
         raise ValueError("only additional highres sources are supported")
     heads = {h: v.channels for h, v in config.model.target_heads.items() if v.source in sources}
     continuing = getattr(args, "continue_base", False)
+    transformer = args.highres_encoding == "transformer"
+    if transformer != (config.model.highres_transformer is not None):
+        raise ValueError("transformer encoding and model.highres_transformer must agree")
+    if transformer and (previous or not config.data.monthly_highres or continuing):
+        raise ValueError("transformer adaptation requires monthly inputs and a public-only base")
     if continuing:
         if added or config.model.target_heads != base_config.model.target_heads:
             raise ValueError("continuation must retain exactly the parent source and target schema")
@@ -102,6 +111,14 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
         if isinstance(system.model, IncrementalHighResModel):
             system.model.freeze_base = False
             system.model.frozen_sources = set()
+    elif transformer:
+        system.model = HighResTransformerModel(
+            base.model,
+            sources,
+            heads,
+            settings=config.model.highres_transformer,
+            freeze_base=args.freeze_base,
+        )
     elif isinstance(base.model, IncrementalHighResModel):
         system.model = base.model.extend(
             sources,
@@ -117,7 +134,7 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
             native=args.highres_encoding == "native",
             freeze_base=args.freeze_base,
         )
-    return {
+    result = {
         "base_checkpoint": str(args.initialize),
         "base_checkpoint_sha256": _sha(args.initialize),
         "base_config": str(args.base_config),
@@ -130,3 +147,9 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
         "new_sources": list(sources),
         "source_order": list(getattr(system.model, "branches", {})),
     }
+    if transformer:
+        result["transformer_settings"] = json.loads(
+            json.dumps(asdict(config.model.highres_transformer))
+        )
+        result["source_order"] = list(sources)
+    return result

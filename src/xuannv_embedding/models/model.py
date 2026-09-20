@@ -198,6 +198,8 @@ class AEFModel(nn.Module):
         timestamps: torch.Tensor,
         highres_frames: dict[str, torch.Tensor] | None = None,
         highres_masks: dict[str, torch.Tensor] | None = None,
+        *,
+        stp_injector=None,
     ) -> AEFOutput:
         """AEFModel 前向传播。
 
@@ -283,7 +285,7 @@ class AEFModel(nn.Module):
 
         # 3) STP 编码器输出精度路径特征，同时拿回原始输入尺寸。
         feats, _ = self.stp_encoder(
-            temporal_input, global_timestamps, mask=combined_mask
+            temporal_input, global_timestamps, mask=combined_mask, injector=stp_injector
         )  # (B, T, H//precision_scale, W//precision_scale, precision_dim)
 
         # 4) 月度嵌入：按 YYYYMM 分 bin，缺失月份用 missing_token。

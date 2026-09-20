@@ -51,3 +51,33 @@ it never renames the raw files or asserts a different acquisition date. Assignme
 are validated against configured high-resolution sources and periods and included
 in the immutable cache/configuration hashes. Without an assignment the actual
 acquisition month is used. Dataset-specific assignments belong in run configuration.
+
+## Experimental transformer injection
+
+`experiment run --highres-encoding transformer --freeze-base` requires monthly
+inputs and explicit `model.highres_transformer` settings. It starts only from a
+registered public-only base. Existing native/resample adapters remain unchanged.
+Settings include `dim`, `heads`, `layers`, ordered `injection_blocks`,
+`patch_pixels`, `window_cells`, `reference_gsd_m`, and `window_chunk`.
+
+Each source has a small-patch linear projection (equivalent to a strided patch
+convolution), two configurable local transformer layers and GSD/time/position
+metadata. Cross-attention injects source features into the STP precision path
+after the selected blocks; later STP blocks exchange them with the spatial and
+temporal paths. Frozen base parameters retain gradients with respect to their
+inputs. The base bottleneck stays in evaluation mode to avoid adding its training
+noise; STP activation checkpointing stays enabled. Zero output projections start
+from the exact base output. An entirely missing source contributes no injection.
+
+The first implementation uses non-overlapping physical windows and requires
+north-up inputs with identical geographic footprints. Audit CRS, bounds and
+reference GSD before registering a run. It derives each token's GSD from the
+common footprint and its native array dimensions, including partial edge patches.
+It does not correct misregistration, implement shifted windows or perform native
+resolution reconstruction. Those remain separate candidate improvements.
+
+Fixed-epoch snapshots follow `training.save_every`. `experiment probe --tasks
+building road water green --heads mlp` performs a development-only subset for
+checkpoint selection; omit these flags to reproduce the historical full protocol.
+Do not use held-out labels to select snapshots. Effective and micro batch sizes
+are recorded separately when gradient accumulation is used.
