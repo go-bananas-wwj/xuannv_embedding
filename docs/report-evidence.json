@@ -1,7 +1,7 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.4",
-  "verified_date": "2026-09-18",
+  "report_version": "1.5",
+  "verified_date": "2026-09-20",
   "scope": "v6全国年度5m训练数据合同、PAN与高分质量筛选、全量相对配准诊断、跨清单重复审计和600个真实样本读取；未训练表征模型，不构成独立科学精度认证。",
   "evidence": {
     "E1": {
@@ -215,7 +215,12 @@
       "GF1C_PAN": 1065,
       "GF1D_PAN": 2364
     },
-    "cross_split_conflicts": {"parent": 0, "file": 0, "product": 0, "pixels": 0},
+    "cross_split_conflicts": {
+      "parent": 0,
+      "file": 0,
+      "product": 0,
+      "pixels": 0
+    },
     "loader_samples_read": 600,
     "training_ready": true,
     "annual_model_ready": false,
@@ -230,6 +235,6 @@
     "fonts": "Fandol via TeX bundle; embedded in PDF"
   },
   "targeted_tests_passed": 37,
-  "report_source_sha256": "10ce3fd80b32ae5c5171433e16919da7721b47ab6519f846060eeef010ecc28c",
-  "report_pdf_sha256": "c60f365e7c9a885d81309c25d797e4ad8335887159328e76c48476c5a4c35eba"
+  "report_source_sha256": "6ff89880cf4a639805f8c08265db34e8393c83f04f703215e3ad995885467938",
+  "report_pdf_sha256": "c1909ae1df349349058bc4cf48985311189701a1c444385ea4129f7d7eae0138"
 }

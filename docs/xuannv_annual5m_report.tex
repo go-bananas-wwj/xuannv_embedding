@@ -465,6 +465,46 @@ I-JEPA / EMA\cite{ijepa} & 对应模块的缓慢更新教师提供潜在目标�
 \end{tabularx}
 \source{资源策略为项目实施设计，尚无年度三分支正式模型的实测速度与显存结论。}
 
+\subsection{年度训练目标与融合约束}
+三分支使用教师--学生的潜变量预测作为主要自监督目标：
+学生只看到随机留出的观测子集，教师由同一模型的指数滑动平均参数产生目标嵌入；教师输入包含另一观测子集，
+且两者在空间、月份和来源上严格隔离。这样目标不必经过像素级配准到5m，也不会要求模型把云影或时间变化复制回输入。
+AnySat采用JEPA和尺度自适应空间编码器处理异构分辨率，结果支持将“预测潜变量”作为主自监督方向，
+而不是把所有高分细节都压成重建误差\cite{anysat}。
+
+高分融合采用“残差 + 门控 + 低分锚点”。先得到只由低分时序产生的$L_5$，再由高分分支预测残差$R_5$和
+门控$\alpha_5$：$H_5=L_5+\alpha_5R_5$。$\alpha_5$由有效支持、日期距离、配准质量和内容一致性共同约束，
+并以小值初始化；高分缺失时严格退化为$L_5$。这样模型不会因为某个高分观测存在就覆盖稳定的低分语义。
+
+年度高分聚合同时计算加权特征、有效覆盖比例、观测数和日期差，
+将这些量作为显式条件输入；训练时随机删除观测、随机保留月份，并加入重复观测不变性约束。TESSERA采用稀疏随机时间采样
+和Barlow Twins约束来减少对具体观测子集的依赖，这一思想适合本项目的缺云和高分稀疏场景\cite{tessera,barlow}。
+
+2m到5m的几何聚合和细节增强解耦。面积交叠权重负责地理守恒；高分编码器学习局部结构；可学习采样器
+（如DySample）作为独立消融，不能改变输出网格或修正未解决的配准误差\cite{dysample}。主模型使用固定几何聚合。
+
+\begin{table}[h]
+\caption{算法消融顺序。每次只改变一项，所有组使用相同空间划分和训练预算。}
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{1.2cm}p{4cm}Y@{}}
+\toprule 组别 & 改动 & 主要判断\\\midrule
+M0 & 当前重建目标 + 固定几何聚合 & 建立可复现基线，记录缺高分区域退化\\
+M1 & M0 + 低分锚点残差门控 & 检查高分是否改善细节且不破坏低分语义\\
+M2 & M1 + 观测子集教师--学生潜变量预测 & 检查跨日期、跨来源和缺云稳定性\\
+M3 & M2 + 覆盖/日期/配准质量条件 & 检查模型是否学习质量差异，而不是盲目平均\\
+M4 & M3 + 可学习采样器或多尺度骨干 & 只有在M3稳定领先时才承担额外显存和解释成本\\\bottomrule
+\end{tabularx}
+\end{table}
+
+M2和M3构成正式训练主线，M4作为后续实验。每组至少报告四类指标：低分-only、5m-only、PAN-only和完整输入；
+同时报告有高分与无高分、云覆盖高与低、相对配准误差小与大的空间块。若高分只提高重建损失而不能提高冻结嵌入下游结果，
+不进入正式模型。若M2导致教师滞后、表示坍塌或跨年度不稳定，则退回M1并增加来源归一化和目标遮挡比例消融。
+
+\subsection{方法边界}
+2m PAN不作为“真实5m语义真值”监督：PAN缺少光谱，且高分与低分存在时间差和残余几何误差。
+外部AlphaEarth嵌入不作为本项目逐像元标签；它最多作为外部冻结表征基线。
+AlphaEarth公开描述的是年度、多源输入的64维嵌入场，说明年度压缩和条件读出的产品方向有参考价值，但不能替代本地训练证据\cite{alphaearth}。
+
 \reportpage
 \section{验证方法、对照与停止条件}
 \subsection{验证什么，而不是仅看训练损失}
@@ -577,6 +617,7 @@ PAN先提取结构再按地面交叠聚合到5m，低分特征插值到同一网
 \bibitem{ijepa} Mahmoud Assran et al. Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture. CVPR, 2023. \url{https://arxiv.org/abs/2301.08243}.
 \bibitem{ocm} Nick Wright. OmniCloudMask, 作者实现及模型。\url{https://github.com/DPIRD-DMA/OmniCloudMask}. 本地运行版本及权重摘要以[E2]为准，不以仓库最新状态反推已运行版本。
 \bibitem{gfguide} SpaceWill. GaoFen-1 Satellite Imagery User Guide. 产品说明；用于传感器与波段惯例，不证明当前切片的处理精度。 \url{https://en.spacewillinfo.com/uploads/soft/210106/8-210106153534.pdf}.
+\bibitem{alphaearth} Christopher F. Brown et al. AlphaEarth Foundations: An embedding field model for accurate and efficient global mapping from sparse label data. 2025. \url{https://arxiv.org/abs/2507.22291}. 本报告仅借鉴年度嵌入和条件时空汇总方向，不使用其嵌入作为本地监督标签。
 \end{thebibliography}
 
 \reportpage
@@ -619,6 +660,7 @@ v1.0 & 2026-09-17 & 建立年度5m三分支方案、数据证据与统一维护�
 v1.1 & 2026-09-17 & 完善封面与作者信息；围绕产品需求阐明方法选择，精简参考与证据范围。\\
 v1.2 & 2026-09-17 & 接入2m PAN候选，补做5m云筛选；更新三路支持、隔离记录与正式放行边界。\\
 v1.3 & 2026-09-18 & 完成v6全量高分配准诊断、PAN筛选、合同门禁和600样本读取；修正最终支持统计并明确训练放行边界。\\
-v1.4 & 2026-09-18 & 同步最终来源计数与代码边界，明确数据已放行而年度模型尚未就绪；清理并行历史文档和多节点旧路线。\\\bottomrule
+v1.4 & 2026-09-18 & 同步最终来源计数与代码边界，明确数据已放行而年度模型尚未就绪；清理并行历史文档和多节点旧路线。\\
+v1.5 & 2026-09-20 & 固定年度训练目标、低分锚点残差门控、观测质量条件和算法消融顺序。\\\bottomrule
 \end{tabularx}
 \end{document}
