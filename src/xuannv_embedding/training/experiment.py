@@ -1,6 +1,6 @@
 """Registered regional experiments with immutable sample caches and validation logs.
 
-Runs are independent single-device processes. Preparation never initializes an NPU.
+Runs may use one device or DDP for one registered model. Preparation never initializes an NPU.
 """
 
 from __future__ import annotations
@@ -19,13 +19,20 @@ from typing import Any
 import numpy as np
 import rasterio
 import torch
+import torch.distributed as dist
 from sklearn.cluster import KMeans
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, DistributedSampler
 
 from xuannv_embedding.config import Config
 from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
 from xuannv_embedding.training.checkpoint import load_training_checkpoint, save_training_checkpoint
 from xuannv_embedding.training.cli import _git_sha, _setup_device, build_training_system
+from xuannv_embedding.training.distributed_experiment import (
+    gather_objects,
+    global_means,
+    rank_random_state,
+    restore_rank_random_state,
+)
 from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.optimizer import build_optimizer, build_scheduler
 from xuannv_embedding.training.runtime import _autocast, _grad_scaler, _move
@@ -201,7 +208,10 @@ def run(args: argparse.Namespace) -> None:
         raise ValueError("cache input schema mismatch")
     if document["model_targets"] != {k: asdict(v) for k, v in config.model.target_heads.items()}:
         raise ValueError("cache target schema mismatch")
-    if document["data"] != json.loads(json.dumps(asdict(config.data), default=str)):
+    cached_data = dict(document["data"])
+    cached_data.setdefault("monthly_highres", False)
+    cached_data.setdefault("highres_month_assignments", {})
+    if cached_data != json.loads(json.dumps(asdict(config.data), default=str)):
         raise ValueError("cache data configuration mismatch")
     args.output.mkdir(parents=True, exist_ok=True)
     resume = getattr(args, "resume", None)
@@ -212,8 +222,10 @@ def run(args: argparse.Namespace) -> None:
     np.random.seed(config.experiment.seed)
     torch.manual_seed(config.experiment.seed)
     device, distributed, _ = _setup_device(args.device)
+    rank, world_size = (dist.get_rank(), dist.get_world_size()) if distributed else (0, 1)
     if distributed:
-        raise ValueError("independent experiments require one process per device, not DDP")
+        dist.barrier()
+    torch.manual_seed(config.experiment.seed + rank)
     system = build_training_system(config)
     adaptation = None
     if getattr(args, "initialize", None) is not None:
@@ -222,14 +234,27 @@ def run(args: argparse.Namespace) -> None:
         if getattr(args, "base_config", None) is None:
             raise ValueError("adaptation requires --base-config")
         adaptation = initialize_adaptation(system, config, args, document["split"])
+    if config.data.monthly_highres and adaptation is None:
+        raise ValueError("monthly highres requires registered incremental adaptation")
     system = system.to(device)
+    wrapped = (
+        torch.nn.parallel.DistributedDataParallel(
+            system,
+            device_ids=[device.index] if device.type != "cpu" else None,
+            broadcast_buffers=False,
+            find_unused_parameters=True,
+        )
+        if distributed
+        else system
+    )
     optimizer = build_optimizer(system, config.training.lr, config.training.weight_decay)
     scheduler = build_scheduler(optimizer, config.training.warmup_epochs, config.training.epochs)
     scaler = _grad_scaler(device, config.training.amp)
     prefix = "pilot_" if args.pilot else ""
     split = document["split"]
     train = CachedSamples(document, split[prefix + "train"])
-    validation = CachedSamples(document, split[prefix + "validation"])
+    validation_indices = split[prefix + "validation"][rank::world_size]
+    validation = CachedSamples(document, validation_indices)
     for record in train.records + validation.records:
         if _sha(Path(record["path"])) != record["sha256"]:
             raise ValueError("cached sample checksum mismatch")
@@ -238,13 +263,37 @@ def run(args: argparse.Namespace) -> None:
         num_workers=config.data.num_workers,
         collate_fn=collate_region_batch,
     )
-    train_loader = DataLoader(train, shuffle=True, **loader_kwargs)
+    if config.data.num_workers:
+        loader_kwargs["multiprocessing_context"] = "spawn"
+        if distributed:
+            # Cached samples have no random transforms. Isolate worker seeding
+            # from the checkpointed model/masking RNG, including after resume.
+            loader_kwargs["persistent_workers"] = True
+            loader_kwargs["generator"] = torch.Generator().manual_seed(
+                config.experiment.seed + rank
+            )
+    sampler = (
+        DistributedSampler(
+            train,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+            seed=config.experiment.seed,
+        )
+        if distributed
+        else None
+    )
+    train_loader = DataLoader(train, shuffle=sampler is None, sampler=sampler, **loader_kwargs)
     validation_loader = DataLoader(validation, shuffle=False, **loader_kwargs)
     metadata = {
         "git_sha": git_sha,
         "config_sha256": _sha(args.config),
         "cache_sha256": _sha(args.cache / "cache.json"),
         "device": str(device),
+        "world_size": world_size,
+        "global_batch_size": config.data.batch_size * world_size,
+        "train_sampler_padding": (len(sampler) * world_size - len(train)) if sampler else 0,
+        "validation_sharding": "rank-strided, no padding or duplicate test/validation samples",
         "seed": config.experiment.seed,
         "lr": config.training.lr,
         "initialization": "registered_base" if adaptation else "scratch",
@@ -257,11 +306,13 @@ def run(args: argparse.Namespace) -> None:
         "parameters": sum(p.numel() for p in system.parameters()),
         "trainable_parameters": sum(p.numel() for p in system.parameters() if p.requires_grad),
     }
-    if resume is None:
+    if resume is None and rank == 0:
         _json(args.output / "run.json", metadata)
         args.output.joinpath("config.yaml").write_bytes(args.config.read_bytes())
-    else:
+    elif resume is not None:
         previous = json.loads((args.output / "run.json").read_text())
+        if previous.get("world_size", 1) != world_size:
+            raise ValueError("resume world size mismatch")
         for key in (
             "cache_sha256",
             "config_sha256",
@@ -273,6 +324,8 @@ def run(args: argparse.Namespace) -> None:
         ):
             if previous[key] != metadata[key]:
                 raise ValueError(f"resume provenance mismatch: {key}")
+    if distributed:
+        dist.barrier()
     started = time.monotonic()
     best = float("inf")
     total_steps = 0
@@ -280,6 +333,9 @@ def run(args: argparse.Namespace) -> None:
     start_epoch = 0
 
     def save(name: str, epoch: int, metrics: dict) -> None:
+        states = gather_objects(rank_random_state(device, scaler))
+        if rank != 0:
+            return
         save_training_checkpoint(
             args.output / name,
             model=system.model,
@@ -294,11 +350,9 @@ def run(args: argparse.Namespace) -> None:
             metrics={
                 **metrics,
                 "best_validation": best,
-                "torch_rng_state": torch.get_rng_state(),
-                "device_rng_state": (
-                    torch.npu.get_rng_state(device) if device.type == "npu" else None
-                ),
-                "scaler": scaler.state_dict() if scaler is not None else None,
+                **states[0],
+                "rank_random_states": states,
+                "world_size": world_size,
             },
         )
 
@@ -319,19 +373,21 @@ def run(args: argparse.Namespace) -> None:
         start_epoch = state["epoch"] + 1
         best = state["metrics"]["best_validation"]
         total_steps = state["metrics"]["optimizer_steps"]
-        torch.set_rng_state(state["metrics"]["torch_rng_state"].cpu())
-        if device.type == "npu":
-            torch.npu.set_rng_state(state["metrics"]["device_rng_state"].cpu(), device)
-        if scaler is not None:
-            scaler.load_state_dict(state["metrics"]["scaler"])
+        states = state["metrics"].get("rank_random_states", [state["metrics"]])
+        if len(states) != world_size:
+            raise ValueError("checkpoint random states do not match world size")
+        restore_rank_random_state(states[rank], device, scaler)
     if start_epoch >= args.epochs:
         raise ValueError("no epochs remaining")
     overflow_steps = 0
     for epoch in range(start_epoch, args.epochs):
         epoch_started = time.monotonic()
-        system.train()
+        wrapped.train()
+        if sampler is not None:
+            sampler.set_epoch(epoch)
         system.criterion.set_epoch(epoch)
         train_sums: dict[str, float] = {}
+        train_seen = 0
         optimizer.zero_grad(set_to_none=True)
         for step, raw in enumerate(train_loader):
             batch = _move(raw, device)
@@ -339,7 +395,7 @@ def run(args: argparse.Namespace) -> None:
             # The final accumulation window may be shorter than the configured window.
             window = min(accumulation, len(train_loader) - (step // accumulation) * accumulation)
             with _autocast(device, config.training.amp):
-                losses = system(batch)
+                losses = wrapped(batch)
                 loss = losses["total"] / window
             if not bool(torch.isfinite(loss).item()):
                 raise FloatingPointError(f"nonfinite training loss at epoch {epoch}, step {step}")
@@ -347,9 +403,15 @@ def run(args: argparse.Namespace) -> None:
                 loss.backward()
             else:
                 scaler.scale(loss).backward()
+            n = len(raw["patch_ids"])
+            train_seen += n
             for key, value in losses.items():
                 if value.numel() == 1:
-                    train_sums[key] = train_sums.get(key, 0.0) + float(value.detach().float().cpu())
+                    train_sums[key] = train_sums.get(key, 0.0) + n * float(
+                        value.detach().float().cpu()
+                    )
+            for key, value in batch.get("masking_stats", {}).items():
+                train_sums[key] = train_sums.get(key, 0.0) + n * float(value.detach().cpu())
             if (step + 1) % accumulation == 0 or step + 1 == len(train_loader):
                 if scaler is None:
                     norm = torch.nn.utils.clip_grad_norm_(
@@ -369,7 +431,7 @@ def run(args: argparse.Namespace) -> None:
                         overflow_steps = 0
                 optimizer.zero_grad(set_to_none=True)
                 total_steps += int(bool(torch.isfinite(norm).item()))
-            if step == 0 or (step + 1) % 10 == 0:
+            if rank == 0 and (step == 0 or (step + 1) % 10 == 0):
                 print(
                     json.dumps(
                         {
@@ -408,31 +470,43 @@ def run(args: argparse.Namespace) -> None:
             "train_seconds": train_seconds,
             "elapsed_seconds": time.monotonic() - started,
             "lr_next": optimizer.param_groups[0]["lr"],
-            "train": {k: v / len(train_loader) for k, v in train_sums.items()},
-            "validation": {k: v / seen for k, v in validation_sums.items()},
+            "train": global_means(train_sums, train_seen),
+            "validation": global_means(validation_sums, seen),
+            "validation_samples": len(split[prefix + "validation"]),
+            "world_size": world_size,
+            "global_batch_size": config.data.batch_size * world_size,
         }
         if device.type == "npu":
-            metrics["peak_memory_bytes"] = torch.npu.max_memory_allocated(device)
-        with (args.output / "metrics.jsonl").open("a") as handle:
-            handle.write(json.dumps(metrics) + "\n")
-        _json(args.output / "status.json", {"state": "running", **metrics})
+            peaks = gather_objects(torch.npu.max_memory_allocated(device))
+            metrics["peak_memory_bytes_by_rank"] = peaks
+            metrics["peak_memory_bytes"] = max(peaks)
+        if rank == 0:
+            with (args.output / "metrics.jsonl").open("a") as handle:
+                handle.write(json.dumps(metrics) + "\n")
+            _json(args.output / "status.json", {"state": "running", **metrics})
         score = metrics["validation"]["total"]
         if score < best:
             best = score
             save("best.pt", epoch, metrics)
         save("latest.pt", epoch, metrics)
-        print(
-            json.dumps(
-                {
-                    "epoch_complete": epoch + 1,
-                    "validation": score,
-                    "train_seconds": train_seconds,
-                    "best": best,
-                }
-            ),
-            flush=True,
+        if rank == 0:
+            print(
+                json.dumps(
+                    {
+                        "epoch_complete": epoch + 1,
+                        "validation": score,
+                        "train_seconds": train_seconds,
+                        "best": best,
+                    }
+                ),
+                flush=True,
+            )
+        if distributed:
+            dist.barrier()
+    if rank == 0:
+        _json(
+            args.output / "status.json", {"state": "complete", **metrics, "best_validation": best}
         )
-    _json(args.output / "status.json", {"state": "complete", **metrics, "best_validation": best})
 
 
 def main(argv: list[str] | None = None) -> int:

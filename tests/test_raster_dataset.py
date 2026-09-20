@@ -195,3 +195,34 @@ def test_statistics_must_be_finite_with_positive_std(tmp_path: Path, payload: st
 
     with pytest.raises(ValueError, match="统计量.*有限|std 必须为正"):
         RegionRasterDataset(config, config.data.datasets[0])
+
+
+def test_explicit_highres_representative_month_preserves_acquisition_paths(tmp_path):
+    from dataclasses import replace
+
+    paths = ["region-a/optical_20260407.tif", "region-a/optical_20260430.tif"]
+    for path, value in zip(paths, [2.0, 8.0], strict=True):
+        _write(tmp_path / path, np.full((1, 16, 16), value))
+    manifest = tmp_path / "manifest.jsonl"
+    write_manifest(
+        manifest,
+        [ManifestRecord("p", "region-a", {"physical_aerial": paths})],
+        months=["2026-04", "2026-05"],
+    )
+    cfg = _config(tmp_path, manifest)
+    cfg = replace(
+        cfg,
+        data=replace(
+            cfg.data,
+            months=["2026-04", "2026-05"],
+            monthly_highres=True,
+            highres_month_assignments={"highres_optical": {"2026-04-30": "2026-05"}},
+        ),
+    )
+    (cfg.data.datasets[0].statistics_dir / "highres_optical_stats.json").write_text(
+        '{"mean":[0],"std":[1]}'
+    )
+    sample = RegionRasterDataset(cfg, cfg.data.datasets[0])[0]
+    assert sample["highres_frames"]["highres_optical"][:, 0, 0, 0].tolist() == [2.0, 8.0]
+    assert sample["targets"]["highres_optical_recon"][:, 0, 0, 0].tolist() == [2.0, 8.0]
+    assert all((tmp_path / p).exists() for p in paths)

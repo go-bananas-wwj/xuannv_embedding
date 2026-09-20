@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
@@ -257,6 +258,8 @@ class DataConfig:
     batch_size: int = 4
     num_workers: int = 8
     patch_size: int = 128
+    monthly_highres: bool = False
+    highres_month_assignments: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def dataset_for_region(self, region: str) -> RegionDatasetConfig:
         matches = [dataset for dataset in self.datasets if dataset.region == region]
@@ -710,7 +713,15 @@ def _parse_data(value: Any, model: ModelConfig) -> DataConfig:
     raw = _strict(
         value,
         "data",
-        allowed={"months", "datasets", "batch_size", "num_workers", "patch_size"},
+        allowed={
+            "months",
+            "datasets",
+            "batch_size",
+            "num_workers",
+            "patch_size",
+            "monthly_highres",
+            "highres_month_assignments",
+        },
         required={"months", "datasets"},
     )
     if not isinstance(raw["months"], list):
@@ -726,12 +737,34 @@ def _parse_data(value: Any, model: ModelConfig) -> DataConfig:
     regions = [dataset.region for dataset in datasets]
     if len(set(regions)) != len(regions):
         raise ConfigError("data.datasets 区域名称重复")
+    assignments = {}
+    for source, mapping in _mapping(
+        raw.get("highres_month_assignments", {}), "data.highres_month_assignments"
+    ).items():
+        if source not in model.input_sources or model.input_sources[source].role != "highres":
+            raise ConfigError("highres_month_assignments requires a configured highres source")
+        assignments[source] = {}
+        for acquired, month in _mapping(mapping, "data.highres_month_assignments source").items():
+            acquired = _string(acquired, "highres acquisition date")
+            try:
+                valid_date = date.fromisoformat(acquired).isoformat() == acquired
+            except ValueError:
+                valid_date = False
+            if not valid_date or month not in months:
+                raise ConfigError(
+                    "highres_month_assignments requires ISO dates and configured months"
+                )
+            assignments[source][acquired] = month
+    if assignments and raw.get("monthly_highres") is not True:
+        raise ConfigError("highres_month_assignments requires monthly_highres=true")
     return DataConfig(
         months=months,
         datasets=datasets,
         batch_size=_positive_int(raw.get("batch_size", 4), "data.batch_size"),
         num_workers=_non_negative_int(raw.get("num_workers", 8), "data.num_workers"),
         patch_size=_positive_int(raw.get("patch_size", 128), "data.patch_size"),
+        monthly_highres=_boolean(raw.get("monthly_highres", False), "data.monthly_highres"),
+        highres_month_assignments=assignments,
     )
 
 

@@ -77,9 +77,9 @@ def _drop_highres_source(
     else:
         keep = (torch.rand(batch_size, device=frames.device) >= prob).to(frames.dtype)
     dropped = 1.0 - keep
-    frames = frames * keep[:, None, None, None]
-    if drop_masks:
-        masks = masks * keep[:, None, None, None]
+    frames = frames * keep.reshape(batch_size, *([1] * (frames.ndim - 1)))
+    if drop_masks or frames.ndim == 5:
+        masks = masks * keep.reshape(batch_size, *([1] * (masks.ndim - 1)))
     return frames, masks, dropped.mean().detach()
 
 
@@ -119,8 +119,9 @@ def _drop_months(
     keep = 1.0 - drop
     for source in temporal_sources:
         source_frames[source] = source_frames[source] * keep[:, :, None, None, None]
-        if drop_masks:
-            source_masks[source] = source_masks[source] * keep
+        mask = source_masks[source]
+        if drop_masks or mask.ndim == 5:
+            source_masks[source] = mask * keep.reshape(*keep.shape, *([1] * (mask.ndim - 2)))
 
     stats["masking_month_drop_ratio"] = drop.mean().detach()
     return stats
@@ -199,6 +200,12 @@ def _drop_spatial_blocks(
     for source, frames in list(highres_frames.items()):
         height, width = frames.shape[-2:]
         key = (height, width)
+        monthly = frames.ndim == 5
+        if monthly:
+            # All monthly grids cover the same ground extent. Map one public-grid
+            # visibility mask rather than sampling unrelated physical locations.
+            public_keep = keep_masks[tuple(ref.shape[-2:])]
+            keep_masks[key] = F.interpolate(public_keep, size=key, mode="nearest")
         if key not in keep_masks:
             keep = _make_spatial_keep_mask(
                 batch_size=batch_size,
@@ -212,12 +219,16 @@ def _drop_spatial_blocks(
             keep = active[:, None, None, None] * keep + (1.0 - active[:, None, None, None])
             keep_masks[key] = keep
         keep = keep_masks[key]
-        highres_frames[source] = frames * keep
-        if drop_highres_masks and source in highres_masks:
-            highres_masks[source] = highres_masks[source] * F.interpolate(
+        visible = keep[:, None] if monthly else keep
+        highres_frames[source] = frames * visible
+        if (drop_highres_masks or monthly) and source in highres_masks:
+            resized = F.interpolate(
                 keep,
                 size=highres_masks[source].shape[-2:],
                 mode="nearest",
+            )
+            highres_masks[source] = highres_masks[source] * (
+                resized[:, None] if monthly else resized
             )
         dropped_sum = dropped_sum + (1.0 - keep).mean().detach()
         dropped_count += 1
@@ -264,15 +275,28 @@ def apply_input_masking(
             highres_masks[source] = masks
             stats[f"masking_modality_drop_{source}"] = dropped
 
+    monthly_highres = {k: v for k, v in highres_frames.items() if v.ndim == 5}
+    temporal_frames = {**source_frames, **monthly_highres}
+    temporal_masks = {**source_masks, **{k: highres_masks[k] for k in monthly_highres}}
     stats.update(
         _drop_months(
-            source_frames,
-            source_masks,
+            temporal_frames,
+            temporal_masks,
             cfg.month_dropout_prob,
             cfg.max_months_per_sample,
             drop_masks=cfg.drop_availability_masks,
         )
     )
+    for source in source_frames:
+        source_frames[source], source_masks[source] = (
+            temporal_frames[source],
+            temporal_masks[source],
+        )
+    for source in monthly_highres:
+        highres_frames[source], highres_masks[source] = (
+            temporal_frames[source],
+            temporal_masks[source],
+        )
     stats.update(
         _drop_spatial_blocks(
             source_frames,

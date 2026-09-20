@@ -4,6 +4,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+import pytest
 import torch
 import yaml
 
@@ -12,7 +13,8 @@ from xuannv_embedding.training.cli import synthetic_batch
 from xuannv_embedding.training.experiment import _sha, public_base_config, run
 
 
-def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_path):
+@pytest.mark.parametrize("monthly", [False, True])
+def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_path, monthly):
     torch.set_num_threads(1)
     raw = public_base_config(
         yaml.safe_load(Path("configs/production/haidian_p10c_v1.yaml").read_text()),
@@ -82,6 +84,7 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(tmp_p
     base_args = setup("base", raw)
     run(base_args)
     adapted_raw = copy.deepcopy(raw)
+    adapted_raw["data"]["monthly_highres"] = monthly
     adapted_raw["model"]["input_sources"]["extra"] = {"channels": 3, "role": "highres"}
     adapted_raw["model"]["target_heads"]["extra_recon"] = {
         "source": "extra",

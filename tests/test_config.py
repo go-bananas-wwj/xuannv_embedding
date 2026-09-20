@@ -245,3 +245,20 @@ def test_shipped_configs_are_self_contained_and_share_canonical_sources() -> Non
         for config in configs
         for task in config.training.semantic_probe_tasks
     )
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        '{unknown: {"2026-01-30": "2026-01"}}',
+        '{s2: {"2026-01-30": "2026-01"}}',
+        '{highres_optical: {"2026-02-30": "2026-01"}}',
+        '{highres_optical: {"2026-01-30": "2026-03"}}',
+    ],
+)
+def test_rejects_invalid_highres_month_assignment(tmp_path, mapping):
+    text = _valid_config().replace(
+        "data:\n", "data:\n  monthly_highres: true\n  highres_month_assignments: " + mapping + "\n"
+    )
+    with pytest.raises(ConfigError, match="highres_month_assignments"):
+        Config.from_yaml(_write(tmp_path, text))

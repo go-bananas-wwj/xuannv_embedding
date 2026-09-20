@@ -33,6 +33,13 @@ class HighResResidual(nn.Module):
         nn.init.zeros_(self.correction.bias)
 
     def forward(self, z, image, mask):
+        b, t, d, h, w = z.shape
+        monthly = image.ndim == 5
+        if monthly:
+            if image.shape[:2] != (b, t) or mask.shape != (b, t, 1, *image.shape[-2:]):
+                raise ValueError("monthly highres image/mask must match embedding batch and time")
+            image = image.flatten(0, 1)
+            mask = mask.flatten(0, 1)
         if mask.shape != (image.shape[0], 1, *image.shape[-2:]):
             raise ValueError("highres quality mask must be [B,1,H,W]")
         mask = mask.to(dtype=image.dtype)
@@ -42,13 +49,17 @@ class HighResResidual(nn.Module):
         for layer in self.layers:
             feature = layer(feature) * mask
         feature, valid = masked_resize(feature, mask.to(feature.dtype), z.shape[-2:])
-        b, t, d, h, w = z.shape
-        repeated = feature[:, None].expand(-1, t, -1, -1, -1)
+        if monthly:
+            repeated = feature.reshape(b, t, d, h, w)
+            valid = valid.reshape(b, t, 1, h, w)
+        else:
+            repeated = feature[:, None].expand(-1, t, -1, -1, -1)
+            valid = valid[:, None]
         delta = self.correction(torch.cat([z, repeated], dim=2).reshape(b * t, 2 * d, h, w))
         delta = delta.reshape(b, t, d, h, w)
         # Preserve the exact pretrained value at zero initialization, including FP rounding.
         corrected = z + (F.normalize(z + delta, dim=2) - F.normalize(z, dim=2))
-        return torch.where(valid[:, None], corrected, z)
+        return torch.where(valid, corrected, z)
 
 
 class IncrementalHighResModel(nn.Module):
