@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -482,3 +483,31 @@ def test_finite_gradients_report_a_real_norm_and_no_skips() -> None:
     assert len(observed) == 1
     assert np.isfinite(observed[0]["gradient_norm"]) and observed[0]["gradient_norm"] > 0
     assert summary["samples_per_rank"] == 1
+
+
+def test_source_digest_covers_packaged_non_python_resources() -> None:
+    """431 键兼容契约登记在 export/artifacts.json，它必须进入 checkpoint 的来源摘要。
+
+    摘要此前只覆盖 ``*.py``，改动登记 JSON 不会改变 source_code_sha256，导出行为变了
+    而来源证明不变。这里不改动源码树，而是证明摘要严格宽于只算 ``.py`` 的旧实现。
+    """
+    from xuannv_embedding.training.cli import _source_code_sha256
+
+    package_root = Path(_source_code_sha256.__globals__["__file__"]).resolve().parents[1]
+    packaged = [
+        path
+        for path in sorted(package_root.rglob("*"))
+        if path.is_file() and "__pycache__" not in path.parts
+    ]
+    non_python = {path.relative_to(package_root).as_posix() for path in packaged}
+    non_python = {name for name in non_python if not name.endswith(".py")}
+    assert "export/artifacts.json" in non_python
+
+    python_only = hashlib.sha256()
+    for path in packaged:
+        if path.suffix != ".py":
+            continue
+        python_only.update(path.relative_to(package_root).as_posix().encode())
+        python_only.update(path.read_bytes())
+    assert _source_code_sha256() != python_only.hexdigest()
+    assert _source_code_sha256() == _source_code_sha256()

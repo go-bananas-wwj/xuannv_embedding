@@ -363,6 +363,23 @@ def _periodic_checkpoint_path(final_path: Path, completed_epoch: int) -> Path:
     return final_path.with_name(f"{stem}.epoch-{completed_epoch:04d}{suffix}")
 
 
+def _source_code_sha256() -> str:
+    """对包内全部随包分发的文件取摘要，作为 checkpoint 的来源证明之一。
+
+    除 ``.py`` 外还覆盖 ``export/*.json`` 这类 package-data：431 键兼容契约就登记
+    在其中，改动它会改变导出行为，因此必须进入同一个摘要。``__pycache__`` 是本地
+    构建产物，不同机器不一致，予以排除。
+    """
+    package_root = Path(__file__).resolve().parents[1]
+    digest = hashlib.sha256()
+    for path in sorted(package_root.rglob("*")):
+        if not path.is_file() or "__pycache__" in path.parts:
+            continue
+        digest.update(path.relative_to(package_root).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv train")
     parser.add_argument("--config", type=Path, required=True)
@@ -385,12 +402,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     config = Config.from_yaml(args.config)
     git_sha = _git_sha()
-    code_digest = hashlib.sha256()
-    package_root = Path(__file__).resolve().parents[1]
-    for source_path in sorted(package_root.rglob("*.py")):
-        code_digest.update(source_path.relative_to(package_root).as_posix().encode())
-        code_digest.update(source_path.read_bytes())
-    source_code_sha256 = code_digest.hexdigest()
+    source_code_sha256 = _source_code_sha256()
     device, distributed, local_rank = _setup_device(args.device)
     torch.manual_seed(config.experiment.seed + (dist.get_rank() if distributed else 0))
     system = build_training_system(config).to(device)
@@ -470,7 +482,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 git_sha=git_sha,
                 source_schema=source_schema,
                 regions=regions,
-                metrics={"checkpoint_kind": "periodic", "completed_epoch": completed_epoch},
+                metrics={
+                    "checkpoint_kind": "periodic",
+                    "completed_epoch": completed_epoch,
+                    "source_code_sha256": source_code_sha256,
+                },
             )
         if distributed:
             dist.barrier()
