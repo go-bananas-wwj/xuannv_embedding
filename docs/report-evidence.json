@@ -1,8 +1,8 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.5",
+  "report_version": "1.7",
   "verified_date": "2026-09-20",
-  "scope": "v6全国年度5m训练数据合同、PAN与高分质量筛选、全量相对配准诊断、跨清单重复审计和600个真实样本读取；未训练表征模型，不构成独立科学精度认证。",
+  "scope": "v6全国年度5m训练数据合同、PAN与高分质量筛选、全量相对配准诊断、跨清单重复审计、600个真实样本读取、年度模型测试和8卡4步真实数据短跑；不构成长训或独立科学精度认证。",
   "evidence": {
     "E1": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
@@ -26,11 +26,11 @@
       "files": [
         {
           "path": "src/xuannv_embedding/models/model.py",
-          "sha256": "bc28886778698a7fdd06d86e904cce0870134b5ff745caed1a39bb8fdc2ca954"
+          "sha256": "f6fc6796c8324b7e350a2e24e66ea39da6c47676269b0253a8636f1b3770e192"
         },
         {
           "path": "src/xuannv_embedding/models/blocks.py",
-          "sha256": "cd30763026a852ef2124fd7ac040e894a03b15068f8a0f5004d688b051e2556e"
+          "sha256": "1aace6a5533b5312dec0e6718a0889191628ff4e46365a27baaf684ded3d0629"
         },
         {
           "path": "src/xuannv_embedding/models/sensor_encoders.py",
@@ -38,11 +38,11 @@
         },
         {
           "path": "src/xuannv_embedding/models/observation_fusion.py",
-          "sha256": "2c060a2d3b71f0904c531e1ea3ffb42835e502670bb23fc6a35d5626ffa6887d"
+          "sha256": "98b4fcb8210ba535872ebf655e861e1eaec4bc77d3061dde11a50efe80b8b301"
         },
         {
           "path": "src/xuannv_embedding/models/bottleneck.py",
-          "sha256": "8d61a92641eb24b504724216962f2add50b7e3a7d7b5504a056ae18830e9e64d"
+          "sha256": "979ce898fff48ffaadd9bd952ea7f430ad3cabe2ac28d12a3646a2b3c536d2e1"
         },
         {
           "path": "src/xuannv_embedding/data/annual_dataset.py",
@@ -58,7 +58,7 @@
         },
         {
           "path": "src/xuannv_embedding/config.py",
-          "sha256": "635526326b92e82bd45a213d7eecf1e66bcaaf1fe160964aa627d58972363745"
+          "sha256": "c0178d8e0ee639fa1493eaab6004c9eac46aca6317057bc1844827ebbb7c135d"
         },
         {
           "path": "src/xuannv_embedding/data_process/pan_annual.py",
@@ -75,6 +75,30 @@
         {
           "path": "src/xuannv_embedding/cli/__init__.py",
           "sha256": "df8c369e9483e4155054eaa37675565f0e262f4eb03870be3d51b011c589f079"
+        },
+        {
+          "path": "src/xuannv_embedding/models/highres_fusion.py",
+          "sha256": "680d277be5a6d843bb81d3bd3409d364cf3458268d1394412ad6a60007696b30"
+        },
+        {
+          "path": "src/xuannv_embedding/training/losses.py",
+          "sha256": "82bfaa9299d1bd596fb635d07c5cba429ac92389a0066c396fd3d43196933fb1"
+        },
+        {
+          "path": "src/xuannv_embedding/training/distillation.py",
+          "sha256": "201db6ed5d032a0014fe17ac314e24a931888dc7deeeb9e3eaa157e97016afd2"
+        },
+        {
+          "path": "src/xuannv_embedding/training/runtime.py",
+          "sha256": "923fbf69cdef32d0bc03b6521047d1828c204446696afcbb9f777ad56bdd2399"
+        },
+        {
+          "path": "src/xuannv_embedding/training/cli.py",
+          "sha256": "63f53d85f7adc72a39484908427577f0b463687e3c3481a4d9345d9c6353ced5"
+        },
+        {
+          "path": "src/xuannv_embedding/export/embedding.py",
+          "sha256": "1db4f08eda8bea526e75e9254e98fb24e6e5636a11e4c6fe7cf4a2f3cb7c8602"
         }
       ]
     },
@@ -223,8 +247,16 @@
     },
     "loader_samples_read": 600,
     "training_ready": true,
-    "annual_model_ready": false,
+    "annual_model_ready": true,
     "scientific_quality_validated": false
+  },
+  "current_source_sha256": {
+    "src/xuannv_embedding/models/annual.py": "709f5f80c5fe3577e19a26f64db8bfc13210cb52436af7e7f50607dbd0b97dc6",
+    "src/xuannv_embedding/training/annual.py": "0414aa4c1250ac46ab0078854dc9cb783a1f25c095b9f9b2aaaacd202d5eab18",
+    "src/xuannv_embedding/training/annual_data.py": "c24df17b6140243e2f011385c9cdc9bc0805b3e9a835bc4d75b7c9e9d4e2d0bf",
+    "src/xuannv_embedding/export/annual.py": "cdd35df9cc16b9f922c175422a63458c09abcf98ad22c848916d0d27e263849b",
+    "configs/production/annual5m_v1.yaml": "4f4f680a8843493d57eacf8a939b3301156cba1e6ff0eea068d6c0373d62666d",
+    "docs/xuannv_annual5m_report.tex": "a0983f40b1925b9579bef0a89b862b41ffa8e70996bbfb2c64a1afff5e3d782d"
   },
   "loader_samples_read": 600,
   "build": {
@@ -234,7 +266,7 @@
     "tex_bundle": "tlextras-2022.0r0",
     "fonts": "Fandol via TeX bundle; embedded in PDF"
   },
-  "targeted_tests_passed": 37,
-  "report_source_sha256": "6ff89880cf4a639805f8c08265db34e8393c83f04f703215e3ad995885467938",
-  "report_pdf_sha256": "c1909ae1df349349058bc4cf48985311189701a1c444385ea4129f7d7eae0138"
+  "targeted_tests_passed": 348,
+  "report_source_sha256": "a0983f40b1925b9579bef0a89b862b41ffa8e70996bbfb2c64a1afff5e3d782d",
+  "report_pdf_sha256": "b322c5c50d089c144b5a459c26fe8e704bda5f08a3c64b70d3b52e9fe3fac6e1"
 }

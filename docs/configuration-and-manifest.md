@@ -25,6 +25,10 @@ input_sources:
   highres_sar: {channels: 1, role: highres}
 ```
 
+`training.latent_prediction_weight` 默认是 `0`。两阶段训练时先用该字段为 0 的配置产出教师，
+再将权重设为正值并通过 `xuannv train --teacher-checkpoint ... --teacher-config ...` 启动学生。教师加载仍严格核对
+`source_schema` 与区域清单；只有训练目标权重变化导致的配置摘要差异被允许。
+
 年度 v6 manifest 通过 `provenance.observations` 保存变长原生高分观测：每条记录带有目标月份、
 源文件、通道数、原生高宽、有效掩膜、质量状态和处理版本。PAN 保留 `1×640×640`，吉林一号多光谱
 保留 `6×256×256`；loader 不在离线阶段把二者强行缩放成同一数组。缺失高分分支用空列表和
@@ -41,6 +45,7 @@ input_sources:
 - [哈尔滨 P10C](../configs/production/harbin_p10c.yaml)
 - [海淀 + 哈尔滨](../configs/production/mixed_haidian_harbin_p10c.yaml)
 - [China P10C pilot](../configs/examples/china_p10c_pilot.yaml)
+- [全国年度 5m v1](../configs/production/annual5m_v1.yaml)
 
 ## manifest v1
 

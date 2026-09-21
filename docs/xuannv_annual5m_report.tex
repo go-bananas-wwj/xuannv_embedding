@@ -15,7 +15,7 @@
  pdftitle={玄女：全国年度5米地理嵌入技术报告},pdfauthor={heyuhang},bookmarksnumbered=true}
 \pagestyle{fancy}\fancyhf{}
 \fancyhead[L]{\small\color{muted}玄女 / 年度 5m 地理嵌入}
-\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.4}
+\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.7}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \ctexset{section={format=\Large\bfseries\color{ink}},subsection={format=\large\bfseries\color{ink}}}
@@ -102,8 +102,8 @@
 全国1\%采样只解决训练与验证数据来源，生产全国连续覆盖仍须准备全国输入。
 
 \note{\status{当前状态}：v6年度数据合同已通过最终门禁，可用于模型开发和8卡训练联调；
-低分月度主干、高分观测融合接口和原生网格年度读取器已有代码基础。完整年度三分支训练闭环、
-独立科学质量认证及下游收益仍待实现或验证。}
+低分年度主干、原生网格高分编码、面积对齐、联合解码、年度遮挡训练和8卡真实数据短跑均已实现；
+完整长训、独立科学质量认证及下游收益仍待验证。}
 \source{仓库模型与数据实现 [E5]；当前数据摘要 [E1--E3]。证据编号见附录。}
 
 \reportpage
@@ -277,10 +277,10 @@ $L_5$是低分语义的网格对齐结果，不是已经读取高分的成品。
 \section{高分空间编码与 2m 到 5m 对齐}
 \subsection{空间骨干与时序骨干的分工}
 高分支线同样需要可训练骨干。卷积可以提取特征；浅层卷积足不足以支撑全国语义表征，则必须实验验证。
-主方案将高分建模拆成逐景空间编码和带日期的年度聚合，不要求原样复制低分STP。
+主方案将高分建模拆成逐景原生空间编码和带日期的年度聚合，不要求原样复制低分STP。
 是否增加高分时空骨干，应依据每父格的有效观测数、季节覆盖和产品一致性决定。
 
-5m编码器的输入输出空间尺寸保持256$\times$256。起步使用产品专用输入投影、多个残差空间块与128通道输出。
+5m编码器的输入输出空间尺寸保持256$\times$256。当前实现使用产品专用输入投影、局部残差空间块与128通道输出。
 进一步比较多尺度骨干，利用浅层细节和深层上下文恢复5m网格。FPN提供多层级融合的结构依据，
 Swin提供窗口注意力的备选，并不保证任何一个在当前数据上更优\cite{fpn,swin}。
 
@@ -309,7 +309,7 @@ PAN按已验证的单波段产品处理，不复制为RGB。它先在原生网�
 编码前屏蔽无效数值，并将有效性作为条件或使用明确的掩膜卷积策略；编码后传播有效支持。
 只在最后乘mask不能保证云影、填充值已不污染邻域。归一化统计也应避免大量填充值支配结果。
 不同产品使用自己的辐射处理、统计量和输入投影；主干深层是否共享参数属于实验选择。
-\source{原生尺度编码参考AnySat\cite{anysat}；骨干与掩膜传播为本项目待实现设计。现有浅层编码器源码见[E5]。}
+\source{原生尺度编码参考AnySat\cite{anysat}；当前实现见[E5] models/annual.py。更深骨干仍需消融。}
 
 \reportpage
 \subsection{非整数尺度转换：按地面交叠聚合}
@@ -389,7 +389,7 @@ PAN按已验证的单波段产品处理，不复制为RGB。它先在原生网�
 通道投影与L2归一化统一放在vMF瓶颈；各分支不新增独立的L2瓶颈。训练用解码器读取该64维输出。
 现有实现使用环境空间高斯扰动后重新归一化，推理不加噪声，不能写成精确vMF采样。
 共享的\texttt{log\_kappa}也不是逐像元校准置信度。单位范数不能代替有效mask\cite{vmf}。
-\source{当前实现见[E5] bottleneck.py；集合聚合与三源融合为待实现设计。}
+\source{当前实现见[E5] bottleneck.py、annual.py；vMF噪声不是独立置信度校准。}
 
 \reportpage
 \section{训练信号与防止信息泄漏}
@@ -452,7 +452,7 @@ G5 全国生产 & 固定权重及输入版本的逐父格输出 & 几何、数�
 报告GPU小时、样本曝光、有效目标数与I/O等待，相同步数不代表相同计算量。
 
 可缓存原始数组、mask和几何权重，但不可固定可学习特征缓存后仍称骨干端到端更新。
-缺模态batch需检查DDP未使用参数处理，跨卡相关性统计与EMA按真实优化器步数更新。
+缺模态batch需检查DDP未使用参数处理，跨卡相关性统计按真实优化器步数更新。
 源码工作区存在未提交修改，checkpoint来源不能只写Git HEAD，须保存实际源码摘要。
 
 \subsection{升级只按单项实验进入主线}
@@ -460,14 +460,14 @@ G5 全国生产 & 固定权重及输入版本的逐父格输出 & 几何、数�
 \toprule 候选方法 & 用途与边界\\\midrule
 DySample\cite{dysample} & 学习采样偏移，比较是否优于固定插值；偏移不改变产品地理网格，也不替代配准。\\
 FeatUp\cite{featup} & 借鉴高分引导与多视图一致性；跨传感器日期差不等同于同图增强，不采用全国逐图优化作为首版。\\
-I-JEPA / EMA\cite{ijepa} & 对应模块的缓慢更新教师提供潜在目标；不依赖外部教师，不自动保证目标正确或避免坍塌。\\
+I-JEPA / 冻结教师\cite{ijepa} & 提供潜在目标；本项目用已验收的教师 checkpoint，避免额外的 EMA 动量状态。\\
 多尺度骨干 & 比较上下文与细节收益；不同时改动所有分支、损失和采样策略。\\\bottomrule
 \end{tabularx}
 \source{资源策略为项目实施设计，尚无年度三分支正式模型的实测速度与显存结论。}
 
 \subsection{年度训练目标与融合约束}
-三分支使用教师--学生的潜变量预测作为主要自监督目标：
-学生只看到随机留出的观测子集，教师由同一模型的指数滑动平均参数产生目标嵌入；教师输入包含另一观测子集，
+三分支首先使用留出观测重建作为主自监督目标；教师--学生潜变量预测是可选第二阶段：
+学生只看到随机留出的观测子集，教师由已验收并冻结的 M0/M1 checkpoint 产生目标嵌入；教师输入包含另一观测子集，
 且两者在空间、月份和来源上严格隔离。这样目标不必经过像素级配准到5m，也不会要求模型把云影或时间变化复制回输入。
 AnySat采用JEPA和尺度自适应空间编码器处理异构分辨率，结果支持将“预测潜变量”作为主自监督方向，
 而不是把所有高分细节都压成重建误差\cite{anysat}。
@@ -496,9 +496,9 @@ M4 & M3 + 可学习采样器或多尺度骨干 & 只有在M3稳定领先时才�
 \end{tabularx}
 \end{table}
 
-M2和M3构成正式训练主线，M4作为后续实验。每组至少报告四类指标：低分-only、5m-only、PAN-only和完整输入；
+M1构成首个正式训练主线，M2/M3在教师 checkpoint 和质量条件验收后进入对照，M4作为后续实验。每组至少报告四类指标：低分-only、5m-only、PAN-only和完整输入；
 同时报告有高分与无高分、云覆盖高与低、相对配准误差小与大的空间块。若高分只提高重建损失而不能提高冻结嵌入下游结果，
-不进入正式模型。若M2导致教师滞后、表示坍塌或跨年度不稳定，则退回M1并增加来源归一化和目标遮挡比例消融。
+不进入正式模型。若M2导致表示坍塌或跨年度不稳定，则退回M1并增加来源归一化和目标遮挡比例消融。
 
 \subsection{方法边界}
 2m PAN不作为“真实5m语义真值”监督：PAN缺少光谱，且高分与低分存在时间差和残余几何误差。
@@ -542,15 +542,15 @@ B组 & 在优选模型上逐项改变骨干、损失或上采样 & 收益能否�
 
 \reportpage
 \section{实现边界、生产交付与风险}
-\subsection{现有代码与待实施接口}
+\subsection{代码实现与验证边界}
 \noindent\begin{tabularx}{\linewidth}{@{}p{2.6cm}YY@{}}
 \toprule 模块 & 已有代码基础 & 本方案待完成\\\midrule
-低分模型 & STP、月度聚合、插值卷积头 & 年度汇总与128通道接口，5m输出\\
-高分编码 & 浅层卷积，支持先编码后缩放 & PAN产品适配、骨干比较、mask传播与面积聚合\\
-观测融合 & 按目标月聚合和残差融合 & 日期/质量年度聚合、两类高分联合解码\\
+低分模型 & STP、月度聚合、插值卷积头 & 年度STP汇总与128通道接口已实现\\
+高分编码 & 原生网格卷积，支持先编码后缩放 & 5m/PAN产品适配、mask传播与面积聚合已实现\\
+观测融合 & 按目标月聚合和残差融合 & 日期/质量年度聚合、两类高分联合解码已实现\\
 球面瓶颈 & 64维投影、归一化、训练扰动 & 接入年度路径与输出有效性\\
-年度数据 & 原生网格读取、2m接入、5m云筛选、全量高分相对配准与最终统计量 & 传感器语义复核、独立绝对定位评估及训练运行时连接\\
-训练与导出 & 严格配置/checkpoint、DDP、月度导出 & 年度监督、生产合同与8卡验收\\\bottomrule
+年度数据 & 原生网格读取、2m接入、5m云筛选、全量高分相对配准与最终统计量 & 传感器语义复核、独立绝对定位评估\\
+训练与导出 & 严格配置/checkpoint、DDP、月度导出 & 年度监督、生产导出已实现；长训和效果待验收\\\bottomrule
 \end{tabularx}
 \source{[E5]是实际源码摘要；上表描述代码能力，不表示新模型已经运行成功。}
 
@@ -585,6 +585,9 @@ TESSERA\cite{tessera} & S1/S2时间序列，独立稀疏观测子集与修改的
 Barlow Twins\cite{barlow} & 两视图交叉相关的对角一致与非对角冗余约束 & 训练投影头的候选正则；需处理像元相关与跨卡统计。\\
 FPN / Swin\cite{fpn,swin} & 多尺度横向连接；分层移位窗口注意力 & 高分空间骨干候选。PAN/多光谱不能直接等同RGB预训练输入。\\
 Scale-MAE\cite{scalemae} & GSD感知位置编码与多尺度/频率重建 & 保留物理尺度与结构目标的参考；未实现全方法前不称为使用该模型。\\
+Galileo\cite{galileo} & 结构化与非结构化掩膜的全局/局部双目标 & 用作单目标稳定性和多尺度目标的消融依据，不直接复制其模型。\\
+SALT\cite{salt} & 先训练目标编码器，再冻结教师进行潜变量预测 & 采用冻结 M0/M1 checkpoint 的两阶段训练接口，不使用 EMA 教师。\\
+Presto\cite{presto} & 面向像元时序的轻量 Transformer 与结构化掩膜 & 作为低成本非 STP 对照，不作为正式5m主干。\\
 vMF研究\cite{vmf} & 监督学习的球面几何与分布建模 & 瓶颈的数学背景；当前高斯投影实现不等于精确采样或校准不确定性。\\\bottomrule
 \end{tabularx}
 
@@ -597,7 +600,7 @@ vMF研究\cite{vmf} & 监督学习的球面几何与分布建模 & 瓶颈的数�
 PAN先提取结构再按地面交叠聚合到5m，低分特征插值到同一网格，三路共同优化最终64维表征。
 固定几何对齐使网格含义可核验；留出观测预测提供训练信号；空间独立的冻结嵌入评测决定方案是否有效。
 
-\note{方法采用分为两层：主方案固定三分支接口、年度聚合和一次联合解码；多尺度骨干、学习上采样与EMA潜在目标
+\note{方法采用分为两层：主方案固定三分支接口、年度聚合和一次联合解码；多尺度骨干、学习上采样与冻结教师潜在目标
 作为单项消融候选。候选方法只有在独立验证中证明收益、并满足8卡资源预算后才进入正式配置。
 参考文献的作用是说明具体设计依据；组合后的效果仍需本项目实验验证。}
 
@@ -615,6 +618,9 @@ PAN先提取结构再按地面交叠聚合到5m，低分特征插值到同一网
 \bibitem{dysample} Wenze Liu et al. Learning to Upsample by Learning to Sample. ICCV, 2023. \url{https://arxiv.org/abs/2308.15085}.
 \bibitem{featup} Stephanie Fu et al. FeatUp: A Model-Agnostic Framework for Features at Any Resolution. ICLR, 2024. \url{https://arxiv.org/abs/2403.10516}.
 \bibitem{ijepa} Mahmoud Assran et al. Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture. CVPR, 2023. \url{https://arxiv.org/abs/2301.08243}.
+\bibitem{galileo} Gabriel Tseng et al. Galileo: Learning Global and Local Features of Many Remote Sensing Modalities. 2025. \url{https://arxiv.org/abs/2502.09356}.
+\bibitem{salt} Xianhang Li et al. Rethinking JEPA: Compute-Efficient Video SSL with Frozen Teachers. 2025. \url{https://arxiv.org/abs/2509.24317}.
+\bibitem{presto} Gabriel Tseng et al. Lightweight, Pre-trained Transformers for Remote Sensing Timeseries. 2023. \url{https://arxiv.org/abs/2304.14065}.
 \bibitem{ocm} Nick Wright. OmniCloudMask, 作者实现及模型。\url{https://github.com/DPIRD-DMA/OmniCloudMask}. 本地运行版本及权重摘要以[E2]为准，不以仓库最新状态反推已运行版本。
 \bibitem{gfguide} SpaceWill. GaoFen-1 Satellite Imagery User Guide. 产品说明；用于传感器与波段惯例，不证明当前切片的处理精度。 \url{https://en.spacewillinfo.com/uploads/soft/210106/8-210106153534.pdf}.
 \bibitem{alphaearth} Christopher F. Brown et al. AlphaEarth Foundations: An embedding field model for accurate and efficient global mapping from sparse label data. 2025. \url{https://arxiv.org/abs/2507.22291}. 本报告仅借鉴年度嵌入和条件时空汇总方向，不使用其嵌入作为本地监督标签。
@@ -626,7 +632,7 @@ PAN先提取结构再按地面交叠聚合到5m，低分特征插值到同一网
 \subsection{证据优先级与快照}
 本地状态使用实际产物和代码，方法论使用原论文，拟实施配置标明为设计。旧Markdown叙述与机器摘要冲突时，
 先核验版本与时间，不以“最新”字样自动覆盖证据。本版完成PAN筛选、吉林一号质量筛选、全量高分相对配准、
-跨集合重复审计和600个真实样本读取；没有训练表征模型。
+跨集合重复审计、600个真实样本读取、年度模型单元测试和8卡4步真实数据短跑；没有长训指标或独立下游精度结论。
 以下路径以服务器 \texttt{/data/heyuhang/processed/} 为基准；完整SHA-256及源码文件列表保存在
 \texttt{docs/report-evidence.json}，它是证据索引，不是第二份方案正文。
 
@@ -661,6 +667,6 @@ v1.1 & 2026-09-17 & 完善封面与作者信息；围绕产品需求阐明方法
 v1.2 & 2026-09-17 & 接入2m PAN候选，补做5m云筛选；更新三路支持、隔离记录与正式放行边界。\\
 v1.3 & 2026-09-18 & 完成v6全量高分配准诊断、PAN筛选、合同门禁和600样本读取；修正最终支持统计并明确训练放行边界。\\
 v1.4 & 2026-09-18 & 同步最终来源计数与代码边界，明确数据已放行而年度模型尚未就绪；清理并行历史文档和多节点旧路线。\\
-v1.5 & 2026-09-20 & 固定年度训练目标、低分锚点残差门控、观测质量条件和算法消融顺序。\\\bottomrule
+v1.7 & 2026-09-20 & 接入年度原生尺度三分支、2m到5m面积聚合、留出遮挡训练、年度导出与8卡真实数据短跑；更新实现边界。\\\bottomrule
 \end{tabularx}
 \end{document}

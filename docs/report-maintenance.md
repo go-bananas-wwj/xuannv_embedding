@@ -10,3 +10,5 @@ SHA-256 登记在 [report-evidence.json](report-evidence.json)。修改数量、
 
 当前正式训练统一按单节点 8 卡设计。历史调研、阶段性运行记录和重复方案不在仓库维护；需要追溯时
 使用服务器外部归档及 v6 数据目录中的日志、摘要和数据库。
+
+评审中发现的实现缺陷在修复后直接并入本报告或 [architecture.md](architecture.md)，不再维护并行的临时方案文档。

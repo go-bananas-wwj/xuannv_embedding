@@ -13,20 +13,24 @@
 ## 命令
 
 ```text
-xuannv data grid         构建 owner-zone 父网格
-xuannv data registry     从质量 atlas 生成采样 registry
-xuannv data partition    生成确定性十等分
-xuannv data materialize  从冻结 catalog 物化多源栅格
-xuannv data preprocess   对齐并切 patch
-xuannv data manifest     生成 manifest v1 与 sidecar
-xuannv data validate     审计 manifest 或父网格包
-xuannv data catalog      从本地高分归档建立观测目录与低分配对缓存
+xuannv data grid                  构建 owner-zone 父网格
+xuannv data registry              从质量 atlas 生成采样 registry
+xuannv data partition             生成确定性十等分
+xuannv data materialize           从冻结 catalog 物化多源栅格
+xuannv data preprocess            对齐并切 patch
+xuannv data manifest              生成 manifest v1 与 sidecar
+xuannv data validate              审计 manifest 或父网格包
+xuannv data catalog               从本地高分归档建立观测目录与低分配对缓存
 xuannv data finalize-catalog      抽样验收并发布已物化目录
 xuannv data prepare-observations  校验观测、生成掩膜和年度索引
 xuannv data pair-observations     配对同期高低分观测并验证读取
 xuannv data quality-annual        执行年度观测初筛并重算统计量
+xuannv data cloud-annual          生成可恢复的 S2 云影筛选候选
+xuannv data cloud-highres         按波长识别 5m 光学波段并生成云影候选
+xuannv data pan-annual            审计 2m 全色观测并接入年度候选清单
 xuannv data release-quality       完成云影、配准、重复和放行门禁
 xuannv data check-annual          抽样读取年度原生网格数据
+xuannv data p0                    从观测 pilot 准备真实 P0 训练数据
 ```
 
 每个命令使用 `--help` 查看精确参数。`grid` 和 `materialize` 拒绝覆盖完成目录；批次先写入临时
