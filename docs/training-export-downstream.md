@@ -69,3 +69,20 @@ RMSE、MAE、偏差和有效数量；模型全域与时序插值共有域分开�
 输出逐图块预测 NPZ、充分统计量及身份 JSON，放在仓库外。原生解码头结果是模型诊断，
 不能替代所有嵌入使用相同预算解码器的公平比较。开发测试覆盖遮挡、共享张量保护、
 无历史域、无效像元及训练/验证/测试读取边界；真实模型结果须另外运行并登记。
+
+## 多任务结果归档
+
+已完成的跟进计划可生成独立 TeX、JSON、逐条件 CSV，供审阅后放入论文实验文件夹。
+入口要求跟进程序处于 `ready_to_publish`，核对 checkpoint、导出、评价、预测数组和独立
+复算记录；支持样本必须与 B0 一致。输出目录必须为新目录，不覆盖已有实验记录。
+
+```bash
+xuannv experiment report-multitask --plan /path/T0_followup_plan.json \
+  --baseline-verification /path/P0_verification.json --output /path/new-report-staging
+```
+
+后续调参组还必须传入 `--reference-followup /path/T0_followup`，比较同更新预算的 T0。
+表中保留候选相对 B0、T0 的原始指标差值；两组分数都以 B0 误差归一化，随后相减，
+不更换分母。未定义的 R² 保留为空并记录定义条件数。负结果不会被转换成改善结论。
+命令只生成待审阅制品；审阅、编译、提交 Git、同步 Overleaf 并核对远端提交之后，
+才能启动下一训练组。失败或未完成的运行仍需单独记录状态及原因，不能生成完成报告。

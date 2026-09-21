@@ -570,6 +570,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--months", nargs="+", type=int, required=True)
     p.add_argument("--aliases", nargs="*", default=[])
     p.add_argument("--context", choices=["offline", "prefix"], default="offline")
+    p = sub.add_parser("report-multitask")
+    p.add_argument("--plan", type=Path, required=True)
+    p.add_argument("--baseline-verification", type=Path, required=True)
+    p.add_argument("--reference-followup", type=Path)
+    p.add_argument("--output", type=Path, required=True)
     p = sub.add_parser("follow-multitask")
     p.add_argument("--plan", type=Path, required=True)
     p = sub.add_parser("follow")
@@ -648,6 +653,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.downstream.reconstruction import run as reconstruct_run
 
         reconstruct_run(args)
+    elif args.action == "report-multitask":
+        from xuannv_embedding.downstream.multitask_report import run as report_multitask
+
+        report_multitask(args)
     elif args.action == "follow-multitask":
         from xuannv_embedding.training.multitask_followup import run as follow_multitask
 
