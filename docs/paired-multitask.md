@@ -8,9 +8,11 @@ loads those frozen parameters and scores test data without refitting. Each phase
 a new output subdirectory; a partial or complete run is never silently overwritten.
 
 This is the primary C/R/Q controller, not completion of the research benchmark. Strong
-heads, task-family bootstrap aggregation, real label-bundle preparation/provenance review,
+heads, real label-bundle preparation/provenance review,
 external geographic audit, and the actual locked-candidate comparison remain required.
 Software tests use synthetic data and do not establish an accuracy improvement.
+Use [paired-multitask-report.md](paired-multitask-report.md) for spatial uncertainty and
+task-family aggregation of the archived predictions.
 
 ## Locked specification
 

@@ -35,7 +35,8 @@ prediction hash after loading, with no refitting. Query prediction accepts featu
 it cannot use query labels to change regularization, a scaler or a threshold.
 
 The primary file-backed caller is documented in [paired-multitask.md](paired-multitask.md).
-Strong heads and task-family uncertainty still need their final workflow integration.
+Task-family uncertainty is documented in [paired-multitask-report.md](paired-multitask-report.md).
+Strong heads still need their final workflow integration.
 Actual AEF and held-out comparisons remain after the candidate lock. Existing running
 experiments continue to use their original immutable code snapshots.
 

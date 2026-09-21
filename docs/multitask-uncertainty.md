@@ -31,8 +31,10 @@ silently drops seeds. If any paired draw is undefined, the unconditional 95% per
 interval is withheld and the defined/total counts are returned. Such a result cannot support
 a positive-confidence claim. The undefined-case policy must remain fixed before scoring.
 
-This layer does **not** yet provide the final file-backed evaluator, validation-frozen readout
-artifact checks, annual/monthly feature adapter, strong-head comparisons, task-family
-aggregation or a paper-level pass decision. Those remain separate required integration work.
+The file-backed primary evaluator and frozen annual/monthly feature path are documented in
+[paired-multitask.md](paired-multitask.md). Task-family reporting and primary numerical
+criteria are integrated in [paired-multitask-report.md](paired-multitask-report.md).
+Strong-head comparisons, real dataset/provenance audits and a complete paper claim still
+require the registered final experiments; these helpers do not establish an improvement.
 Its tests use synthetic predictions and literal tile duplication, including unequal tile
 sizes, tied AP scores, missing classes/domains, seed averaging and mismatched pairing.
