@@ -76,7 +76,6 @@ xuannv downstream evaluate --dataset task.npz --folds folds.json --fold 0 \
 - [海淀模型卡](docs/production/haidian-model-card.md)
 - [海淀评测证据](docs/production/haidian-evidence.md)
 - [哈尔滨迁移证据与限制](docs/production/harbin-transfer.md)
-- [迁移与来源](MIGRATION.md)
 - [发布清单](docs/release/release-checklist.md)
 
 大制品发布在

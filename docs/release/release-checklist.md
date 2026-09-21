@@ -13,8 +13,7 @@
 
 ## Ascend NPU（v1.0.0 已验收）
 
-验收环境 Ascend910B4-1、PyTorch `2.6.0`、torch-npu `2.6.0.post5`；证据见
-[验收摘要](validation-summary.md)。
+验收环境 Ascend910B4-1、PyTorch `2.6.0`、torch-npu `2.6.0.post5`。
 
 - [x] 加载 `/usr/local/Ascend/cann-9.0.0/set_env.sh`，核验 PyTorch `2.6.0`、torch_npu
   `2.6.0.post5` 和设备型号。

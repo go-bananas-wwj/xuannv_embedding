@@ -326,6 +326,5 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`：
 - `docs/production/haidian-model-card.md`：海淀模型卡
 - `docs/production/haidian-evidence.md`：海淀评测证据
 - `docs/production/harbin-transfer.md`：哈尔滨迁移证据与限制
-- `MIGRATION.md`：旧仓迁移与来源映射
 - `CONTRIBUTING.md`：贡献指南
 - `SECURITY.md`：安全政策
