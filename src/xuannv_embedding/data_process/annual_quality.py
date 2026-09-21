@@ -10,6 +10,7 @@ import os
 import sqlite3
 from collections import Counter, defaultdict
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -23,12 +24,19 @@ VERSION = "annual-quality-candidate-v2"
 LOWRES_CHANNELS = {"s2": 10, "s1": 2, "landsat": 6}
 
 
+@lru_cache(maxsize=32)
+def _resolved_root(root: Path) -> Path:
+    """数据根在单个进程内是常量；逐次重解析会在网络 FS 上产生可观的 stat 开销。"""
+    return root.resolve()
+
+
 def relative_file(root: Path, relative: str) -> Path:
     path = Path(relative)
     if path.is_absolute() or ".." in path.parts or "\\" in relative or "://" in relative:
         raise ValueError("Unsafe observation path")
     result = root / path
-    if not result.resolve().is_relative_to(root.resolve()):
+    # 结果路径仍逐次完整解析，符号链接逃逸检查的语义与缓存前完全一致。
+    if not result.resolve().is_relative_to(_resolved_root(root)):
         raise ValueError("Observation path escapes data root")
     return result
 

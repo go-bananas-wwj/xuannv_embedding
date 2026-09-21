@@ -19,6 +19,7 @@ from xuannv_embedding.data_process.annual_quality import (
     buffered_parents,
     build,
     numeric_reasons,
+    relative_file,
     select_seasons,
     verify_observation,
 )
@@ -199,3 +200,30 @@ def test_annual_dataset_import_disables_gdal_directory_probing():
 
     assert os.environ["GDAL_DISABLE_READDIR_ON_OPEN"] == "EMPTY_DIR"
     assert os.environ["GDAL_PAM_ENABLED"] == "NO"
+
+
+def test_relative_file_rejects_escapes_including_symlinked_leaves(tmp_path):
+    """缓存数据根的解析结果不得削弱逃逸检查：叶子文件仍须逐次完整解析。"""
+    import os
+
+    root = tmp_path / "root"
+    (root / "sub").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.tif").write_bytes(b"x")
+    (root / "sub" / "ok.tif").write_bytes(b"x")
+    os.symlink(outside / "secret.tif", root / "sub" / "escape.tif")
+    os.symlink(outside, root / "linkdir")
+
+    assert relative_file(root, "sub/ok.tif") == root / "sub" / "ok.tif"
+    for unsafe in (
+        "sub/escape.tif",
+        "linkdir/secret.tif",
+        "/abs/x.tif",
+        "../x.tif",
+        "a/../../x.tif",
+        "http://host/x.tif",
+        "a\\b.tif",
+    ):
+        with pytest.raises(ValueError):
+            relative_file(root, unsafe)
