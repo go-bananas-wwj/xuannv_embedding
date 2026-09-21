@@ -181,7 +181,8 @@ def train_steps(
                 optimizer.zero_grad(set_to_none=True)
                 optimizer_steps += 1
                 pending = 0
-            if device.type == "cuda":
+            # 同步只为让 step_callback 的计时可信；无回调时保留 H2D/计算重叠。
+            if step_callback is not None and device.type == "cuda":
                 torch.cuda.synchronize(device)
             previous_end = perf_counter()
             if step_callback is not None:
