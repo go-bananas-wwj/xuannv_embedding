@@ -419,7 +419,9 @@ def retrieval(spec, cache, task, y, features, out):
 
 def main(argv=None):
     p = argparse.ArgumentParser()
-    p.add_argument("stage", choices=["export", "prepare", "probe", "describe", "report"])
+    p.add_argument(
+        "stage", choices=["export", "prepare", "probe", "describe", "report", "reproduce"]
+    )
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--model")
     p.add_argument("--task")
@@ -435,6 +437,10 @@ def main(argv=None):
         probe(args)
     elif args.stage == "describe":
         from xuannv_embedding.downstream.fixed_description import run
+
+        run(args)
+    elif args.stage == "reproduce":
+        from xuannv_embedding.downstream.fixed_reproduction import run
 
         run(args)
     else:
