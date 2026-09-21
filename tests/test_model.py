@@ -487,6 +487,18 @@ def test_availability_aware_fusion_is_identity_when_unavailable() -> None:
     assert torch.equal(output, base_feat)
 
 
+def test_stp_time_operator_converts_yyyymm_to_continuous_months() -> None:
+    timestamps = torch.tensor([[202512, 202601, 202603]])
+
+    converted = STPTimeOperator._continuous_month_index(timestamps)
+
+    assert converted.tolist() == [[311.0, 312.0, 314.0]]
+    assert torch.equal(converted[:, 1:], STPTimeOperator._continuous_month_index(timestamps[:, 1:]))
+
+    padded = STPTimeOperator._continuous_month_index(torch.tensor([[202512, 0, 0]]))
+    assert padded.tolist() == [[311.0, 0.0, 0.0]]
+
+
 def test_availability_aware_fusion_rejects_size_mismatch() -> None:
     """AvailabilityAwareFusion 在输入尺寸不一致时应抛出断言错误。"""
     fusion = AvailabilityAwareFusion(16)

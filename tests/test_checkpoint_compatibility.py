@@ -30,7 +30,7 @@ REAL_SHA256 = "69dfd81c898544413a747f5c7304cc9210ad1cf420ce724864b8bd7deb6ed790"
 def _model(*, legacy: bool) -> AEFModel:
     optical = "highres_optical_haidian" if legacy else "highres_optical"
     sar = "highres_sar_haidian" if legacy else "highres_sar"
-    return AEFModel(
+    model = AEFModel(
         sensor_channels={"s2": 2, optical: 3, sar: 1},
         embed_dim=8,
         target_heads={
@@ -54,6 +54,9 @@ def _model(*, legacy: bool) -> AEFModel:
         ref_month=12,
         source_roles={"s2": "temporal", optical: "highres", sar: "highres"},
     ).eval()
+    if legacy:
+        model.enable_legacy_inference()
+    return model
 
 
 def _registry(path: Path, checkpoint: Path, key_count: int) -> Path:

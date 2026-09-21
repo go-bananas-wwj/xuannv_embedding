@@ -196,6 +196,12 @@ class AEFModel(nn.Module):
             else:
                 raise ValueError(f"不支持的 decoder 类型: {kind!r}")
 
+    def enable_legacy_inference(self) -> None:
+        """Restore the registered monthly checkpoint's numerical time encoding."""
+        self.highres_fusion.residual_mode = False
+        for block in self.stp_encoder.blocks:
+            block.time_op.time_encoding.legacy = True
+
     def forward(
         self,
         source_frames: dict[str, torch.Tensor],

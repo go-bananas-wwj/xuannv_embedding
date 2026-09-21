@@ -18,16 +18,17 @@ class SinusoidalTimeEncoding(nn.Module):
     用于 ``STPTimeOperator`` 提供时间先验。
     """
 
-    def __init__(self, dim: int, max_period: float = 10000.0) -> None:
+    def __init__(self, dim: int, max_period: float = 128.0) -> None:
         """初始化 SinusoidalTimeEncoding。
 
         Args:
             dim: 输出编码维度。
-            max_period: 正弦周期上限，默认 10000。
+            max_period: 频率倒数上限，默认 128 个时间单位。
         """
         super().__init__()
         self.dim = dim
         self.max_period = max_period
+        self.legacy = False
 
     def forward(self, timestamps: torch.Tensor) -> torch.Tensor:
         """对时间戳进行正弦编码。
@@ -40,10 +41,13 @@ class SinusoidalTimeEncoding(nn.Module):
             返回 ``(B, dim)``。
         """
         half_dim = self.dim // 2
-        # 频率序列：(half_dim,)
+        # 频率从 1 到 1/max_period，避免大数值时间戳造成高频混叠。
         freq = torch.exp(
             torch.arange(half_dim, device=timestamps.device, dtype=torch.float32)
-            * (math.log(self.max_period) / max(half_dim - 1, 1))
+            * (
+                (math.log(10000.0) if self.legacy else -math.log(self.max_period))
+                / max(half_dim - 1, 1)
+            )
         )
 
         if timestamps.dim() == 1:
@@ -164,8 +168,29 @@ class STPTimeOperator(nn.Module):
         )
         self.time_encoding = SinusoidalTimeEncoding(dim)
 
-    def _pad_or_trim(self, tensor: torch.Tensor, target_len: int, dim: int = 1) -> torch.Tensor:
-        """将张量沿指定维度补齐或截断到目标长度（复制最后一个值）。"""
+    @staticmethod
+    def _continuous_month_index(timestamps: torch.Tensor) -> torch.Tensor:
+        """Convert YYYYMM to months since 2000-01, independently of the batch."""
+        values = timestamps.float()
+        if values.numel() == 0 or float(values.abs().max()) < 100000.0:
+            return values
+        yyyymm = values.round().to(torch.long)
+        is_calendar = yyyymm.abs() >= 100000
+        years = torch.div(yyyymm, 100, rounding_mode="floor")
+        months = yyyymm.remainder(100)
+        if bool((is_calendar & ((months < 1) | (months > 12))).any()):
+            raise ValueError("Invalid YYYYMM timestamp")
+        converted = ((years - 2000) * 12 + months - 1).float()
+        return torch.where(is_calendar, converted, values)
+
+    def _pad_or_trim(
+        self,
+        tensor: torch.Tensor,
+        target_len: int,
+        dim: int = 1,
+        pad_value: float | None = None,
+    ) -> torch.Tensor:
+        """将张量沿指定维度补齐或截断，可用中性值补齐。"""
         cur_len = tensor.shape[dim]
         if cur_len == target_len:
             return tensor
@@ -174,10 +199,15 @@ class STPTimeOperator(nn.Module):
             slices[dim] = slice(None, target_len)
             return tensor[tuple(slices)]
         repeat_times = target_len - cur_len
-        last = tensor.index_select(dim, torch.tensor([cur_len - 1], device=tensor.device))
-        repeats = [1] * tensor.dim()
-        repeats[dim] = repeat_times
-        padding = last.repeat(*repeats)
+        if pad_value is None:
+            last = tensor.index_select(dim, torch.tensor([cur_len - 1], device=tensor.device))
+            repeats = [1] * tensor.dim()
+            repeats[dim] = repeat_times
+            padding = last.repeat(*repeats)
+        else:
+            shape = list(tensor.shape)
+            shape[dim] = repeat_times
+            padding = tensor.new_full(shape, pad_value)
         return torch.cat([tensor, padding], dim=dim)
 
     def forward(
@@ -199,7 +229,16 @@ class STPTimeOperator(nn.Module):
         B, T, H, W, C = x.shape
         if timestamps.dim() == 1:
             timestamps = timestamps.view(B, T)
-        timestamps = self._pad_or_trim(timestamps, T, dim=1)
+        if self.time_encoding.legacy:
+            timestamps = self._pad_or_trim(timestamps, T, dim=1)
+            if mask is not None:
+                mask = self._pad_or_trim(mask, T, dim=1)
+        else:
+            timestamp_count = timestamps.shape[1]
+            timestamps = self._pad_or_trim(timestamps, T, dim=1, pad_value=0.0)
+            timestamps = self._continuous_month_index(timestamps)
+            mask = x.new_ones(B, T) if mask is None else self._pad_or_trim(mask, T, pad_value=0)
+            mask = mask * (torch.arange(T, device=x.device)[None] < timestamp_count)
 
         time_enc = self.time_encoding(timestamps)  # (B, T, C) 或 (B, C)
         if time_enc.dim() == 2:

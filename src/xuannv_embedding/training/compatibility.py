@@ -124,6 +124,8 @@ def load_compatible_checkpoint(
         )
     try:
         model.load_state_dict(mapped, strict=True)
+        if hasattr(model, "enable_legacy_inference"):
+            model.enable_legacy_inference()
     except RuntimeError as exc:
         raise CompatibilityError(f"checkpoint 张量形状或类型不兼容: {exc}") from exc
     return CompatibilityReport(

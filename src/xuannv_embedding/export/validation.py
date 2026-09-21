@@ -342,7 +342,7 @@ def build_legacy_haidian_model(config: Config) -> AEFModel:
         _LEGACY_TARGET_NAMES.get(name, name): (head.loss_type, head.channels)
         for name, head in config.model.target_heads.items()
     }
-    return AEFModel(
+    model = AEFModel(
         sensor_channels=sensor_channels,
         embed_dim=config.model.embed_dim,
         target_heads=target_heads,
@@ -354,6 +354,8 @@ def build_legacy_haidian_model(config: Config) -> AEFModel:
         gradient_checkpointing=config.training.gradient_checkpointing,
         source_roles=source_roles,
     ).eval()
+    model.enable_legacy_inference()
+    return model
 
 
 def _legacy_batch(batch: dict[str, Any]) -> dict[str, Any]:
