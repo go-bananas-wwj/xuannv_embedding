@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
+from xuannv_embedding.downstream.product_bootstrap import run_all
 from xuannv_embedding.export.context import dump, sha
 
 MODELS = ("xuannv", "AlphaEarth", "raw")
@@ -48,6 +49,7 @@ def run(args):
     root = Path(spec["output"])
     if not (root / "complete.json").exists():
         raise ValueError("comparison has unfinished jobs")
+    run_all(root, spec["workers"], spec["threads"])
     identity = json.loads((root / "identity.json").read_text())
     out = root / "report"
     out.mkdir(exist_ok=True)
@@ -117,6 +119,24 @@ def run(args):
                                 [r["metrics"]["block_counts"] for r in b],
                             ),
                         }
+                        ap_draws = {}
+                        for m, rr in ((reference, a), ("xuannv", b)):
+                            ap_draws[m] = np.mean(
+                                [
+                                    np.load(
+                                        root
+                                        / "ap_bootstrap"
+                                        / r["task"]
+                                        / r["head"]
+                                        / f"{r['model']}_{r['seed']}_{r['budget']}.npy"
+                                    )
+                                    for r in rr
+                                ],
+                                axis=0,
+                            )
+                        item["differences"][reference]["ci95"]["ap"] = np.percentile(
+                            ap_draws["xuannv"] - ap_draws[reference], [2.5, 97.5]
+                        ).tolist()
                     summary.append(item)
     dump(out / "summary.json", summary)
     with (out / "all_metrics.csv").open("w") as f:
@@ -294,7 +314,7 @@ def run(args):
             "AlphaEarth使用2025年年度官方COG，已修正旧缓存先插值后反量化的处理顺序；本轮先反量化再插值并单位化。",
             "xuannv使用2026年5月输出、2025年12月至2026年5月上下文；原始特征使用相同六个月和静态汇聚高分输入。",
             "OSM与上游监督关联；ESRI来自2023年，只提供跨来源、跨年份参考一致性；旧权重见过全部320图块。",
-            "置信区间以当前57个空间图块为条件，不代表跨区域泛化；AP报告点估计，F1/IoU报告配对区间。",
+            "置信区间以当前57个空间图块为条件，不代表跨区域泛化；AP、F1及IoU均报告2000次配对图块重采样区间；AP按重采样后的全体像元排序精确重算。",
         ]
     )
     (out / "RESULTS.md").write_text("\n".join(lines) + "\n")
@@ -345,6 +365,35 @@ def run(args):
                     )
                 }
                 costs[f"{family}/{h}/{model}"]["measured_configurations"] = len(rr)
+    storage = {
+        model: {
+            "dimensions": identity["feature_dimensions"][model],
+            "array_bytes": int(np.load(root / "prepared" / f"{model}.npy", mmap_mode="r").nbytes),
+            "file_bytes": (root / "prepared" / f"{model}.npy").stat().st_size,
+        }
+        for model in MODELS
+    }
+    dump(out / "storage.json", storage)
+    budgets = {}
+    for family in families:
+        for budget in spec["budgets"]:
+            selected = [
+                r
+                for r in rows
+                if r["family"] == family
+                and r["budget"] == budget
+                and r["head"] == "ridge"
+                and r["model"] == "xuannv"
+            ]
+            budgets[f"{family}/{budget}"] = {
+                key: {
+                    "min": min(r[key] for r in selected),
+                    "median": float(np.median([r[key] for r in selected])),
+                    "max": max(r[key] for r in selected),
+                }
+                for key in ("labeled_pixels", "fitted_pixels")
+            }
+    dump(out / "annotation_budget.json", budgets)
     dump(out / "costs.json", costs)
     cost_lines = [
         r"\begin{table*}[t]",

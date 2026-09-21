@@ -44,6 +44,7 @@ data-process = [
 ]
 downstream = [
     "numexpr>=2.14,<3",
+    "numba>=0.61,<1",
     "matplotlib>=3.7",
     "scikit-image>=0.21",
     "scikit-learn>=1.3",
