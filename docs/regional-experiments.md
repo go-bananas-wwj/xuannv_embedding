@@ -31,6 +31,20 @@ checkpoints. Resume verifies the configuration, source schema, cache, split and 
 optimizer, scheduler, AMP scaler and CPU/NPU random states are restored. Run paths are never silently
 overwritten. `--epochs` is the total epoch endpoint for this experiment command.
 
+When a completed stage must remain independently reproducible, resume into a **new output
+directory**. Copy its `run.json`, `config.yaml`, `metrics.jsonl`, and `best.pt`; change only the
+new registration's `epochs` to the next endpoint. Pass the previous stage's immutable numbered
+checkpoint to `--resume`, with the original configuration, code, initialization/adaptation flags,
+and distributed world size. The runner requires the copied registration to validate provenance.
+Record the source registration, terminal status, and resume-checkpoint hashes before launch and
+verify that the source directory stays unchanged. Do not hard-link mutable checkpoint destinations.
+Use a separate follow-up plan/output for each stage so later training cannot invalidate an earlier
+report's terminal-epoch check. Keep the original scheduler horizon in the configuration;
+`--epochs` only sets the stopping point. Elapsed time resets for each resumed segment, so report
+segment time and cumulative training time separately rather than interpreting the last segment as
+the cost of the entire run. The CPU resume regression checks identical model, criterion, optimizer,
+and scheduler states against uninterrupted training while preserving the previous directory.
+
 Example (paths refer to externally prepared inputs):
 
 ```bash

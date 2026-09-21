@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import shutil
 from dataclasses import asdict
 from pathlib import Path
 
@@ -43,7 +44,10 @@ def test_spatial_partition_rejects_nonfinite_coordinates() -> None:
         spatial_partition(np.array([[0, float("nan")]]), tile_size=1280)
 
 
-def test_cached_training_resume_matches_uninterrupted_run(tmp_path: Path) -> None:
+@pytest.mark.parametrize("fresh_directory", [False, True])
+def test_cached_training_resume_matches_uninterrupted_run(
+    tmp_path: Path, fresh_directory: bool
+) -> None:
     torch.set_num_threads(1)
     raw = public_base_config(
         yaml.safe_load(Path("configs/production/haidian_p10c_v1.yaml").read_text()),
@@ -110,10 +114,35 @@ def test_cached_training_resume_matches_uninterrupted_run(tmp_path: Path) -> Non
     run(args(full, 4))
     resumed = tmp_path / "resumed"
     run(args(resumed, 2))
-    run(args(resumed, 4, resumed / "latest.pt"))
+    source = resumed
+    resume_checkpoint = source / "latest.pt"
+    source_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in source.iterdir()}
+    if fresh_directory:
+        resumed = tmp_path / "continued"
+        resumed.mkdir()
+        for name in ("run.json", "config.yaml", "metrics.jsonl", "best.pt"):
+            shutil.copy2(source / name, resumed / name)
+        registration = json.loads((resumed / "run.json").read_text())
+        registration["epochs"] = 4
+        (resumed / "run.json").write_text(json.dumps(registration))
+    run(args(resumed, 4, resume_checkpoint))
     left = torch.load(full / "latest.pt", weights_only=True)
     right = torch.load(resumed / "latest.pt", weights_only=True)
-    for key in left["model"]:
-        torch.testing.assert_close(left["model"][key], right["model"][key], rtol=0, atol=0)
+    for key in ("model", "criterion", "optimizer", "scheduler"):
+        torch.testing.assert_close(left[key], right[key], rtol=0, atol=0)
+    assert [
+        json.loads(line)["epoch"] for line in (resumed / "metrics.jsonl").read_text().splitlines()
+    ] == [
+        1,
+        2,
+        3,
+        4,
+    ]
+    if fresh_directory:
+        assert source_hashes == {
+            p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in source.iterdir()
+        }
+        assert json.loads((source / "status.json").read_text())["epoch"] == 2
+        assert json.loads((resumed / "status.json").read_text())["epoch"] == 4
     with pytest.raises(FileExistsError):
         run(args(resumed, 1))
