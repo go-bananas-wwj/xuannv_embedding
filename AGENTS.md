@@ -52,7 +52,8 @@ src/xuannv_embedding/
 - **models/model.py**：`AEFModel` 是主模型，流程为：多源时序 stem → STP 编码器 → 月度嵌入 → 上采样 → 可选高分融合 → vMF bottleneck → 解码器。
 - **training/cli.py**：训练入口，支持单卡、`torchrun` CUDA/CPU/NPU DDP、`--synthetic` smoke。
 - **export/cli.py**：从严格 checkpoint 或旧海淀兼容 profile 导出 embedding。
-- **data_process/cli.py**：`xuannv data <grid|registry|partition|materialize|preprocess|manifest|validate>` 的实现。
+- **data_process/cli.py**：全部 `xuannv data <子命令>` 的实现；子命令清单见[全国数据处理](docs/data-processing.md)。
+- **training/p0_diagnostics.py**：`xuannv diagnose` 的实现，在真实观测上核验月份绑定、排列不变性、缺测回退与边界反传。
 
 ## 构建与安装
 
@@ -80,6 +81,7 @@ xuannv data --help
 xuannv train --help
 xuannv export --help
 xuannv downstream --help
+xuannv diagnose --help
 ```
 
 ### 训练
@@ -141,14 +143,49 @@ xuannv downstream evaluate \
 ### 数据处理
 
 ```bash
-xuannv data grid         # 构建 1,280 m 父网格
-xuannv data registry     # 生成采样 registry
-xuannv data partition    # 生成确定性十等分
-xuannv data materialize  # 从冻结 catalog 物化多源栅格
-xuannv data preprocess   # 对齐并切 patch
-xuannv data manifest     # 生成 manifest v1 与 sidecar
-xuannv data validate     # 审计 manifest 或父网格包
+# 全国父网格与采样
+xuannv data grid                  # 构建 1,280 m 父网格
+xuannv data registry              # 生成采样 registry
+xuannv data partition             # 生成确定性十等分
+
+# 物化与预处理
+xuannv data materialize           # 从冻结 catalog 物化多源栅格
+xuannv data preprocess            # 对齐并切 patch
+xuannv data manifest              # 生成 manifest v1 与 sidecar
+xuannv data validate              # 审计 manifest 或父网格包
+
+# 高分归档与观测
+xuannv data catalog               # 建立高分观测目录与低分配对缓存
+xuannv data finalize-catalog      # 抽样验收并发布已物化目录
+xuannv data prepare-observations  # 校验观测、生成掩膜和年度索引
+xuannv data pair-observations     # 配对同期高低分观测并验证读取
+
+# 年度质量门禁
+xuannv data quality-annual        # 年度观测初筛并重算统计量
+xuannv data cloud-annual          # 生成可恢复的 S2 云影筛选候选
+xuannv data cloud-highres         # 按波长识别 5m 光学波段并生成云影候选
+xuannv data pan-annual            # 审计 2m 全色观测并接入年度候选清单
+xuannv data release-quality       # 云影、配准、重复与放行门禁收尾
+xuannv data check-annual          # 抽样读取年度原生网格数据
+xuannv data p0                    # 从观测 pilot 准备真实 P0 训练数据
 ```
+
+新增 `xuannv data` 子命令必须同时登记到 `docs/data-processing.md` 与 CI 的 help 门禁，
+否则延迟导入的破坏不会被任何测试捕获。
+
+### P0 诊断
+
+```bash
+# 在真实观测上核验月份绑定、排列不变性、缺测回退与边界反传
+xuannv diagnose \
+  --config /path/observations.yaml \
+  --checkpoint /path/checkpoint.pt \
+  --output /path/reports/p0.json \
+  --device cuda:0
+```
+
+诊断要求 `data.highres_mode: observations` 且 `data.target_months` 非空；任一不变量失败即
+抛错，不会写出 `passed: true` 的报告。
 
 ## 配置与 Manifest 合同
 
@@ -233,6 +270,9 @@ testpaths = ["tests"]
 - `test_p10c_training.py`：端到端 smoke 训练
 - `test_checkpoint_compatibility.py`：旧海淀 431 键兼容加载
 - `test_data_*.py`：父网格、registry、partition、materialize、preprocess、manifest、STAC、OSM 等
+- `test_p0_observations.py`：月份绑定的高分观测融合与 dataset 合同
+- `test_p0_diagnostics.py`：`xuannv diagnose` 在真实栅格上的不变量与报告写入
+- `test_cli_bootstrap.py`：全部子命令的延迟导入 help 门禁
 - `test_downstream.py`：下游头与评测协议
 - `test_release_validation.py`、`test_repository_policy.py`：发布门禁与仓库策略
 
@@ -281,6 +321,7 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`：
 - `docs/configuration-and-manifest.md`：配置和 manifest 合同
 - `docs/data-processing.md`：全国数据处理流程
 - `docs/training-export-downstream.md`：训练、导出与下游评测
+- `docs/training-acceleration.md`：年度训练吞吐瓶颈定位与加速
 - `docs/report-maintenance.md`：全国年度 5m 唯一技术报告的维护入口
 - `docs/production/haidian-model-card.md`：海淀模型卡
 - `docs/production/haidian-evidence.md`：海淀评测证据
