@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from contextlib import nullcontext
+from math import isfinite
 from time import perf_counter
 from typing import Any, Callable
 
@@ -59,6 +60,21 @@ def _grad_scaler(device: torch.device, enabled: bool):
             return None
         return torch.amp.GradScaler("cuda")
     return None
+
+
+def _observe_gradient_norm(system: nn.Module, optimizer: Optimizer, scaler: Any | None) -> float:
+    """Observe gradients; reject nonfinite updates when no scaler can skip them."""
+    if scaler is not None:
+        scaler.unscale_(optimizer)
+    gradients = [parameter.grad for parameter in system.parameters() if parameter.grad is not None]
+    norm = (
+        torch.linalg.vector_norm(torch.stack([gradient.float().norm() for gradient in gradients]))
+        if gradients
+        else torch.tensor(0.0)
+    )
+    if scaler is None and not bool(torch.isfinite(norm)):
+        raise FloatingPointError("Nonfinite gradients; optimizer update rejected")
+    return float(norm)
 
 
 class TrainingSystem(nn.Module):
@@ -126,6 +142,7 @@ def train_steps(
     data_wait_seconds = 0.0
     sample_count = 0
     gradient_norm = 0.0
+    skipped_steps = 0
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
 
@@ -151,13 +168,11 @@ def train_steps(
             batch_count += 1
             loss_sum += float(losses["total"].detach().float().cpu())
             if pending == gradient_accumulation_steps:
-                if scaler is not None:
-                    scaler.unscale_(optimizer)
-                gradient_norm = float(
-                    torch.nn.utils.clip_grad_norm_(
-                        system.parameters(), float("inf"), error_if_nonfinite=True
-                    )
-                )
+                gradient_norm = _observe_gradient_norm(system, optimizer, scaler)
+                if not isfinite(gradient_norm):
+                    # fp16/NPU 的 GradScaler 会在溢出时跳过这一步并下调 scale，
+                    # 非有限范数属于预期路径，只统计不中断训练。
+                    skipped_steps += 1
                 if scaler is None:
                     optimizer.step()
                 else:
@@ -185,6 +200,9 @@ def train_steps(
                     }
                 )
         if pending:
+            gradient_norm = _observe_gradient_norm(system, optimizer, scaler)
+            if not isfinite(gradient_norm):
+                skipped_steps += 1
             if scaler is None:
                 optimizer.step()
             else:
@@ -205,6 +223,7 @@ def train_steps(
         "end_epoch": end_epoch,
         "batches": batch_count,
         "optimizer_steps": optimizer_steps,
+        "nonfinite_gradient_steps": skipped_steps,
         "loss": loss_sum / batch_count,
         "elapsed_seconds": perf_counter() - started,
         "data_wait_seconds": data_wait_seconds,

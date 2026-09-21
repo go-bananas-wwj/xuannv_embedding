@@ -406,3 +406,79 @@ def test_upsample_head_is_unused_when_precision_scale_is_one() -> None:
     }
     assert graded == set()
     assert any(name.startswith("model.upsample_head.") for name, _ in system.named_parameters())
+
+
+class _OverflowingScaler:
+    """最小 GradScaler 替身：把梯度放大成 inf，模拟 fp16 溢出的正常路径。"""
+
+    def __init__(self) -> None:
+        self.steps = 0
+        self.updates = 0
+
+    def scale(self, loss: torch.Tensor) -> torch.Tensor:
+        return loss
+
+    def unscale_(self, optimizer: torch.optim.Optimizer) -> None:
+        for group in optimizer.param_groups:
+            for parameter in group["params"]:
+                if parameter.grad is not None:
+                    parameter.grad.fill_(float("inf"))
+
+    def step(self, optimizer: torch.optim.Optimizer) -> None:
+        self.steps += 1
+
+    def update(self) -> None:
+        self.updates += 1
+
+
+def test_nonfinite_gradients_are_counted_instead_of_aborting_fp16_training(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fp16/NPU 的 GradScaler 允许溢出：非有限梯度必须交给 scaler 跳过，不能抛错。
+
+    此前 train_steps 用 clip_grad_norm_(error_if_nonfinite=True) 观测梯度范数，
+    第一次溢出就会 RuntimeError 终止训练，把不支持 bf16 的 CUDA 卡和 NPU 的 AMP
+    路径全部打死。本用例失败即说明该回归复现。
+    """
+    scaler = _OverflowingScaler()
+    monkeypatch.setattr(
+        "xuannv_embedding.training.runtime._grad_scaler", lambda device, enabled: scaler
+    )
+    system = _system()
+    optimizer = torch.optim.AdamW(system.parameters(), lr=1e-3)
+
+    summary = train_steps(
+        system,
+        [_batch()],
+        optimizer,
+        device=torch.device("cpu"),
+        epochs=2,
+        gradient_accumulation_steps=1,
+        amp=True,
+    )
+
+    assert summary["optimizer_steps"] == 2
+    assert summary["nonfinite_gradient_steps"] == 2
+    assert scaler.steps == 2 and scaler.updates == 2
+
+
+def test_finite_gradients_report_a_real_norm_and_no_skips() -> None:
+    system = _system()
+    optimizer = torch.optim.AdamW(system.parameters(), lr=1e-3)
+    observed: list[dict[str, object]] = []
+
+    summary = train_steps(
+        system,
+        [_batch()],
+        optimizer,
+        device=torch.device("cpu"),
+        epochs=1,
+        gradient_accumulation_steps=1,
+        amp=False,
+        step_callback=observed.append,
+    )
+
+    assert summary["nonfinite_gradient_steps"] == 0
+    assert len(observed) == 1
+    assert np.isfinite(observed[0]["gradient_norm"]) and observed[0]["gradient_norm"] > 0
+    assert summary["samples_per_rank"] == 1
