@@ -703,6 +703,8 @@ def test_aef_model_forward() -> None:
     assert isinstance(out, AEFOutput)
     assert out.embedding.shape == (batch_size, num_months, embed_dim)
     assert out.embedding_map.shape == (batch_size, num_months, embed_dim, height, width)
+    assert out.validity_mask is not None
+    assert torch.all(out.validity_mask == 1)
     assert set(out.reconstructions.keys()) == set(target_heads.keys())
     assert out.reconstructions["s2_recon"].shape == (batch_size, num_months, 10, height, width)
     assert out.reconstructions["s1_recon"].shape == (batch_size, num_months, 2, height, width)
@@ -947,6 +949,8 @@ def test_aef_model_missing_months_no_nan() -> None:
     out = model(source_frames, source_masks, timestamps)
 
     assert not torch.isnan(out.embedding_map).any()
+    assert out.validity_mask is not None
+    assert torch.equal(out.validity_mask[:, 1], torch.zeros_like(out.validity_mask[:, 1]))
     assert not torch.isnan(out.embedding).any()
     assert not torch.isnan(out.reconstructions["s2_recon"]).any()
     assert out.embedding_map.shape == (batch_size, num_months, embed_dim, height, width)

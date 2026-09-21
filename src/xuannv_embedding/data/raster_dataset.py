@@ -306,6 +306,7 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
         record = self.records[index]
         source_frames: dict[str, torch.Tensor] = {}
         source_masks: dict[str, torch.Tensor] = {}
+        source_pixel_masks: dict[str, torch.Tensor] = {}
         highres_frames: dict[str, torch.Tensor] = {}
         highres_masks: dict[str, torch.Tensor] = {}
         highres_months: dict[str, torch.Tensor] = {}
@@ -318,7 +319,7 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
             if source_config.role == "temporal":
                 monthly = self._monthly_continuous(observations, source_config.channels)
                 monthly_by_source[source] = monthly
-                source_frames[source], source_masks[source], _ = monthly
+                source_frames[source], source_masks[source], source_pixel_masks[source] = monthly
             elif self.config.data.highres_mode == "observations":
                 highres_frames[source], highres_masks[source], highres_months[source] = (
                     self._highres_observations(source, observations, source_config.channels)
@@ -349,6 +350,7 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
             "region": record.region,
             "source_frames": source_frames,
             "source_masks": source_masks,
+            "source_pixel_masks": source_pixel_masks,
             "timestamps": torch.tensor(self.months),
             "highres_frames": highres_frames,
             "highres_masks": highres_masks,
@@ -380,6 +382,7 @@ def collate_region_batch(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "regions": [sample["region"] for sample in samples],
         "source_frames": stack_mapping("source_frames"),
         "source_masks": stack_mapping("source_masks"),
+        "source_pixel_masks": stack_mapping("source_pixel_masks"),
         "timestamps": torch.stack([sample["timestamps"] for sample in samples]),
         "highres_frames": stack_mapping("highres_frames"),
         "highres_masks": stack_mapping("highres_masks"),

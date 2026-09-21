@@ -93,6 +93,7 @@ class TrainingSystem(nn.Module):
             batch["timestamps"],
             batch.get("highres_frames"),
             batch.get("highres_masks"),
+            source_pixel_masks=batch.get("source_pixel_masks"),
             **optional,
         )
         return self.criterion(

@@ -36,6 +36,7 @@ class AEFOutput:
     embedding_map: torch.Tensor  # [B, T_month, D, H, W]，与输入相同空间分辨率
     embedding: torch.Tensor  # [B, T_month, D]
     reconstructions: dict[str, torch.Tensor]  # [B, T_month, C_out, H, W]
+    validity_mask: torch.Tensor | None = None  # [B, T_month, 1, H, W]
 
 
 class AEFModel(nn.Module):
@@ -210,6 +211,7 @@ class AEFModel(nn.Module):
         highres_frames: dict[str, torch.Tensor] | None = None,
         highres_masks: dict[str, torch.Tensor] | None = None,
         *,
+        source_pixel_masks: dict[str, torch.Tensor] | None = None,
         highres_months: dict[str, torch.Tensor] | None = None,
         output_months: torch.Tensor | None = None,
     ) -> AEFOutput:
@@ -223,6 +225,8 @@ class AEFModel(nn.Module):
             highres_frames: 可选的高分辨率单帧输入字典，格式 ``{source: (B, C, H, W)}``。
             highres_masks: 高分辨率可用性掩码字典，格式 ``{source: (B, 1, H, W)}``；
                 提供 ``highres_frames`` 时也必须提供，且 key 需与 ``highres_frames`` 一致。
+            source_pixel_masks: 时序源逐像元有效掩码，格式 ``{source: (B,T,H,W)}``；
+                未提供时由时间 mask 广播到全空间。
 
         Returns:
             AEFOutput，包含月度 embedding_map、embedding 与 reconstructions。
@@ -260,6 +264,7 @@ class AEFModel(nn.Module):
             dtype=first_x.dtype,
         )
         masks: list[torch.Tensor] = []
+        pixel_masks: list[torch.Tensor] = []
         encoded_sources: dict[str, torch.Tensor] = {}
         encoded_masks: dict[str, torch.Tensor] = {}
 
@@ -269,11 +274,19 @@ class AEFModel(nn.Module):
             if mask is None:
                 raise KeyError(f"缺少 source mask: {source!r}")
 
+            pixel_mask = None if source_pixel_masks is None else source_pixel_masks.get(source)
+            if pixel_mask is None:
+                pixel_mask = mask[:, :, None, None].expand(B, T, H, W)
+            elif pixel_mask.shape != (B, T, H, W):
+                raise ValueError(f"source_pixel_masks[{source!r}] 必须是 [B,T,H,W]")
+            pixel_mask = pixel_mask.to(device=x.device, dtype=x.dtype)
+            pixel_mask = pixel_mask * mask[:, :, None, None].to(dtype=x.dtype)
+            if source_pixel_masks is not None:
+                x = torch.where(pixel_mask[:, :, None] > 0, x, 0.0)
             x_flat = x.reshape(B * T, x.shape[2], H, W)
-            x_enc = self.temporal_stem_bank(x_flat, source)  # (B*T, stem_dim, H, W)
+            x_enc = self.temporal_stem_bank(x_flat, source)
             x_enc = x_enc.view(B, T, self.stem_dim, H, W)
-            mask_5d = mask[:, :, None, None, None]
-            x_enc = x_enc * mask_5d
+            x_enc = x_enc * pixel_mask[:, :, None]
 
             if self.temporal_fusion_mode == "concat":
                 source_idx = self.temporal_source_order.index(source)
@@ -284,6 +297,7 @@ class AEFModel(nn.Module):
                 encoded_sources[source] = x_enc
                 encoded_masks[source] = mask
             masks.append(mask)
+            pixel_masks.append(pixel_mask)
 
         if self.temporal_fusion_mode == "gated_sum":
             if self.temporal_fusion is None:
@@ -293,17 +307,33 @@ class AEFModel(nn.Module):
 
         # 2) 合并时间有效性掩码。
         combined_mask = torch.stack(masks, dim=0).amax(dim=0)  # (B, T)
+        combined_pixel_mask = torch.stack(pixel_masks, dim=0).amax(dim=0)
+        input_pixel_mask = combined_pixel_mask
         self._validate_month_range(global_timestamps, combined_mask)
 
         # 3) STP 编码器输出精度路径特征，同时拿回原始输入尺寸。
         feats, _ = self.stp_encoder(
             temporal_input, global_timestamps, mask=combined_mask
         )  # (B, T, H//precision_scale, W//precision_scale, precision_dim)
+        feat_h, feat_w = feats.shape[2:4]
+        if combined_pixel_mask.shape[-2:] != (feat_h, feat_w):
+            combined_pixel_mask = F.interpolate(
+                combined_pixel_mask.flatten(0, 1).unsqueeze(1),
+                size=(feat_h, feat_w),
+                mode="nearest",
+            ).view(B, T, feat_h, feat_w)
 
         # 4) 月度嵌入：按 YYYYMM 分 bin，缺失月份用 missing_token。
         monthly_feats, monthly_mask = self.monthly_embed(
-            feats, global_timestamps, combined_mask
+            feats, global_timestamps, combined_pixel_mask
         )  # (B, T_month, H', W', embed_dim), (B, T_month)
+        month_index = self.monthly_embed._yyyymm_to_index(global_timestamps)
+        monthly_pixel_mask = feats.new_zeros(B, self.num_months, H, W)
+        for month in range(self.num_months):
+            selected = (month_index == month).to(combined_pixel_mask.dtype)
+            monthly_pixel_mask[:, month] = (input_pixel_mask * selected[:, :, None, None]).amax(
+                dim=1
+            )
 
         if output_months is not None:
             if output_months.ndim != 2 or output_months.shape[0] != B:
@@ -315,6 +345,10 @@ class AEFModel(nn.Module):
                 -1, -1, *monthly_feats.shape[2:]
             )
             monthly_feats = monthly_feats.gather(1, month_index)
+            monthly_mask = monthly_mask.gather(1, selected_indices)
+            monthly_pixel_mask = monthly_pixel_mask.gather(
+                1, selected_indices[:, :, None, None].expand(-1, -1, H, W)
+            )
 
         # 5) 逐月恢复到原始分辨率。precision_scale=1 时避免无意义的上采样再缩回。
         Bm, M, Hh, Wh, D = monthly_feats.shape
@@ -384,7 +418,17 @@ class AEFModel(nn.Module):
         emb_map = emb_map_flat.view(Bm, M, D, H, W)
 
         # 8) 每个场景/月份平均池化得到场景级嵌入并 L2 归一化。
-        emb = emb_map.mean(dim=[3, 4])  # (B, T_month, D)
+        validity_mask = (
+            F.interpolate(
+                monthly_pixel_mask.flatten(0, 1).unsqueeze(1),
+                size=(H, W),
+                mode="nearest",
+            )
+            .view(Bm, M, 1, H, W)
+            .to(emb_map.dtype)
+        )
+        emb = (emb_map * validity_mask).sum(dim=[3, 4])
+        emb = emb / validity_mask.sum(dim=[3, 4]).clamp(min=1.0)
         emb = F.normalize(emb, p=2, dim=-1)
 
         # 9) 解码器重建目标模态（逐月）。
@@ -395,7 +439,12 @@ class AEFModel(nn.Module):
             _, C_out, _, _ = out.shape
             reconstructions[name] = out.view(Bm, M, C_out, H, W)
 
-        return AEFOutput(embedding_map=emb_map, embedding=emb, reconstructions=reconstructions)
+        return AEFOutput(
+            embedding_map=emb_map,
+            embedding=emb,
+            reconstructions=reconstructions,
+            validity_mask=validity_mask,
+        )
 
     def _validate_month_range(self, timestamps: torch.Tensor, mask: torch.Tensor) -> None:
         """避免所有有效观测静默落到月度 bin 范围外。"""

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import torch
+import torch.distributed as distributed
+import torch.distributed.nn.functional as distributed_nn
 import torch.nn.functional as F
 from torch import nn
 
@@ -54,6 +56,8 @@ def reconstruction_loss(
             # (B, T) 时间掩码，应用到所有空间位置。
             mask = mask.reshape(B * T, 1, 1).expand(B * T, H, W)
 
+    if mask.ndim == 4 and mask.shape[1] == 1:
+        mask = mask.squeeze(1)
     if loss_type == "l1":
         # 逐元素 L1，然后在通道维度取平均，得到 [B, H, W]。
         loss = F.l1_loss(pred, target, reduction="none").mean(dim=1)
@@ -72,7 +76,29 @@ def reconstruction_loss(
     return masked_sum / (masked_count + eps)
 
 
-def batch_uniformity_loss(emb: torch.Tensor, temperature: float = 2.0) -> torch.Tensor:
+def _gather_for_uniformity(emb: torch.Tensor) -> torch.Tensor:
+    """Gather variable-sized negatives with autograd across DDP ranks."""
+    if not distributed.is_available() or not distributed.is_initialized():
+        return emb
+    world_size = distributed.get_world_size()
+    local_size = torch.tensor([emb.shape[0]], device=emb.device, dtype=torch.long)
+    sizes = [torch.zeros_like(local_size) for _ in range(world_size)]
+    distributed.all_gather(sizes, local_size)
+    counts = [int(size.item()) for size in sizes]
+    max_size = max(counts, default=0)
+    if max_size == 0:
+        return emb
+    padded = F.pad(emb, (0, 0, 0, max_size - emb.shape[0]))
+    gathered = distributed_nn.all_gather(padded)
+    chunks = [value[:count] for value, count in zip(gathered, counts, strict=True)]
+    return torch.cat(chunks, dim=0)
+
+
+def batch_uniformity_loss(
+    emb: torch.Tensor,
+    temperature: float = 2.0,
+    validity_mask: torch.Tensor | None = None,
+) -> torch.Tensor:
     """计算 batch 内场景级嵌入的均匀性损失。
 
     先将每个嵌入 L2 归一化到单位球面，再计算 Wang-Isola 风格的
@@ -86,26 +112,33 @@ def batch_uniformity_loss(emb: torch.Tensor, temperature: float = 2.0) -> torch.
     Returns:
         标量张量，表示均匀性损失。
     """
-    # 月度输出合并为 (B*T, D)。
-    if emb.dim() == 3:
-        emb = emb.reshape(-1, emb.shape[-1])
+    if emb.dim() == 2:
+        emb = emb.unsqueeze(1)
+    if emb.dim() != 3:
+        raise ValueError("emb 必须是 [B,D] 或 [B,T,D]")
+    if validity_mask is not None:
+        valid = validity_mask.to(device=emb.device, dtype=torch.bool)
+        if valid.shape != emb.shape[:2]:
+            raise ValueError("validity_mask 必须是 [B,T]")
+    else:
+        valid = torch.ones(emb.shape[:2], device=emb.device, dtype=torch.bool)
 
-    # L2 归一化，避免除零。
-    emb = F.normalize(emb, p=2, dim=1)
-    batch_size = emb.shape[0]
-
-    # pairwise squared distance = ||u_i - u_j||^2 = 2 - 2 * u_i @ u_j。
-    similarity = emb @ emb.t()  # [B, B]
-    squared_dist = 2.0 - 2.0 * similarity
-
-    # 排除对角线。
-    off_diag_count = batch_size * (batch_size - 1)
-    if off_diag_count == 0:
-        return torch.tensor(0.0, device=emb.device, dtype=emb.dtype)
-
-    diag_mask = ~torch.eye(batch_size, device=emb.device, dtype=torch.bool)
-    off_diag_dist = squared_dist[diag_mask]
-    return torch.log(torch.exp(-temperature * off_diag_dist).mean())
+    monthly_losses: list[torch.Tensor] = []
+    for month_index in range(emb.shape[1]):
+        local = emb[:, month_index][valid[:, month_index]]
+        gathered = _gather_for_uniformity(local)
+        if gathered.shape[0] < 2:
+            continue
+        gathered = F.normalize(gathered.float(), p=2, dim=1)
+        squared_dist = 2.0 - 2.0 * (gathered @ gathered.t())
+        off_diag = ~torch.eye(gathered.shape[0], device=emb.device, dtype=torch.bool)
+        scores = -temperature * squared_dist[off_diag].clamp(min=0)
+        monthly_losses.append(
+            torch.logsumexp(scores, dim=0) - scores.new_tensor(scores.numel()).log()
+        )
+    if not monthly_losses:
+        return emb.sum() * 0.0
+    return torch.stack(monthly_losses).mean()
 
 
 class SemanticProbeLoss(nn.Module):
@@ -358,7 +391,14 @@ class TotalLoss(nn.Module):
         supervised_label_masks: dict[str, torch.Tensor] | None = None,
     ) -> dict[str, torch.Tensor]:
         embedding_map = output.embedding_map
-        embedding = F.normalize(embedding_map.mean(dim=[3, 4]), p=2, dim=-1)
+        validity = getattr(output, "validity_mask", None)
+        if validity is None:
+            validity = embedding_map.new_ones(
+                *embedding_map.shape[:2], 1, *embedding_map.shape[-2:]
+            )
+        embedding = (embedding_map * validity).sum(dim=[3, 4])
+        embedding = embedding / validity.sum(dim=[3, 4]).clamp(min=1.0)
+        embedding = F.normalize(embedding, p=2, dim=-1)
         total_recon = embedding_map.sum() * 0.0
         result: dict[str, torch.Tensor] = {}
 
@@ -381,6 +421,7 @@ class TotalLoss(nn.Module):
         uniformity = batch_uniformity_loss(
             embedding,
             temperature=self.uniformity_temperature,
+            validity_mask=validity.flatten(2).any(dim=2),
         )
         uniformity_weight = self._warmup_weight(
             self.uniformity_weight,

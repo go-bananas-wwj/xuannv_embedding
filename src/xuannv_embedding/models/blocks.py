@@ -793,7 +793,8 @@ class MonthlyEmbeddingModule(nn.Module):
         Args:
             feats: 输入特征，形状 ``(B, T_obs, H, W, C)``。
             timestamps: 时间戳，形状 ``(B, T_obs)``，应为 ``YYYYMM`` 整数格式。
-            mask: 可选时间有效掩码，形状 ``(B, T_obs)``；为 None 时视为全 1。
+            mask: 可选时间或像元有效掩码，形状 ``(B, T_obs)`` 或 ``(B, T_obs, H, W)``；
+                为 None 时视为全 1。
 
         Returns:
             ``(monthly_feats, monthly_mask)`` 元组：
@@ -810,9 +811,14 @@ class MonthlyEmbeddingModule(nn.Module):
         in_range = (month_index >= 0) & (month_index < M)
 
         if mask is None:
-            valid = in_range
+            valid = in_range[:, :, None, None].expand(B, T, H, W)
+        elif mask.ndim == 2:
+            valid = mask.bool()[:, :, None, None].expand(B, T, H, W)
+            valid = valid & in_range[:, :, None, None]
+        elif mask.ndim == 4 and mask.shape[-2:] == (H, W):
+            valid = mask.bool() & in_range[:, :, None, None]
         else:
-            valid = mask.bool() & in_range
+            raise ValueError("MonthlyEmbeddingModule mask 必须是 [B,T] 或 [B,T,H,W]")
 
         # 构建 scatter_add 所需的线性索引。
         b_idx = torch.arange(B, device=device).view(B, 1, 1, 1).expand(B, T, H, W).reshape(-1)
@@ -820,7 +826,7 @@ class MonthlyEmbeddingModule(nn.Module):
         h_idx = torch.arange(H, device=device).view(1, 1, H, 1).expand(B, T, H, W).reshape(-1)
         w_idx = torch.arange(W, device=device).view(1, 1, 1, W).expand(B, T, H, W).reshape(-1)
 
-        valid_flat = valid.view(B, T, 1, 1).expand(B, T, H, W).reshape(-1)
+        valid_flat = valid.reshape(-1)
         flat_index = ((b_idx * M + m_idx) * H + h_idx) * W + w_idx
 
         z_flat = z.reshape(B * T * H * W, self.embed_dim)

@@ -145,6 +145,7 @@ def _make_spatial_keep_mask(
 
 def _drop_spatial_blocks(
     source_frames: dict[str, torch.Tensor],
+    source_pixel_masks: dict[str, torch.Tensor],
     highres_frames: dict[str, torch.Tensor],
     highres_masks: dict[str, torch.Tensor],
     prob: float,
@@ -193,6 +194,8 @@ def _drop_spatial_blocks(
             keep_masks[key] = keep
         keep = keep_masks[key]
         source_frames[source] = frames * keep[:, None]
+        if source in source_pixel_masks:
+            source_pixel_masks[source] = source_pixel_masks[source] * keep
         dropped_sum = dropped_sum + (1.0 - keep).mean().detach()
         dropped_count += 1
 
@@ -241,6 +244,7 @@ def apply_input_masking(
 
     source_frames = prepared["source_frames"]
     source_masks = prepared["source_masks"]
+    source_pixel_masks = prepared.get("source_pixel_masks", {})
     highres_frames = prepared.get("highres_frames", {})
     highres_masks = prepared.get("highres_masks", {})
     stats: dict[str, torch.Tensor] = {}
@@ -279,6 +283,7 @@ def apply_input_masking(
     stats.update(
         _drop_spatial_blocks(
             source_frames,
+            source_pixel_masks,
             highres_frames,
             highres_masks,
             cfg.spatial_block_prob,
