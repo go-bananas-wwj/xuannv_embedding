@@ -173,7 +173,7 @@ def run(args):
             )
     lookup = {(r["family"], r["task"], r["head"], r["budget"]): r for r in summary}
     plt.rcParams.update(
-        {"font.size": 9, "axes.spines.top": False, "axes.spines.right": False, "pdf.fonttype": 42}
+        {"font.size": 11, "axes.spines.top": False, "axes.spines.right": False, "pdf.fonttype": 42}
     )
 
     def save(fig, name):
@@ -181,7 +181,7 @@ def run(args):
             fig.savefig(out / f"{name}.{suffix}", dpi=190, bbox_inches="tight")
         plt.close(fig)
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 7), layout="constrained")
+    fig, axes = plt.subplots(2, 2, figsize=(10.5, 7), layout="constrained")
     for j, family in enumerate(families):
         tasks = [t for t, d in identity["tasks"].items() if d["family"] == family]
         x = np.arange(len(tasks))
@@ -209,7 +209,7 @@ def run(args):
         axes[j, 1].axvline(0, color="gray", lw=0.8)
         axes[j, 1].set_yticks(x, [identity["tasks"][t]["name"] for t in tasks])
         axes[j, 1].set_xlabel("F1 difference (percentage points); paired 95% CI")
-        axes[j, 1].legend(frameon=False, fontsize=8)
+        axes[j, 1].legend(frameon=False, fontsize=9)
     save(fig, "product_tasks")
     fig, axes = plt.subplots(2, 2, figsize=(10, 6), layout="constrained")
     for j, family in enumerate(families):
@@ -341,6 +341,18 @@ def run(args):
         )
     table.extend([r"\bottomrule\end{tabular}", r"\end{table*}"])
     (out / "product_main.tex").write_text("\n".join(table) + "\n")
+    paired_svm_cost_cases = set.intersection(
+        *[
+            {
+                (r["task"], r["seed"])
+                for r in rows
+                if r["model"] == model
+                and r["head"] == "svm"
+                and r.get("kernel_backend") == "numexpr_float64"
+            }
+            for model in MODELS
+        ]
+    )
     costs = {}
     for family in families:
         for h in ("ridge", "rf", "svm"):
@@ -352,7 +364,7 @@ def run(args):
                     and r["head"] == h
                     and r["model"] == model
                     and r["budget"] == 5
-                    and (h != "svm" or r.get("kernel_backend") == "numexpr_float64")
+                    and (h != "svm" or (r["task"], r["seed"]) in paired_svm_cost_cases)
                 ]
                 costs[f"{family}/{h}/{model}"] = {
                     k: float(np.median([r[k] for r in rr]))
@@ -401,7 +413,7 @@ def run(args):
         r"\caption{五图块设置的CPU读出成本中位数（秒）。候选拟合包括全部正则候选；"
         r"验证包含候选预测、AP计算与阈值选择；测试预测覆盖57图块。"
         r"测量在最多四任务并行、每任务四线程的运行条件下进行，"
-        r"SVM仅汇总数值等价的融合CPU实现，N为计时样本数；不包括影像准备、嵌入生成和人工标注。}\label{tab:product-cost}",
+        r"SVM仅汇总三种表征共有任务与抽样的融合CPU实现计时，N为计时样本数；不包括影像准备、嵌入生成和人工标注。}\label{tab:product-cost}",
         r"\begin{tabular}{llrrrr}\toprule",
         r"特征 & 分类器 & N & 候选拟合 & 验证与选择 & 测试预测\\\midrule",
     ]
@@ -413,7 +425,7 @@ def run(args):
                 if r["model"] == model
                 and r["head"] == head
                 and r["budget"] == 5
-                and (head != "svm" or r.get("kernel_backend") == "numexpr_float64")
+                and (head != "svm" or (r["task"], r["seed"]) in paired_svm_cost_cases)
             ]
             fit = np.median([sum(r["fit_seconds_candidates"]) for r in selected])
             val = np.median([r["validation_seconds"] for r in selected])
