@@ -560,6 +560,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-config", type=Path, required=True)
     p.add_argument("--freeze-base", action="store_true")
     p.add_argument("--highres-encoding", choices=["native", "transformer"], default="transformer")
+    p = sub.add_parser("follow-multitask")
+    p.add_argument("--plan", type=Path, required=True)
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
     p = sub.add_parser("cpu-queue")
@@ -632,6 +634,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.training.experiment_folds import derive_fold_cache
 
         derive_fold_cache(args.cache, args.output, args.test_group)
+    elif args.action == "follow-multitask":
+        from xuannv_embedding.training.multitask_followup import run as follow_multitask
+
+        follow_multitask(args.plan)
     elif args.action == "follow":
         from xuannv_embedding.training.experiment_schedule import main as follow_main
 
