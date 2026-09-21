@@ -43,10 +43,36 @@ jobs:
       - run: python -m venv /tmp/xuannv-clean-install
       - run: /tmp/xuannv-clean-install/bin/python -m pip install dist/*.whl
       - run: /tmp/xuannv-clean-install/bin/xuannv --help
-      - run: /tmp/xuannv-clean-install/bin/xuannv data --help
-      - run: /tmp/xuannv-clean-install/bin/xuannv train --help
-      - run: /tmp/xuannv-clean-install/bin/xuannv export --help
-      - run: /tmp/xuannv-clean-install/bin/xuannv downstream --help
+      # 每个子命令都是延迟导入：只有 help 能在不碰真实数据的前提下证明 dispatch 目标可导入。
+      - name: Every installed subcommand help runs
+        run: |
+          set -euo pipefail
+          for command in data downstream train diagnose export; do
+            /tmp/xuannv-clean-install/bin/xuannv "$command" --help > /dev/null
+          done
+          for command in $(/tmp/xuannv-clean-install/bin/python - <<'PY'
+          import argparse
+
+          from xuannv_embedding.cli import build_parser
+
+          parser = build_parser()
+          top = next(
+              action
+              for action in parser._subparsers._group_actions
+              if isinstance(action, argparse._SubParsersAction)
+          )
+          data = next(
+              action
+              for action in top.choices["data"]._subparsers._group_actions
+              if isinstance(action, argparse._SubParsersAction)
+          )
+          print(" ".join(sorted(data.choices)))
+          PY
+          ); do
+            /tmp/xuannv-clean-install/bin/xuannv data "$command" --help > /dev/null
+          done
+          /tmp/xuannv-clean-install/bin/xuannv downstream train --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv downstream evaluate --help > /dev/null
       - run: >-
           XUANNV_GIT_SHA=${{ github.sha }}
           /tmp/xuannv-clean-install/bin/xuannv train
