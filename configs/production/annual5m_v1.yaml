@@ -1,0 +1,104 @@
+schema_version: "1"
+paths:
+  data_root: /data/heyuhang/processed
+  output_root: /data/heyuhang/xuannv_embedding/outputs/annual5m
+  artifact_root: /data/heyuhang/xuannv_embedding/outputs/annual5m/artifacts
+experiment:
+  name: annual5m_stp_ms_pan_v1
+  seed: 42
+model:
+  architecture: annual5m
+  embed_dim: 64
+  annual_feature_dim: 128
+  annual_backbone: stp
+  annual_pan_sources: [GF1B_PAN_c1, GF6_PAN_c1, GF1C_PAN_c1, GF1D_PAN_c1]
+  stem_dim: 32
+  num_months: 12
+  ref_year: 2020
+  ref_month: 1
+  input_sources:
+    s2: {channels: 10, role: temporal}
+    s1: {channels: 2, role: temporal}
+    JL1GP01_PMS2_5m_c6_1241de7154eb: {channels: 6, role: highres}
+    JL1GP01_PMS1_5m_c6_d00302d8f981: {channels: 6, role: highres}
+    JL1GP02_PMS1_5m_c6_32d782939cb6: {channels: 6, role: highres}
+    JL1GP02_PMS2_5m_c6_6bbcf4da9eeb: {channels: 6, role: highres}
+    GF1B_PAN_c1: {channels: 1, role: highres}
+    GF6_PAN_c1: {channels: 1, role: highres}
+    GF1C_PAN_c1: {channels: 1, role: highres}
+    GF1D_PAN_c1: {channels: 1, role: highres}
+  target_heads:
+    s2_recon: {source: s2, loss_type: continuous, channels: 10, weight: 1.0}
+    s1_recon: {source: s1, loss_type: continuous, channels: 2, weight: 1.0}
+  stp:
+    space_dim: 128
+    time_dim: 128
+    precision_dim: 128
+    precision_scale: 1
+    num_blocks: 2
+    num_heads: 8
+    temporal_fusion: gated_sum
+    time_attention_mode: full
+    highres_fusion_to_embedding: true
+training:
+  epochs: 100
+  lr: 0.0001
+  weight_decay: 0.01
+  warmup_epochs: 5
+  gradient_accumulation_steps: 1
+  save_every: 5
+  amp: true
+  gradient_checkpointing: false
+  uniformity_weight: 0.05
+  uniformity_warmup_epochs: 10
+  uniformity_temperature: 2.0
+  latent_prediction_weight: 0.0
+  input_masking:
+    enabled: true
+    month_dropout_prob: 0.25
+    max_months_per_sample: 3
+    spatial_block_prob: 1.0
+    spatial_block_size: 16
+    spatial_block_ratio: 0.25
+data:
+  months: [2020-01, 2020-02, 2020-03, 2020-04, 2020-05, 2020-06, 2020-07, 2020-08, 2020-09, 2020-10, 2020-11, 2020-12]
+  batch_size: 4
+  num_workers: 8
+  patch_size: 128
+  highres_mode: observations
+  highres_max_observations: 2
+  datasets:
+    - region: national2020
+      manifest_path: /data/heyuhang/processed/national_annual5m_quality_v6/2020.train.manifest.jsonl
+      statistics_dir: /data/heyuhang/processed/national_annual5m_quality_v6/statistics
+      patch_grid_path: /data/heyuhang/processed/national_annual5m_quality_v6/2020.train.manifest.jsonl
+      source_map:
+        s2: s2
+        s1: s1
+        JL1GP01_PMS2_5m_c6_1241de7154eb: JL1GP01_PMS2_5m_c6_1241de7154eb
+        JL1GP01_PMS1_5m_c6_d00302d8f981: JL1GP01_PMS1_5m_c6_d00302d8f981
+        JL1GP02_PMS1_5m_c6_32d782939cb6: JL1GP02_PMS1_5m_c6_32d782939cb6
+        JL1GP02_PMS2_5m_c6_6bbcf4da9eeb: JL1GP02_PMS2_5m_c6_6bbcf4da9eeb
+        GF1B_PAN_c1: GF1B_PAN_c1
+        GF6_PAN_c1: GF6_PAN_c1
+        GF1C_PAN_c1: GF1C_PAN_c1
+        GF1D_PAN_c1: GF1D_PAN_c1
+      supervised_label_roots: {}
+      sampling_weight: 1.0
+    - region: national2021
+      manifest_path: /data/heyuhang/processed/national_annual5m_quality_v6/2021.train.manifest.jsonl
+      statistics_dir: /data/heyuhang/processed/national_annual5m_quality_v6/statistics
+      patch_grid_path: /data/heyuhang/processed/national_annual5m_quality_v6/2021.train.manifest.jsonl
+      source_map:
+        s2: s2
+        s1: s1
+        JL1GP01_PMS2_5m_c6_1241de7154eb: JL1GP01_PMS2_5m_c6_1241de7154eb
+        JL1GP01_PMS1_5m_c6_d00302d8f981: JL1GP01_PMS1_5m_c6_d00302d8f981
+        JL1GP02_PMS1_5m_c6_32d782939cb6: JL1GP02_PMS1_5m_c6_32d782939cb6
+        JL1GP02_PMS2_5m_c6_6bbcf4da9eeb: JL1GP02_PMS2_5m_c6_6bbcf4da9eeb
+        GF1B_PAN_c1: GF1B_PAN_c1
+        GF6_PAN_c1: GF6_PAN_c1
+        GF1C_PAN_c1: GF1C_PAN_c1
+        GF1D_PAN_c1: GF1D_PAN_c1
+      supervised_label_roots: {}
+      sampling_weight: 1.0

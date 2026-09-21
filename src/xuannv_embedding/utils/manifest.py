@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -193,6 +194,58 @@ class ManifestMeta:
 class ManifestDocument:
     records: list[ManifestRecord]
     meta: ManifestMeta
+
+
+class IndexedManifest(Sequence):
+    """Validate a JSONL manifest once and keep offsets instead of imagery metadata in RAM."""
+
+    def __init__(self, path: Path, max_records: int | None = None) -> None:
+        if path.suffix != ".jsonl":
+            raise ManifestError("IndexedManifest requires JSONL")
+        if max_records is not None and max_records < 1:
+            raise ManifestError("max_records must be positive")
+        self.path = path
+        self.meta = ManifestMeta.from_dict(
+            _json_loads(manifest_meta_path(path).read_text(), str(path))
+        )
+        if self.meta.schema_version != "1":
+            raise ManifestError("Unsupported indexed manifest version")
+        self.offsets = []
+        self.years = set()
+        self.identities = []
+        digest = hashlib.sha256()
+        seen = set()
+        offset = 0
+        with path.open("rb") as handle:
+            for payload in handle:
+                digest.update(payload)
+                if payload.strip():
+                    record = ManifestRecord.from_dict(_json_loads(payload.decode(), str(path)))
+                    identity = (record.region, record.patch_id)
+                    if identity in seen:
+                        raise ManifestError(f"Duplicate manifest identity: {identity}")
+                    seen.add(identity)
+                    self.years.add((record.provenance or {}).get("year"))
+                    if max_records is None or len(self.offsets) < max_records:
+                        self.offsets.append(offset)
+                        self.identities.append(identity)
+                offset += len(payload)
+        if digest.hexdigest() != self.meta.sha256 or len(seen) != self.meta.record_count:
+            raise ManifestError("Indexed manifest SHA-256 or record count mismatch")
+        self.file_identity = (path.stat().st_size, path.stat().st_mtime_ns)
+
+    def __len__(self) -> int:
+        return len(self.offsets)
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[position] for position in range(*index.indices(len(self)))]
+        status = self.path.stat()
+        if (status.st_size, status.st_mtime_ns) != self.file_identity:
+            raise ManifestError("Indexed manifest changed after validation")
+        with self.path.open("rb") as handle:
+            handle.seek(self.offsets[index])
+            return ManifestRecord.from_dict(_json_loads(handle.readline().decode(), str(self.path)))
 
 
 def manifest_meta_path(path: str | Path) -> Path:

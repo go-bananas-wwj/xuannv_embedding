@@ -104,7 +104,16 @@ class TrainingSystem(nn.Module):
         self.teacher_model = freeze_teacher(teacher)
 
     def forward(self, batch: dict[str, Any]) -> dict[str, torch.Tensor]:
-        optional = {key: batch[key] for key in ("highres_months", "output_months") if key in batch}
+        optional = {
+            key: batch[key]
+            for key in (
+                "highres_months",
+                "output_months",
+                "highres_observations",
+                "reconstruction_requests",
+            )
+            if key in batch
+        }
         output = self.model(
             batch["source_frames"],
             batch["source_masks"],
@@ -129,10 +138,18 @@ class TrainingSystem(nn.Module):
                     source_pixel_masks=teacher_view.get("source_pixel_masks"),
                     **{
                         key: teacher_view[key]
-                        for key in ("highres_months", "output_months")
+                        for key in (
+                            "highres_months",
+                            "output_months",
+                            "highres_observations",
+                            "reconstruction_requests",
+                        )
                         if key in teacher_view
                     },
                 )
+        loss_optional = (
+            {"highres_targets": batch["highres_targets"]} if "highres_targets" in batch else {}
+        )
         return self.criterion(
             output,
             batch["targets"],
@@ -140,6 +157,7 @@ class TrainingSystem(nn.Module):
             batch.get("supervised_labels"),
             batch.get("supervised_label_masks"),
             teacher_output=teacher_output,
+            **loss_optional,
         )
 
 

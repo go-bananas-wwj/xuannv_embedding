@@ -18,7 +18,7 @@ from torch.utils.data import Dataset
 
 from xuannv_embedding.data_process.annual_quality import LOWRES_CHANNELS, relative_file
 from xuannv_embedding.data_process.observation_raster import parent_geometry
-from xuannv_embedding.utils.manifest import load_manifest
+from xuannv_embedding.utils.manifest import IndexedManifest, load_manifest
 
 # GDAL 默认在每次 open 时 readdir 所在目录以探测 sidecar。年度栅格按 source/年/月 组织，
 # 单目录可达十万量级文件，这会让网络文件系统上的 open 比实际解码贵一个数量级。
@@ -30,18 +30,38 @@ os.environ.setdefault("GDAL_PAM_ENABLED", "NO")
 class AnnualObservationDataset(Dataset):
     """Read annual manifests without resizing, averaging or inventing observations."""
 
-    def __init__(self, manifest: Path, *, allow_candidates: bool = False) -> None:
+    def __init__(
+        self,
+        manifest: Path,
+        *,
+        allow_candidates: bool = False,
+        indexed: bool = False,
+        max_records: int | None = None,
+        max_observations: int | None = None,
+    ) -> None:
         self.directory = manifest.parent
         summary = json.loads((self.directory / "summary.json").read_text())
         if not allow_candidates and not summary.get("training_ready"):
             raise ValueError("Annual dataset has not passed scientific quality gates")
         self.root = Path(summary["data_root"])
-        document = load_manifest(manifest)
-        self.records = document.records
-        years = {record.provenance["year"] for record in self.records}
-        if len(years) != 1 or document.meta.months != [
-            f"{next(iter(years))}-{month:02}" for month in range(1, 13)
-        ]:
+        if indexed:
+            self.records = IndexedManifest(manifest, max_records=max_records)
+            months = self.records.meta.months
+            years = self.records.years
+        else:
+            document = load_manifest(manifest)
+            self.records = (
+                document.records if max_records is None else document.records[:max_records]
+            )
+            months = document.meta.months
+            years = {record.provenance["year"] for record in self.records}
+        self.max_observations = max_observations
+        self.selected_sources = None
+        if (
+            len(years) != 1
+            or None in years
+            or months != [f"{next(iter(years))}-{month:02}" for month in range(1, 13)]
+        ):
             raise ValueError("Annual manifest must contain exactly one complete calendar year")
         self.schemas = json.loads((self.directory / "sources.json").read_text())
         self.statistics = {}
@@ -106,10 +126,22 @@ class AnnualObservationDataset(Dataset):
         for source, schema in self.schemas.items():
             if source not in self.statistics:
                 continue
+            if self.selected_sources is not None and source not in self.selected_sources:
+                continue
             observations = metadata.get(source, [])
             paths = record.sources.get(source) or []
             if paths != [item["path"] for item in observations]:
                 raise ValueError("Annual manifest paths disagree with metadata")
+            if (
+                schema["role"] == "highres"
+                and self.max_observations
+                and len(observations) > self.max_observations
+            ):
+                ordered = sorted(observations, key=lambda item: (item["date"], item["path"]))
+                indices = (
+                    np.linspace(0, len(ordered) - 1, self.max_observations).round().astype(int)
+                )
+                observations = [ordered[position] for position in indices]
             if schema["role"] == "temporal":
                 size = 43 if source == "landsat" else 128
                 shape = (schema["channels"], size, size)

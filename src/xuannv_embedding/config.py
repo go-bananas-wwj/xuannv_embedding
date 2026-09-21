@@ -176,6 +176,10 @@ class ModelConfig:
     ref_year: int = 2025
     ref_month: int = 1
     stp: STPConfig = field(default_factory=STPConfig)
+    architecture: Literal["monthly", "annual5m"] = "monthly"
+    annual_feature_dim: int = 128
+    annual_pan_sources: list[str] = field(default_factory=list)
+    annual_backbone: Literal["stp", "conv"] = "stp"
 
     @property
     def sensor_channels(self) -> dict[str, int]:
@@ -445,6 +449,10 @@ def _parse_model(value: Any) -> ModelConfig:
             "input_sources",
             "target_heads",
             "stp",
+            "architecture",
+            "annual_feature_dim",
+            "annual_pan_sources",
+            "annual_backbone",
         },
         required={"embed_dim", "num_months", "input_sources", "target_heads"},
     )
@@ -458,6 +466,20 @@ def _parse_model(value: Any) -> ModelConfig:
     target_heads = {name: _parse_target_head(name, head) for name, head in target_raw.items()}
     if not input_sources or not any(source.role == "temporal" for source in input_sources.values()):
         raise ConfigError("model.input_sources 至少需要一个 temporal source")
+    architecture = _string(raw.get("architecture", "monthly"), "model.architecture")
+    backbone = _string(raw.get("annual_backbone", "stp"), "model.annual_backbone")
+    if architecture not in {"monthly", "annual5m"} or backbone not in {"stp", "conv"}:
+        raise ConfigError("Invalid model architecture or annual_backbone")
+    pan_sources = raw.get("annual_pan_sources", [])
+    if not isinstance(pan_sources, list) or not all(isinstance(name, str) for name in pan_sources):
+        raise ConfigError("model.annual_pan_sources must be a source list")
+    if len(set(pan_sources)) != len(pan_sources) or any(
+        name not in input_sources
+        or input_sources[name].role != "highres"
+        or input_sources[name].channels != 1
+        for name in pan_sources
+    ):
+        raise ConfigError("PAN sources must be unique registered single-channel highres inputs")
     return ModelConfig(
         embed_dim=_positive_int(raw["embed_dim"], "model.embed_dim"),
         input_sources=input_sources,
@@ -467,6 +489,12 @@ def _parse_model(value: Any) -> ModelConfig:
         ref_year=_positive_int(raw.get("ref_year", 2025), "model.ref_year"),
         ref_month=_positive_int(raw.get("ref_month", 1), "model.ref_month"),
         stp=_parse_stp(raw.get("stp", {})),
+        architecture=architecture,
+        annual_feature_dim=_positive_int(
+            raw.get("annual_feature_dim", 128), "model.annual_feature_dim"
+        ),
+        annual_pan_sources=list(pan_sources),
+        annual_backbone=backbone,
     )
 
 
@@ -773,6 +801,24 @@ def _validate_cross_contracts(
     training: TrainingConfig,
     data: DataConfig,
 ) -> None:
+    if model.architecture == "annual5m":
+        if model.num_months != 12 or model.ref_month != 1 or data.target_months:
+            raise ConfigError("annual5m requires twelve calendar months and no target_months")
+        if model.annual_feature_dim % model.stp.num_heads:
+            raise ConfigError("annual_feature_dim must be divisible by stp.num_heads")
+        if model.embed_dim != 64:
+            raise ConfigError("annual5m production embeddings must have 64 dimensions")
+        if training.semantic_probe_tasks:
+            raise ConfigError("Annual label dates require a separate validated probe contract")
+        if not training.input_masking.enabled or training.input_masking.month_dropout_prob <= 0:
+            raise ConfigError("annual5m training requires enabled held-out month masking")
+        for head in model.target_heads.values():
+            if (
+                head.loss_type != "continuous"
+                or head.source not in model.input_sources
+                or model.input_sources[head.source].role != "temporal"
+            ):
+                raise ConfigError("Annual target_heads must reference continuous temporal inputs")
     if model.num_months != len(data.months):
         raise ConfigError(
             f"月份冲突: model.num_months={model.num_months}, data.months={len(data.months)}"

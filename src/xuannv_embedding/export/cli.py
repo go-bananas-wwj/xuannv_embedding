@@ -52,6 +52,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     config = Config.from_yaml(args.config)
     system = build_training_system(config)
     if args.compatibility_profile:
+        if config.model.architecture != "monthly":
+            parser.error("Legacy compatibility profiles support only monthly models")
         load_compatible_checkpoint(
             args.checkpoint,
             system.model,
@@ -76,21 +78,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     for dataset_config in config.data.datasets:
         if dataset_config.region not in selected:
             continue
-        dataset = RegionRasterDataset(config, dataset_config, max_records=args.limit)
+        if config.model.architecture == "annual5m":
+            from xuannv_embedding.data.annual_dataset import collate_annual_observations
+            from xuannv_embedding.training.annual_data import annual_dataset
+
+            dataset = annual_dataset(config, dataset_config, max_records=args.limit)
+            collate_fn = collate_annual_observations
+        else:
+            dataset = RegionRasterDataset(config, dataset_config, max_records=args.limit)
+            collate_fn = collate_region_batch
         loader = DataLoader(
             dataset,
             batch_size=args.batch_size or config.data.batch_size,
             shuffle=False,
             num_workers=config.data.num_workers,
-            collate_fn=collate_region_batch,
+            collate_fn=collate_fn,
             pin_memory=True,
         )
-        paths = export_embedding_batches(
-            system.model,
-            loader,
-            args.output_root / dataset_config.region,
-            device=device,
-        )
+        if config.model.architecture == "annual5m":
+            from xuannv_embedding.export.annual import export_annual_batches
+
+            paths = export_annual_batches(
+                system.model,
+                loader,
+                args.output_root / dataset_config.region,
+                config=config,
+                device=device,
+            )
+        else:
+            paths = export_embedding_batches(
+                system.model, loader, args.output_root / dataset_config.region, device=device
+            )
         written[dataset_config.region] = [str(path) for path in paths]
     print(json.dumps({"written": written}, ensure_ascii=False, indent=2))
     return 0

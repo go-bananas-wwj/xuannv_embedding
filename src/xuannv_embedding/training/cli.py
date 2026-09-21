@@ -33,6 +33,23 @@ from xuannv_embedding.training.runtime import TrainingSystem, train_steps
 
 
 def build_training_system(config: Config) -> TrainingSystem:
+    if config.model.architecture == "annual5m":
+        from xuannv_embedding.models.annual import Annual5mModel
+        from xuannv_embedding.training.annual import AnnualLoss
+
+        model = Annual5mModel(
+            config.model.sensor_channels,
+            config.model.source_roles,
+            tuple(config.model.annual_pan_sources),
+            {name: head.source for name, head in config.model.target_heads.items()},
+            embed_dim=config.model.embed_dim,
+            feature_dim=config.model.annual_feature_dim,
+            stem_dim=config.model.stem_dim,
+            stp=asdict(config.model.stp),
+            gradient_checkpointing=config.training.gradient_checkpointing,
+            backbone=config.model.annual_backbone,
+        )
+        return TrainingSystem(model, AnnualLoss(config))
     model = AEFModel(
         sensor_channels=config.model.sensor_channels,
         embed_dim=config.model.embed_dim,
@@ -260,6 +277,17 @@ def build_region_batch_stream(
     start_epoch: int = 0,
     teacher_enabled: bool = False,
 ) -> RegionBatchStream:
+    if config.model.architecture == "annual5m":
+        from xuannv_embedding.training.annual_data import build_annual_stream
+
+        return build_annual_stream(
+            config,
+            distributed=distributed,
+            max_records=max_records,
+            max_steps=max_steps,
+            start_epoch=start_epoch,
+            teacher_enabled=teacher_enabled,
+        )
     from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
 
     loaders: list[DataLoader] = []
@@ -443,6 +471,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--synthetic 需要显式提供正数 --steps")
 
     config = Config.from_yaml(args.config)
+    if args.synthetic and config.model.architecture == "annual5m":
+        parser.error(
+            "annual5m synthetic input is not a substitute for native-grid observations; "
+            "use --steps with the annual manifest"
+        )
     git_sha = _git_sha()
     source_code_sha256 = _source_code_sha256()
     device, distributed, local_rank = _setup_device(args.device)
