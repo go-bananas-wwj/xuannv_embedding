@@ -103,6 +103,10 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(
     }
     adapted_raw["data"]["datasets"][0]["source_map"]["extra"] = "extra"
     args = setup("adapt", adapted_raw)
+    if transformer:
+        # Objective-weight search reuses materialized targets, without rewriting cache data.
+        adapted_raw["model"]["target_heads"]["extra_recon"]["weight"] = 0.45
+        args.config.write_text(yaml.safe_dump(adapted_raw))
     args.initialize = base_args.output / "best.pt"
     args.base_config = base_args.config
     args.freeze_base = True

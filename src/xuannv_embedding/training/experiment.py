@@ -201,13 +201,26 @@ def _synchronize(device: torch.device) -> None:
         torch.cuda.synchronize()
 
 
+def validate_cached_targets(cached: dict, configured: dict) -> None:
+    """Loss weights do not change materialized targets; all other fields must match."""
+
+    def schema(heads):
+        return {
+            name: {k: v for k, v in head.items() if k != "weight"} for name, head in heads.items()
+        }
+
+    if schema(cached) != schema(configured):
+        raise ValueError("cache target schema mismatch")
+
+
 def run(args: argparse.Namespace) -> None:
     config = Config.from_yaml(args.config)
     document = json.loads((args.cache / "cache.json").read_text())
     if document["model_inputs"] != {k: asdict(v) for k, v in config.model.input_sources.items()}:
         raise ValueError("cache input schema mismatch")
-    if document["model_targets"] != {k: asdict(v) for k, v in config.model.target_heads.items()}:
-        raise ValueError("cache target schema mismatch")
+    validate_cached_targets(
+        document["model_targets"], {k: asdict(v) for k, v in config.model.target_heads.items()}
+    )
     cached_data = dict(document["data"])
     cached_data.setdefault("monthly_highres", False)
     cached_data.setdefault("highres_month_assignments", {})
@@ -538,6 +551,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--highres-encoding", choices=["native", "resample", "transformer"], default="native"
     )
+    p = sub.add_parser("diagnose")
+    p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--cache", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--device", required=True)
+    p.add_argument("--initialize", type=Path, required=True)
+    p.add_argument("--base-config", type=Path, required=True)
+    p.add_argument("--freeze-base", action="store_true")
+    p.add_argument("--highres-encoding", choices=["native", "transformer"], default="transformer")
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
     p = sub.add_parser("cpu-queue")
@@ -582,6 +604,10 @@ def main(argv: list[str] | None = None) -> int:
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers, include_highres=args.include_highres)
+    elif args.action == "diagnose":
+        from xuannv_embedding.training.diagnostics import run as diagnose_run
+
+        diagnose_run(args)
     elif args.action == "cpu-queue":
         from xuannv_embedding.training.evaluation_queue import run as queue_run
 
