@@ -432,6 +432,7 @@ def main(argv=None):
             "compare-run",
             "compare-report",
             "multitask",
+            "embedding-diagnostics",
         ],
     )
     p.add_argument("--spec", type=Path, required=True)
@@ -439,7 +440,11 @@ def main(argv=None):
     p.add_argument("--task")
     p.add_argument("--device", default="cpu")
     args = p.parse_args(argv)
-    if args.stage == "multitask":
+    if args.stage == "embedding-diagnostics":
+        from xuannv_embedding.downstream import embedding_diagnostics
+
+        embedding_diagnostics.run(args)
+    elif args.stage == "multitask":
         from xuannv_embedding.downstream import multitask
 
         multitask.run(args)
