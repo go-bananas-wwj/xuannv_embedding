@@ -438,7 +438,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # 所以只能让 DDP 容忍未用参数，否则多卡从第二个 step 起就会中止。
         wrapped = nn.parallel.DistributedDataParallel(
             system,
-            device_ids=[local_rank],
+            device_ids=[local_rank] if device.type != "cpu" else None,
             broadcast_buffers=False,
             find_unused_parameters=True,
         )
