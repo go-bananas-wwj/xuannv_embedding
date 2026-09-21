@@ -476,6 +476,17 @@ def test_availability_aware_fusion_masks_highres_features() -> None:
     assert torch.allclose(out_a, out_b, atol=1e-6)
 
 
+def test_availability_aware_fusion_is_identity_when_unavailable() -> None:
+    fusion = AvailabilityAwareFusion(16)
+    base_feat = torch.randn(1, 16, 8, 8)
+    highres_feat = torch.randn(1, 16, 8, 8)
+    mask_zero = torch.zeros(1, 1, 8, 8)
+
+    output = fusion(base_feat, highres_feat, mask_zero)
+
+    assert torch.equal(output, base_feat)
+
+
 def test_availability_aware_fusion_rejects_size_mismatch() -> None:
     """AvailabilityAwareFusion 在输入尺寸不一致时应抛出断言错误。"""
     fusion = AvailabilityAwareFusion(16)

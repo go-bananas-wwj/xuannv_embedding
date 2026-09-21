@@ -6,12 +6,7 @@ from torch import nn
 
 
 class AvailabilityAwareFusion(nn.Module):
-    """基于可用性掩码的高分辨率特征融合模块。
-
-    要求 ``base_feat`` 与 ``highres_feat`` 已经对齐到相同空间尺寸 ``(H, W)``；
-    将高分辨率数据是否可用显式编码为嵌入，并与基础特征相加，
-    随后通过 1x1 卷积融合基础特征与高分辨率特征。
-    """
+    """以低分特征为锚点、由可用性掩码门控的高分残差融合。"""
 
     def __init__(self, dim: int) -> None:
         """初始化融合模块。
@@ -21,6 +16,7 @@ class AvailabilityAwareFusion(nn.Module):
         """
         super().__init__()
         self.dim = dim
+        self.residual_mode = True
 
         # 将单通道可用性掩码映射到 dim 维嵌入。
         self.avail_embed = nn.Conv2d(1, dim, kernel_size=1)
@@ -68,5 +64,7 @@ class AvailabilityAwareFusion(nn.Module):
         highres_feat = highres_feat * avail_mask.float()
         avail_embed = self.avail_embed(avail_mask.float())  # (B, C, H, W)
         combined = torch.cat([base_feat + avail_embed, highres_feat], dim=1)  # (B, 2C, H, W)
-        fused = self.fusion(combined)  # (B, C, H, W)
-        return fused
+        residual = self.fusion(combined)  # (B, C, H, W)
+        if not self.residual_mode:
+            return residual
+        return base_feat + 0.1 * avail_mask.float() * residual

@@ -43,6 +43,7 @@ def build_training_system(config: Config) -> TrainingSystem:
         ref_month=config.model.ref_month,
         gradient_checkpointing=config.training.gradient_checkpointing,
         source_roles=config.model.source_roles,
+        residual_fusion=True,
     )
     training = config.training
     criterion = TotalLoss(

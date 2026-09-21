@@ -60,6 +60,7 @@ class AEFModel(nn.Module):
         ref_month: int = 1,
         gradient_checkpointing: bool = False,
         source_roles: dict[str, str] | None = None,
+        residual_fusion: bool = False,
     ) -> None:
         """初始化 AEFModel。
 
@@ -78,6 +79,8 @@ class AEFModel(nn.Module):
             gradient_checkpointing: 是否启用 STP 编码器的梯度检查点。
             source_roles: 规范 source 到 ``temporal`` 或 ``highres`` 的显式映射。
                 未提供时所有 source 均按 temporal 处理；名称不会参与角色推断。
+            residual_fusion: 新年度训练是否使用低分锚点残差融合；默认关闭以保持旧
+                直接构造模型的兼容行为，生产训练入口显式开启。
         """
         super().__init__()
         self.sensor_channels = sensor_channels
@@ -180,6 +183,7 @@ class AEFModel(nn.Module):
         )
         self.upsample_head = EmbeddingUpsampleHead(embed_dim, embed_dim)
         self.highres_fusion = AvailabilityAwareFusion(embed_dim)
+        self.highres_fusion.residual_mode = bool(residual_fusion)
         self.bottleneck = VMFBottleneck(embed_dim, embed_dim)
 
         # 构建各目标模态的 decoder head。

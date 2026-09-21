@@ -56,7 +56,11 @@ def fuse_observations(
             support[:, month_index] += weights.sum(dim=1)
     available = (support > 0).to(base.dtype)
     features = feature_sum / support.clamp(min=1)
-    residual = fusion(base.flatten(0, 1), features.flatten(0, 1), available.flatten(0, 1)).view_as(
-        base
-    )
-    return base + available * residual
+    fused = fusion(
+        base.flatten(0, 1),
+        features.flatten(0, 1),
+        available.flatten(0, 1),
+    ).view_as(base)
+    if getattr(fusion, "residual_mode", False):
+        return fused
+    return base + available * fused
