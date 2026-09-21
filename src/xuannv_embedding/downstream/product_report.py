@@ -13,6 +13,23 @@ from xuannv_embedding.export.context import dump, sha
 
 MODELS = ("xuannv", "AlphaEarth", "raw")
 COLORS = ("#267e82", "#7253a0", "#bc7533")
+NAMES = {"xuannv": "xuannv", "AlphaEarth": "AlphaEarth", "raw": "Raw features"}
+TASK_NAMES = {
+    "osm_building": "Buildings",
+    "osm_road": "Roads",
+    "osm_water": "Water",
+    "osm_green": "Green space",
+    "osm_forest": "Forest",
+    "osm_agriculture": "Cropland",
+    "osm_bare": "Bare land",
+    "osm_education": "Education",
+    "esri_water": "Water",
+    "esri_trees": "Trees",
+    "esri_range": "Low vegetation",
+    "esri_crops": "Cropland",
+    "esri_built": "Built-up",
+    "esri_bare": "Bare land",
+}
 
 
 def paired_intervals(a, b):
@@ -177,6 +194,9 @@ def run(args):
     )
 
     def save(fig, name):
+        if name != "product_examples":
+            handles, labels = fig.axes[0].get_legend_handles_labels()
+            fig.legend(handles, labels, loc="outside upper center", ncol=3, frameon=False)
         for suffix in ("pdf", "png"):
             fig.savefig(out / f"{name}.{suffix}", dpi=190, bbox_inches="tight")
         plt.close(fig)
@@ -190,24 +210,21 @@ def run(args):
                 x + (i - 1) * 0.24,
                 [100 * lookup[(family, t, "ridge", 5)]["models"][model]["f1"] for t in tasks],
                 0.24,
-                label=model,
+                label=NAMES[model],
                 color=COLORS[i],
             )
-        axes[j, 0].set_xticks(
-            x, [identity["tasks"][t]["name"] for t in tasks], rotation=30, ha="right"
-        )
+        axes[j, 0].set_xticks(x, [TASK_NAMES[t] for t in tasks], rotation=30, ha="right")
         axes[j, 0].set_title(f"{family}: five-tile Ridge F1")
         axes[j, 0].set_ylabel("F1 (%)")
-        axes[j, 0].legend(frameon=False)
         for i, ref in enumerate(("AlphaEarth", "raw")):
             ds = [lookup[(family, t, "ridge", 5)]["differences"][ref] for t in tasks]
             vals = np.array([d["point"]["f1"] for d in ds]) * 100
             bounds = np.array([d["ci95"]["f1"] for d in ds]) * 100
             yy = x + (i - 0.5) * 0.2
             axes[j, 1].hlines(yy, bounds[:, 0], bounds[:, 1], color=COLORS[i + 1])
-            axes[j, 1].scatter(vals, yy, label=f"xuannv - {ref}", color=COLORS[i + 1], s=18)
+            axes[j, 1].scatter(vals, yy, label=f"xuannv - {NAMES[ref]}", color=COLORS[i + 1], s=18)
         axes[j, 1].axvline(0, color="gray", lw=0.8)
-        axes[j, 1].set_yticks(x, [identity["tasks"][t]["name"] for t in tasks])
+        axes[j, 1].set_yticks(x, [TASK_NAMES[t] for t in tasks])
         axes[j, 1].set_xlabel("F1 difference (percentage points); paired 95% CI")
         axes[j, 1].legend(frameon=False, fontsize=9)
     save(fig, "product_tasks")
@@ -219,12 +236,11 @@ def run(args):
                     100 * lookup[(family, "macro", "ridge", b)]["models"][model][metric]
                     for b in spec["budgets"]
                 ]
-                axes[j, k].plot(spec["budgets"], values, "o-", label=model, color=color)
+                axes[j, k].plot(spec["budgets"], values, "o-", label=NAMES[model], color=color)
             axes[j, k].set_xticks(spec["budgets"])
             axes[j, k].set_xlabel("Fully labeled support tiles")
             axes[j, k].set_ylabel(metric.upper() + " (%)")
             axes[j, k].set_title(f"{family}: macro {metric.upper()}")
-            axes[j, k].legend(frameon=False)
     save(fig, "product_budget")
     fig, axes = plt.subplots(2, 2, figsize=(10, 6), layout="constrained")
     heads = ("ridge", "rf", "svm")
@@ -236,12 +252,11 @@ def run(args):
                     [100 * lookup[(family, "macro", h, 5)]["models"][model][metric] for h in heads],
                     0.23,
                     color=COLORS[i],
-                    label=model,
+                    label=NAMES[model],
                 )
             axes[j, k].set_xticks(range(3), ["Ridge", "Random forest", "RBF-SVM"])
             axes[j, k].set_title(f"{family}: {metric.upper()}, five support tiles")
             axes[j, k].set_ylabel(metric.upper() + " (%)")
-            axes[j, k].legend(frameon=False)
     save(fig, "product_heads")
     tasks = ("osm_building", "osm_road", "osm_water", "osm_green")
     fig, axes = plt.subplots(4, 4, figsize=(9, 9), layout="constrained")
@@ -271,9 +286,7 @@ def run(args):
                 ax.set_title(
                     ("Reference", "Raw + Ridge", "AlphaEarth + Ridge", "xuannv + Ridge")[k]
                 )
-        axes[j, 0].set_ylabel(
-            f"{task.removeprefix('osm_')}\n{identity['records'][index]['patch_id']}"
-        )
+        axes[j, 0].set_ylabel(f"{TASK_NAMES[task]}\n{identity['records'][index]['patch_id']}")
     fig.legend(
         handles=[
             Patch(color=c, label=label)
