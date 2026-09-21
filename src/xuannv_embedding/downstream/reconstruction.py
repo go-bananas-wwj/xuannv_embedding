@@ -24,10 +24,14 @@ from xuannv_embedding.training.experiment_export import validate_export_identity
 from xuannv_embedding.training.runtime import _move
 
 
-def hidden_month_inputs(batch, sources, month, *, prefix):
+def hidden_month_inputs(batch, sources, month, *, prefix, allow_missing_sources=False):
     count = batch["timestamps"].shape[1]
     names = set(batch.get("source_frames", {})) | set(batch.get("highres_frames", {}))
-    if not sources or not set(sources) <= names or not 0 <= month < count:
+    if (
+        not sources
+        or (not allow_missing_sources and not set(sources) <= names)
+        or not 0 <= month < count
+    ):
         raise ValueError("unknown hidden source or invalid month")
     result = dict(batch)
     for frames_key, masks_key in [

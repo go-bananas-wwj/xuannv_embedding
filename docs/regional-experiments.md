@@ -79,3 +79,24 @@ uses spawn workers and an isolated runtime directory. Unknown device processes b
 the controller does not terminate any training or resident process. Failed or stalled runs are
 recorded for inspection while independent jobs on other devices continue. Restart uses the same
 immutable plan; editing a live plan is rejected rather than silently altering an experiment.
+
+
+## 共同解码器的外部目标缓存
+
+`xuannv experiment reconstruct-ridge --target-cache /path/to/target-cache` 允许冻结编码器
+读取自身训练时登记的观测缓存，同时从独立缓存取得重建目标。例如，没有高分重建头的基座
+也可用同容量线性读出器预测高分来源的模型网格目标。其余参数（`--cache`、`--config`、
+`--checkpoint`、`--target`、`--months`、`--context`、`--alpha` 和 `--sample-stride`）沿用
+共同重建命令；不传 `--target-cache` 时仍使用模型自身缓存中的目标。
+
+两份缓存必须有相同的登记 manifest 身份、月份顺序、图块尺寸、记录顺序、图块 ID、边界及
+完整训练／验证／测试／缓冲划分。目标必须声明连续类型和通道数。评价前重新校验两份缓存的
+全部训练／验证样本哈希，逐样本复核地区、图块、时间戳及目标尺寸，不读取测试样本文件。
+外部缓存的观测、标签和输入掩码不会合并进编码器输入；只有其重建目标与有效目标掩码用于
+训练支持拟合、朴素基线及验证评分。
+
+目标源在模型输入中存在时先遮住目标月；本来不存在时不注入该源，身份记录明确列出缺失源。
+前缀模式仍删除模型所有未来输入及无日期静态输入。额外别名必须是模型已登记的实际输入源，
+不能用缺失源选项忽略拼写错误。结果记录两份缓存身份、目标通道数和缺失遮挡源。
+跨模型比较仍须统一目标缓存、采样位置、读出容量和超参数；本功能不提供原始分辨率恢复、
+真实时间外推或独立变化检测的证据。正在执行的实验继续使用各自固定的代码快照。

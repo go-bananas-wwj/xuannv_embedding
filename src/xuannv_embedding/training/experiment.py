@@ -572,6 +572,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--aliases", nargs="*", default=[])
         p.add_argument("--context", choices=["offline", "prefix"], default="offline")
         if action == "reconstruct-ridge":
+            p.add_argument("--target-cache", type=Path)
             p.add_argument("--alpha", type=float, default=10.0)
             p.add_argument("--sample-stride", type=int, default=8)
     p = sub.add_parser("report-multitask")

@@ -19,8 +19,9 @@ from xuannv_embedding.downstream.reconstruction import (
     summarize_sums,
     temporal_baseline,
 )
+from xuannv_embedding.downstream.reconstruction_targets import paired_samples, paired_target_schema
 from xuannv_embedding.training.cli import _git_sha, _setup_device
-from xuannv_embedding.training.experiment import CachedSamples, _json, _sha
+from xuannv_embedding.training.experiment import _json, _sha
 from xuannv_embedding.training.experiment_export import validate_export_identity
 from xuannv_embedding.training.runtime import _move
 
@@ -78,8 +79,14 @@ def grid_support(embedding, truth, valid, *, stride):
     return embedding[:, yy, xx].T, truth[:, yy, xx].T, np.column_stack([yy, xx])
 
 
-def masked_embedding(model, sample, sources, month, *, prefix, device):
-    batch = hidden_month_inputs(collate_region_batch([sample]), sources, month, prefix=prefix)
+def masked_embedding(model, sample, sources, month, *, prefix, device, allow_missing_sources=False):
+    batch = hidden_month_inputs(
+        collate_region_batch([sample]),
+        sources,
+        month,
+        prefix=prefix,
+        allow_missing_sources=allow_missing_sources,
+    )
     digest = hashlib.sha256()
     for group in ("source_masks", "highres_masks"):
         for source, tensor in sorted(batch.get(group, {}).items()):
@@ -113,7 +120,15 @@ def run(args):
         training, config_sha=_sha(args.config), cache_sha=_sha(args.cache / "cache.json")
     )
     check_partition(document["split"], len(document["records"]))
-    head = config.model.target_heads[args.target]
+    target_cache = getattr(args, "target_cache", None)
+    target_document = (
+        json.loads((target_cache / "cache.json").read_text()) if target_cache else document
+    )
+    head = (
+        paired_target_schema(document, target_document, args.target)
+        if target_cache
+        else config.model.target_heads[args.target]
+    )
     if head.loss_type != "continuous":
         raise ValueError("common reconstruction requires continuous targets")
     if (
@@ -123,15 +138,18 @@ def run(args):
     ):
         raise ValueError("months must be distinct valid zero-based indices")
     sources = [head.source, *args.aliases]
-    if len(set(sources)) != len(sources) or not set(sources) <= set(config.model.input_sources):
+    allowed = set(config.model.input_sources) | ({head.source} if target_cache else set())
+    if len(set(sources)) != len(sources) or not set(sources) <= allowed:
         raise ValueError("hidden sources must be distinct registered inputs")
     train, validation = document["split"]["train"], document["split"]["validation"]
     if not train or not validation:
         raise ValueError("training and validation splits must be nonempty")
-    for i in [*train, *validation]:
-        record = document["records"][i]
-        if _sha(Path(record["path"])) != record["sha256"]:
-            raise ValueError("sample checksum changed")
+    documents = [document] if target_document is document else [document, target_document]
+    for checked_document in documents:
+        for i in [*train, *validation]:
+            record = checked_document["records"][i]
+            if _sha(Path(record["path"])) != record["sha256"]:
+                raise ValueError("sample checksum changed")
     model, epoch = _load_model(config, document, training, args.checkpoint, _sha(args.config))
     device, distributed, _ = _setup_device(args.device)
     if distributed:
@@ -144,8 +162,12 @@ def run(args):
         checkpoint_epoch=epoch,
         config_sha256=_sha(args.config),
         cache_sha256=_sha(args.cache / "cache.json"),
+        target_cache_sha256=_sha((target_cache or args.cache) / "cache.json"),
+        external_target_cache=target_cache is not None,
+        target_channels=head.channels,
         target=args.target,
         hidden_sources=sources,
+        absent_hidden_sources=sorted(set(sources) - set(config.model.input_sources)),
         months=args.months,
         context=args.context,
         training_indices=train,
@@ -168,9 +190,15 @@ def run(args):
         sums = np.zeros((len(config.data.months), head.channels))
         counts = np.zeros(len(config.data.months), dtype=np.int64)
         masks = []
-        for i, sample in zip(train, CachedSamples(document, train), strict=True):
-            values = sample["targets"][args.target].numpy()
-            valid = sample["target_masks"][args.target].numpy() > 0
+        for i, (sample, reference) in zip(
+            train,
+            paired_samples(
+                document, target_document, train, name=args.target, channels=head.channels
+            ),
+            strict=True,
+        ):
+            values = reference["targets"][args.target].numpy()
+            valid = reference["target_masks"][args.target].numpy() > 0
             for month in args.months:
                 truth, domain = values[month], valid[month]
                 selected = truth[:, domain]
@@ -179,7 +207,13 @@ def run(args):
                 sums[month] += selected.sum(1, dtype=np.float64)
                 counts[month] += selected.shape[1]
                 embedding, digest = masked_embedding(
-                    model, sample, sources, month, prefix=args.context == "prefix", device=device
+                    model,
+                    sample,
+                    sources,
+                    month,
+                    prefix=args.context == "prefix",
+                    device=device,
+                    allow_missing_sources=target_cache is not None,
                 )
                 x, y, positions = grid_support(embedding, truth, domain, stride=args.sample_stride)
                 support[month]["features"].append(x)
@@ -214,12 +248,24 @@ def run(args):
         )
         _json(args.output / "identity.json", identity)
         totals = {}
-        for i, sample in zip(validation, CachedSamples(document, validation), strict=True):
-            values = sample["targets"][args.target].numpy()
-            valid = sample["target_masks"][args.target].numpy() > 0
+        for i, (sample, reference) in zip(
+            validation,
+            paired_samples(
+                document, target_document, validation, name=args.target, channels=head.channels
+            ),
+            strict=True,
+        ):
+            values = reference["targets"][args.target].numpy()
+            valid = reference["target_masks"][args.target].numpy() > 0
             for month in args.months:
                 embedding, digest = masked_embedding(
-                    model, sample, sources, month, prefix=args.context == "prefix", device=device
+                    model,
+                    sample,
+                    sources,
+                    month,
+                    prefix=args.context == "prefix",
+                    device=device,
+                    allow_missing_sources=target_cache is not None,
                 )
                 truth, domain = values[month], valid[month]
                 flat = embedding.reshape(embedding.shape[0], -1).T
