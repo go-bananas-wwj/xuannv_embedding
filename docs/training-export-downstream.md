@@ -50,3 +50,22 @@ JSON 的每项包含互斥 `train / val / test`。
 
 阈值只用 validation 选择，test 报告 F1、AP、AUC。full-label 与 5/10/50-shot 必须分开报告；
 更换标签、fold、shot、seed 或数据文件后，身份摘要不一致会直接拒绝评测。
+
+## 验证集遮挡重建诊断
+
+`xuannv experiment reconstruct` 从已登记的实验 checkpoint 和同一缓存加载模型，
+在编码前清零指定源的目标月输入和掩码；`--aliases` 指定需要同时屏蔽的重复表示。
+`--context prefix` 还会清零所有源的未来月份和无法确定日期的静态输入。
+该模式只检查推理输入依赖，不证明训练权重从未见过未来月份。
+
+```bash
+xuannv experiment reconstruct --config /path/config.yaml --cache /path/cache \
+  --checkpoint /path/run/epoch_0200.pt --output /path/new-reconstruction \
+  --device npu:0 --target s2_recon --months 0 1 2 3 4 5 --context offline
+```
+
+评分只读训练与验证记录，均值基线只拟合训练像元。逐月、逐波段报告归档归一化单位的
+RMSE、MAE、偏差和有效数量；模型全域与时序插值共有域分开，空域记 null。
+输出逐图块预测 NPZ、充分统计量及身份 JSON，放在仓库外。原生解码头结果是模型诊断，
+不能替代所有嵌入使用相同预算解码器的公平比较。开发测试覆盖遮挡、共享张量保护、
+无历史域、无效像元及训练/验证/测试读取边界；真实模型结果须另外运行并登记。
