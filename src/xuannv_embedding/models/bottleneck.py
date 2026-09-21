@@ -37,6 +37,8 @@ class VMFBottleneck(nn.Module):
         init_kappa = 10.0 if kappa is None else float(kappa)
         self.log_kappa = nn.Parameter(torch.log(torch.tensor(init_kappa)))
         self.proj = nn.Conv2d(in_dim, out_dim, kernel_size=1, bias=False)
+        self.log_kappa_min = 0.0
+        self.log_kappa_max = 8.0
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
@@ -53,7 +55,12 @@ class VMFBottleneck(nn.Module):
         if self.training:
             # 加入环境空间各向同性高斯噪声，标准差为 1 / exp(log_kappa)，
             # 再重新投影回单位球面以近似 vMF 采样。
-            noise = torch.randn_like(z) / torch.exp(self.log_kappa)
+            effective_log_kappa = self.log_kappa.clamp(
+                min=self.log_kappa_min,
+                max=self.log_kappa_max,
+            )
+            dimension_scale = max(self.out_dim - 1, 1) ** 0.5
+            noise = torch.randn_like(z) / (torch.exp(effective_log_kappa) * dimension_scale)
             z = F.normalize(z + noise, dim=1)
 
         return z
