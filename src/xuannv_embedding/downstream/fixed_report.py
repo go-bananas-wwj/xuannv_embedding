@@ -399,7 +399,9 @@ def run(args):
     architecture(out, root, table)
     conceptual_figures(out)
     latex_tables(out, summary, rows, retr)
-    inventory = {p.name: sha(p) for p in out.iterdir() if p.is_file()}
+    inventory = {
+        p.name: sha(p) for p in out.iterdir() if p.is_file() and p.name != "artifact_hashes.json"
+    }
     dump(out / "artifact_hashes.json", inventory)
     print(
         json.dumps(
