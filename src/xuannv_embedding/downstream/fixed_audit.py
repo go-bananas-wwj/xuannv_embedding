@@ -420,14 +420,36 @@ def retrieval(spec, cache, task, y, features, out):
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument(
-        "stage", choices=["export", "prepare", "probe", "describe", "report", "reproduce"]
+        "stage",
+        choices=[
+            "export",
+            "prepare",
+            "probe",
+            "describe",
+            "report",
+            "reproduce",
+            "compare-prepare",
+            "compare-run",
+            "compare-report",
+        ],
     )
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--model")
     p.add_argument("--task")
     p.add_argument("--device", default="cpu")
     args = p.parse_args(argv)
-    if args.stage == "export":
+    if args.stage.startswith("compare-"):
+        from xuannv_embedding.downstream import product_comparison
+
+        if args.stage == "compare-prepare":
+            product_comparison.prepare(args)
+        elif args.stage == "compare-run":
+            product_comparison.run(args)
+        else:
+            from xuannv_embedding.downstream import product_report
+
+            product_report.run(args)
+    elif args.stage == "export":
         from xuannv_embedding.export.context import run
 
         run(args)
