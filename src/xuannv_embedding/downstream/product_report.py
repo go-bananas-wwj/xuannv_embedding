@@ -268,7 +268,13 @@ def run(args):
             continue
         index = identity["rois"][task][0]
         y = np.load(root / "prepared" / f"label_{task}.npy")[index]
-        axes[j, 0].imshow(y == 1, cmap=ListedColormap(["#f3f3f3", "#208b69"]), vmin=0, vmax=1)
+        axes[j, 0].imshow(
+            y == 1,
+            cmap=ListedColormap(["#f3f3f3", "#208b69"]),
+            vmin=0,
+            vmax=1,
+            interpolation="nearest",
+        )
         for k, model in enumerate(("raw", "AlphaEarth", "xuannv"), 1):
             p = root / "runs" / task / "ridge" / f"{model}_{spec['seeds'][0]}_5_predictions.npz"
             with np.load(p) as z:
@@ -278,7 +284,7 @@ def run(args):
             image[(y == 1) & pred] = 1
             image[(y == 0) & pred] = 2
             image[(y == 1) & ~pred] = 3
-            axes[j, k].imshow(image, cmap=cmap, vmin=0, vmax=3)
+            axes[j, k].imshow(image, cmap=cmap, vmin=0, vmax=3, interpolation="nearest")
         for k, ax in enumerate(axes[j]):
             ax.set_xticks([])
             ax.set_yticks([])
