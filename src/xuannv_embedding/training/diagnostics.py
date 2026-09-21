@@ -74,7 +74,9 @@ def run(args):
     batch = _move(collate_region_batch([samples[i] for i in range(len(samples))]), device)
     batch = apply_input_masking(batch, asdict(config.training.input_masking))
     before, frozen_count = _frozen_digest(system)
-    optimizer = torch.optim.AdamW(system.parameters(), lr=config.training.lr)
+    optimizer = torch.optim.AdamW(
+        system.parameters(), lr=config.training.lr, weight_decay=config.training.weight_decay
+    )
     traces = []
     for step in range(2):
         values = system(batch)
