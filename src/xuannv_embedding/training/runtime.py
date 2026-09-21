@@ -201,6 +201,9 @@ def train_steps(
                     }
                 )
         if pending:
+            for parameter in system.parameters():
+                if parameter.grad is not None:
+                    parameter.grad.mul_(gradient_accumulation_steps / pending)
             gradient_norm = _observe_gradient_norm(system, optimizer, scaler)
             if not isfinite(gradient_norm):
                 skipped_steps += 1
