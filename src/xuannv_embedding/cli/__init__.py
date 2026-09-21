@@ -94,6 +94,12 @@ def _run_experiment(args: argparse.Namespace) -> int:
     return experiment_main(args.forwarded_args)
 
 
+def _run_audit(args: argparse.Namespace) -> int:
+    from xuannv_embedding.downstream.fixed_audit import main as audit_main
+
+    return audit_main(args.forwarded_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建不依赖可选运行组件的顶层命令解析器。"""
     parser = argparse.ArgumentParser(
@@ -112,6 +118,8 @@ def build_parser() -> argparse.ArgumentParser:
     export.set_defaults(handler=_run_export)
     experiment = subparsers.add_parser("experiment", help="准备和运行独立区域实验", add_help=False)
     experiment.set_defaults(handler=_run_experiment)
+    audit = subparsers.add_parser("audit", help="固定权重配对嵌入评价", add_help=False)
+    audit.set_defaults(handler=_run_audit)
     return parser
 
 
@@ -119,7 +127,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
-    if args.command in {"data", "train", "export", "experiment"}:
+    if args.command in {"data", "train", "export", "experiment", "audit"}:
         args.forwarded_args = unknown
     elif unknown:
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")
