@@ -54,6 +54,10 @@ def export_embedding_batches(
                 optional["output_months"] = batch["output_months"].to(target_device)
             if "highres_months" in batch:
                 optional["highres_months"] = _move_mapping(batch["highres_months"], target_device)
+            if "source_pixel_masks" in batch:
+                optional["source_pixel_masks"] = _move_mapping(
+                    batch["source_pixel_masks"], target_device
+                )
             output = model(
                 _move_mapping(batch["source_frames"], target_device),
                 _move_mapping(batch["source_masks"], target_device),
@@ -67,11 +71,26 @@ def export_embedding_batches(
                 raise ValueError(f"embedding 输出 batch 形状非法: {embedding.shape}")
             if not np.isfinite(embedding).all():
                 raise FloatingPointError("embedding 包含 NaN/Inf")
-            timestamps = batch["timestamps"].detach().cpu().numpy()
+            timestamps = batch.get("output_months", batch["timestamps"]).detach().cpu().numpy()
+            if timestamps.shape != embedding.shape[:2]:
+                raise ValueError("Export timestamps must describe the output monthly bins")
+            validity = getattr(output, "validity_mask", None)
+            validity_array = (
+                validity.detach().float().cpu().numpy() if validity is not None else None
+            )
+            if validity_array is not None and (
+                validity_array.shape != (*embedding.shape[:2], 1, *embedding.shape[-2:])
+                or not np.isfinite(validity_array).all()
+                or ((validity_array < 0) | (validity_array > 1)).any()
+            ):
+                raise ValueError("Invalid output validity mask")
             for index, patch_id in enumerate(patch_ids):
                 path = output_root / f"{patch_id}.npz"
                 if path.exists():
                     raise FileExistsError(f"拒绝覆盖已导出的 embedding: {path}")
-                _atomic_npz(path, embedding=embedding[index], timestamps=timestamps[index])
+                arrays = {"embedding": embedding[index], "timestamps": timestamps[index]}
+                if validity_array is not None:
+                    arrays["validity_mask"] = validity_array[index]
+                _atomic_npz(path, **arrays)
                 written.append(path)
     return written
