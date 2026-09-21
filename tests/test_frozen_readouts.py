@@ -173,3 +173,34 @@ def test_validation_replay_after_load_rejects_changed_observations_without_refit
         verify_validation(readout, x + 1, y)
     with pytest.raises(ValueError, match="observations"):
         verify_validation(readout, x, 1 - y)
+
+
+@pytest.mark.parametrize("order", ["C", "F"])
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
+def test_frozen_scaling_matches_sklearn_for_nontrivial_statistics(tmp_path, order, dtype):
+    rng = np.random.default_rng(8)
+    x = np.array(rng.normal(size=(255, 3)), dtype=dtype, order=order)
+    query = np.array(rng.normal(size=(253, 3)), dtype=dtype, order=order)
+    y, target = np.arange(255) % 2, np.arange(253) % 2
+    for name, fit in (("C", fit_classification), ("R", fit_regression)):
+        model = fit(x, y, query, target)
+        save_readout(model, tmp_path / name)
+        loaded = load_readout(tmp_path / name, sha(tmp_path / name / "identity.json"))
+        assert verify_validation(loaded, query, target)["state"] == "verified"
+
+
+def test_empty_query_returns_no_predictions_without_refitting():
+    x, y = np.array([[0], [1]], dtype=np.float32), np.array([0, 1])
+    for model in (fit_classification(x, y, x, y), fit_regression(x, y, x, y)):
+        assert model.predict(np.empty((0, 1), np.float32)).shape == (0,)
+
+
+def test_changed_numerical_runtime_is_rejected(tmp_path):
+    x, y = np.array([[0], [1]], dtype=np.float32), np.array([0, 1])
+    save_readout(fit_classification(x, y, x, y), tmp_path / "frozen")
+    path = tmp_path / "frozen/identity.json"
+    data = json.loads(path.read_text())
+    data["metadata"]["sklearn_version"] = "different"
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="library versions"):
+        load_readout(tmp_path / "frozen", sha(path))

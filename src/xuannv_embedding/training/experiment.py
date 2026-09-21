@@ -582,6 +582,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--output", type=Path, required=True)
     p = sub.add_parser("follow-multitask")
     p.add_argument("--plan", type=Path, required=True)
+    for action in ("calibrate-primary", "score-primary"):
+        p = sub.add_parser(action)
+        p.add_argument("--spec", type=Path, required=True)
+        if action == "score-primary":
+            p.add_argument("--calibration-identity-sha256", required=True)
     p = sub.add_parser("follow")
     p.add_argument("--root", type=Path, required=True)
     p = sub.add_parser("cpu-queue")
@@ -672,6 +677,13 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.training.multitask_followup import run as follow_multitask
 
         follow_multitask(args.plan)
+    elif args.action in ("calibrate-primary", "score-primary"):
+        from xuannv_embedding.downstream.paired_multitask import calibrate, score
+
+        if args.action == "calibrate-primary":
+            calibrate(args.spec)
+        else:
+            score(args.spec, args.calibration_identity_sha256)
     elif args.action == "follow":
         from xuannv_embedding.training.experiment_schedule import main as follow_main
 

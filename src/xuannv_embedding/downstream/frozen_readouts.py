@@ -65,14 +65,18 @@ class FrozenReadout:
         x = _matrix(features, self.metadata["feature_dtype"])
         if x.shape[1] != self.metadata["channels"]:
             raise ValueError("prediction dimensions differ from the frozen readout")
+        if not len(x):
+            return np.empty(0, dtype=x.dtype)
         if self.kind == "Q":
             query = x.copy()
             query /= np.maximum(1e-12, np.linalg.norm(query, axis=1, keepdims=True))
             return (query @ self.arrays["prototypes"].T).max(1)
-        # Preserve StandardScaler's two in-place casts for float32 calibration parity.
-        query = x.copy()
-        query -= self.arrays["mean"]
-        query /= self.arrays["scale"]
+        # Replay the installed scaler's dtype and layout rules without fitting.
+        scaler = StandardScaler()
+        scaler.mean_ = self.arrays["mean"]
+        scaler.scale_ = self.arrays["scale"]
+        scaler.n_features_in_ = self.metadata["channels"]
+        query = scaler.transform(x)
         values = query @ self.arrays["coef"].T + self.arrays["intercept"]
         if self.kind == "C":
             return values.ravel()
@@ -251,6 +255,11 @@ def load_readout(root: Path, expected_identity_sha256: str) -> FrozenReadout:
     if sha(root / "parameters.npz") != identity["parameters_sha256"]:
         raise ValueError("frozen readout parameters changed")
     metadata, kind = identity["metadata"], identity["kind"]
+    if kind != "Q" and (
+        metadata["numpy_version"] != np.__version__
+        or metadata["sklearn_version"] != sklearn.__version__
+    ):
+        raise ValueError("frozen numerical library versions differ from calibration")
     dimensions = metadata["channels"]
     if (
         type(dimensions) is not int
