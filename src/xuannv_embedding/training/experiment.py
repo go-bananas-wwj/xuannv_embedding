@@ -560,16 +560,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-config", type=Path, required=True)
     p.add_argument("--freeze-base", action="store_true")
     p.add_argument("--highres-encoding", choices=["native", "transformer"], default="transformer")
-    p = sub.add_parser("reconstruct")
-    p.add_argument("--config", type=Path, required=True)
-    p.add_argument("--cache", type=Path, required=True)
-    p.add_argument("--checkpoint", type=Path, required=True)
-    p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--device", required=True)
-    p.add_argument("--target", required=True)
-    p.add_argument("--months", nargs="+", type=int, required=True)
-    p.add_argument("--aliases", nargs="*", default=[])
-    p.add_argument("--context", choices=["offline", "prefix"], default="offline")
+    for action in ("reconstruct", "reconstruct-ridge"):
+        p = sub.add_parser(action)
+        p.add_argument("--config", type=Path, required=True)
+        p.add_argument("--cache", type=Path, required=True)
+        p.add_argument("--checkpoint", type=Path, required=True)
+        p.add_argument("--output", type=Path, required=True)
+        p.add_argument("--device", required=True)
+        p.add_argument("--target", required=True)
+        p.add_argument("--months", nargs="+", type=int, required=True)
+        p.add_argument("--aliases", nargs="*", default=[])
+        p.add_argument("--context", choices=["offline", "prefix"], default="offline")
+        if action == "reconstruct-ridge":
+            p.add_argument("--alpha", type=float, default=10.0)
+            p.add_argument("--sample-stride", type=int, default=8)
     p = sub.add_parser("report-multitask")
     p.add_argument("--plan", type=Path, required=True)
     p.add_argument("--baseline-verification", type=Path, required=True)
@@ -655,6 +659,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.downstream.reconstruction import run as reconstruct_run
 
         reconstruct_run(args)
+    elif args.action == "reconstruct-ridge":
+        from xuannv_embedding.downstream.common_reconstruction import run as common_reconstruction
+
+        common_reconstruction(args)
     elif args.action == "report-multitask":
         from xuannv_embedding.downstream.multitask_report import run as report_multitask
 
