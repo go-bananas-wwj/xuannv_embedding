@@ -86,3 +86,24 @@ xuannv experiment report-multitask --plan /path/T0_followup_plan.json \
 不更换分母。未定义的 R² 保留为空并记录定义条件数。负结果不会被转换成改善结论。
 命令只生成待审阅制品；审阅、编译、提交 Git、同步 Overleaf 并核对远端提交之后，
 才能启动下一训练组。失败或未完成的运行仍需单独记录状态及原因，不能生成完成报告。
+
+## 缺源与逐月诊断导出
+
+`experiment export --drop-source <source...>` 在全部月份同时清零指定源的像元和可用性，
+不修改缓存或共享的重建真值。`--prefix-month <index>` 的月份索引从0开始，保留该月及
+以前的输入，屏蔽所有源的后续月份及无日期静态输入；它不证明训练权重没有见过未来。
+消融导出记录完整输入条件，`input_masks.json` 保存每图块原始/修改后掩码哈希及可用比例。
+若数据源原本不可用，应报告该消融没有移除额外信息，不能将零差值解释为该源没有作用。
+
+```bash
+xuannv experiment export --config /path/config.yaml --cache /path/cache \
+  --checkpoint /path/run/epoch_0200.pt --output /path/no-detail-export \
+  --device npu:0 --batch-size 4 --drop-source highres_optical
+```
+
+多任务评价 spec 的 `models.<name>.month_index` 可选择月度 NPZ 中的指定月份；省略时仍读取
+最后一月。`spec.month`、导出月份和NPZ时间戳必须一致，不允许读取前缀截止时间之后的表征。
+已合并为单月数组的 `array` 输入只支持它登记的最后一月。静态年度参考地图的逐月读出属于
+表示诊断，不能据此报告月度地物变化真值或变化检测F1。当前诊断重新拟合相同预算的读出器，
+因此反映缺源后的可读出信息，并不等同于部署中冻结读出器时的性能变化。
+输入删减也不等同于从头不使用该源训练；训练增益仍需相应同预算训练对照。

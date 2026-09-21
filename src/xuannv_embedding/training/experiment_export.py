@@ -11,6 +11,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 
 from xuannv_embedding.config import Config
+from xuannv_embedding.data.observation_ablation import ablate_inputs, mask_audit
 from xuannv_embedding.data.raster_dataset import collate_region_batch
 from xuannv_embedding.export.embedding import export_embedding_batches
 from xuannv_embedding.training.checkpoint import load_training_checkpoint
@@ -28,6 +29,17 @@ def run(args: argparse.Namespace) -> None:
     if args.batch_size < 1:
         raise ValueError("batch_size must be positive")
     config = Config.from_yaml(args.config)
+    dropped = getattr(args, "drop_source", [])
+    prefix = getattr(args, "prefix_month", None)
+    if len(set(dropped)) != len(dropped) or not set(dropped) <= set(config.model.input_sources):
+        raise ValueError("ablation sources must be unique registered inputs")
+    if prefix is not None and (
+        type(prefix) is not int or not 0 <= prefix < len(config.data.months)
+    ):
+        raise ValueError("invalid prefix month")
+    ablation = bool(dropped) or prefix is not None
+    if ablation and getattr(args, "probe_output", None):
+        raise ValueError("ablation requires an explicitly registered downstream evaluation")
     cache_path = args.cache / "cache.json"
     document = json.loads(cache_path.read_text())
     training = json.loads((args.checkpoint.parent / "run.json").read_text())
@@ -88,6 +100,15 @@ def run(args: argparse.Namespace) -> None:
         ),
         "adaptation": adaptation,
     }
+    if ablation:
+        metadata["masking"] = "registered inference input ablation; targets unchanged"
+        metadata["input_ablation"] = {
+            "dropped_sources": sorted(dropped),
+            "last_visible_month_index": prefix,
+            "last_visible_month": config.data.months[prefix] if prefix is not None else None,
+            "undated_static_inputs": "hidden" if prefix is not None else "unchanged unless dropped",
+            "training_time_causality_claim": False,
+        }
     del state
     device, distributed, _ = _setup_device(args.device)
     if distributed:
@@ -96,6 +117,7 @@ def run(args: argparse.Namespace) -> None:
     _json(args.output / "run.json", metadata)
     started = time.monotonic()
     paths = []
+    input_audits = []
     try:
         loader = DataLoader(
             CachedSamples(document, list(range(len(document["records"])))),
@@ -104,6 +126,14 @@ def run(args: argparse.Namespace) -> None:
             collate_fn=collate_region_batch,
         )
         for batch in loader:
+            if ablation:
+                original_audit = mask_audit(batch)
+                batch = ablate_inputs(batch, dropped, last_month=prefix)
+                changed_audit = mask_audit(batch)
+                input_audits.extend(
+                    {"original": before, "ablated": after}
+                    for before, after in zip(original_audit, changed_audit, strict=True)
+                )
             written = export_embedding_batches(
                 system.model, [batch], args.output / "embeddings", device=device
             )
@@ -117,6 +147,9 @@ def run(args: argparse.Namespace) -> None:
             _json(args.output / "status.json", status)
             if len(paths) % 20 == 0:
                 print(json.dumps(status), flush=True)
+        if ablation:
+            _json(args.output / "input_masks.json", input_audits)
+            metadata["input_masks_sha256"] = _sha(args.output / "input_masks.json")
         _json(
             args.output / "manifest.json",
             {

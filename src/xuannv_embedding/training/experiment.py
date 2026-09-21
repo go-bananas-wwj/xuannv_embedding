@@ -609,6 +609,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--device", required=True)
     p.add_argument("--batch-size", type=int, default=1)
+    p.add_argument("--drop-source", nargs="*", default=[])
+    p.add_argument("--prefix-month", type=int)
     p.add_argument("--probe-output", type=Path)
     p.add_argument("--probe-slots", type=Path)
     p = sub.add_parser("queue")

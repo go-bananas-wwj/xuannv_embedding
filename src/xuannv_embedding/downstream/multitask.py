@@ -123,10 +123,24 @@ def _task_labels(prepared, active):
     return result
 
 
+def export_month_index(model, manifest):
+    count = len(manifest["months"])
+    index = model.get("month_index", count - 1)
+    if type(index) is not int or not 0 <= index < count:
+        raise ValueError("invalid export month index")
+    if "array" in model and index != count - 1:
+        raise ValueError("prepared array only registers the final export month")
+    prefix = manifest.get("input_ablation", {}).get("last_visible_month_index")
+    if prefix is not None and index > prefix:
+        raise ValueError("requested readout month is beyond the future-input cutoff")
+    return index
+
+
 def _features(model, records, active, out):
     """Validate identity before using a prepared array or a per-tile export."""
     manifest_path = Path(model["manifest"])
     manifest = json.loads(manifest_path.read_text())
+    month_index = export_month_index(model, manifest)
     exported = manifest["records"]
     if len(exported) != len(records):
         raise ValueError("export record count mismatch")
@@ -134,6 +148,8 @@ def _features(model, records, active, out):
         if any(exported[i][k] != records[i][k] for k in ("patch_id", "bounds")):
             raise ValueError("export grid/order mismatch")
     metadata = {"manifest_sha256": sha(manifest_path)}
+    metadata["month"] = manifest["months"][month_index]
+    metadata["input_ablation"] = manifest.get("input_ablation")
     if "array" in model:
         path = Path(model["array"])
         metadata["array_sha256"] = sha(path)
@@ -156,7 +172,12 @@ def _features(model, records, active, out):
                 raise ValueError("embedding digest mismatch")
             digests[records[i]["patch_id"]] = digest
             with np.load(path) as f:
-                x[j] = f["embedding"][-1].transpose(1, 2, 0)
+                if f["embedding"].shape[0] != len(manifest["months"]):
+                    raise ValueError("embedding month count differs from manifest")
+                expected_time = int(manifest["months"][month_index].replace("-", ""))
+                if int(f["timestamps"][month_index]) != expected_time:
+                    raise ValueError("embedding timestamp differs from selected month")
+                x[j] = f["embedding"][month_index].transpose(1, 2, 0)
         x.flush()
         metadata["tile_sha256"] = digests
     if not np.isfinite(x).all():
@@ -267,7 +288,8 @@ def run(args):
     if prepared_identity["cache_sha256"] != sha(cache_path):
         raise ValueError("label cache identity mismatch")
     export_manifest = json.loads(Path(spec["models"][args.model]["manifest"]).read_text())
-    if export_manifest["months"][-1] != spec["month"]:
+    month_index = export_month_index(spec["models"][args.model], export_manifest)
+    if export_manifest["months"][month_index] != spec["month"]:
         raise ValueError("evaluation month differs from export")
     for part in ("train", "validation", "test", "buffer"):
         if export_manifest["split"][part] != cache["split"][part]:
