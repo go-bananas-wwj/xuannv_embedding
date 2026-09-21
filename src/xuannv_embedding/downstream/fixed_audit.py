@@ -431,6 +431,7 @@ def main(argv=None):
             "compare-prepare",
             "compare-run",
             "compare-report",
+            "multitask",
         ],
     )
     p.add_argument("--spec", type=Path, required=True)
@@ -438,7 +439,11 @@ def main(argv=None):
     p.add_argument("--task")
     p.add_argument("--device", default="cpu")
     args = p.parse_args(argv)
-    if args.stage.startswith("compare-"):
+    if args.stage == "multitask":
+        from xuannv_embedding.downstream import multitask
+
+        multitask.run(args)
+    elif args.stage.startswith("compare-"):
         from xuannv_embedding.downstream import product_comparison
 
         if args.stage == "compare-prepare":
