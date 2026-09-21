@@ -20,6 +20,12 @@ from xuannv_embedding.data_process.annual_quality import LOWRES_CHANNELS, relati
 from xuannv_embedding.data_process.observation_raster import parent_geometry
 from xuannv_embedding.utils.manifest import load_manifest
 
+# GDAL 默认在每次 open 时 readdir 所在目录以探测 sidecar。年度栅格按 source/年/月 组织，
+# 单目录可达十万量级文件，这会让网络文件系统上的 open 比实际解码贵一个数量级。
+# 训练、导出与审计都经过本模块，因此在导入时统一关闭；显式设置的环境变量优先。
+os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
+os.environ.setdefault("GDAL_PAM_ENABLED", "NO")
+
 
 class AnnualObservationDataset(Dataset):
     """Read annual manifests without resizing, averaging or inventing observations."""
@@ -177,7 +183,6 @@ def check_manifest(task: tuple[Path, int]) -> dict:
     """Exercise real native-grid reads and collation for a deterministic sample."""
     path, count = task
     torch.set_num_threads(2)
-    os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "TRUE")
     dataset = AnnualObservationDataset(path, allow_candidates=True)
     ranked = sorted(
         (hashlib.sha256(record.patch_id.encode()).digest(), index)

@@ -189,3 +189,13 @@ def test_build_filters_bad_observation_and_reads_native_annual_data(tmp_path):
     target.write_bytes(b"corrupt")
     with pytest.raises(ValueError, match="checksum mismatch"):
         verify_observation(tmp_path, record)
+
+
+def test_annual_dataset_import_disables_gdal_directory_probing():
+    """单目录十万量级文件时，sidecar 探测让 open 贵一个数量级；三条读栅格路径都要关。"""
+    import os
+
+    import xuannv_embedding.data.annual_dataset  # noqa: F401
+
+    assert os.environ["GDAL_DISABLE_READDIR_ON_OPEN"] == "EMPTY_DIR"
+    assert os.environ["GDAL_PAM_ENABLED"] == "NO"
