@@ -341,12 +341,12 @@ def run(args):
         r"\begin{table*}[t]",
         r"\centering\small",
         r"\caption{相同五图块预算下的产品比较。数值为三次支持抽样均值（\%）；OSM与ESRI分别汇总，不能合并解释为独立区域泛化精度。}\label{tab:product-main}",
-        r"\begin{tabular}{llrrrrrr}\toprule",
+        r"\begin{tabular}{llrrrrrrrrr}\toprule",
         (
-            r"参考标签 & 分类器 & \multicolumn{2}{c}{xuannv} & "
-            r"\multicolumn{2}{c}{AlphaEarth Foundations} & \multicolumn{2}{c}{原始多源特征}\\"
+            r"参考标签 & 分类器 & \multicolumn{3}{c}{xuannv} & "
+            r"\multicolumn{3}{c}{AlphaEarth Foundations} & \multicolumn{3}{c}{原始多源特征}\\"
         ),
-        r" & & F1 & AP & F1 & AP & F1 & AP\\\midrule",
+        r" & & F1 & AP & IoU & F1 & AP & IoU & F1 & AP & IoU\\\midrule",
     ]
     for r in macro:
         if r["budget"] != 5:
@@ -354,12 +354,35 @@ def run(args):
         table.append(
             f"{r['family']} & {dict(ridge='Ridge',rf='随机森林',svm='RBF-SVM')[r['head']]} & "
             + " & ".join(
-                f"{100*r['models'][m][metric]:.2f}" for m in MODELS for metric in ("f1", "ap")
+                f"{100*r['models'][m][metric]:.2f}"
+                for m in MODELS
+                for metric in ("f1", "ap", "iou")
             )
             + r"\\"
         )
     table.extend([r"\bottomrule\end{tabular}", r"\end{table*}"])
     (out / "product_main.tex").write_text("\n".join(table) + "\n")
+    for head in ("ridge", "rf", "svm"):
+        detail = table[:6].copy()
+        title = {"ridge": "Ridge", "rf": "随机森林", "svm": "RBF-SVM"}[head]
+        detail[2] = (
+            r"\caption{五图块" + title + r"逐任务结果。AP、F1及IoU均为三次支持抽样均值（\%）；"
+            r"两类参考分别列出。}\label{tab:product-" + head + "-detail}"
+        )
+        detail[4] = detail[4].replace("分类器", "任务")
+        for item in summary:
+            if item["head"] != head or item["budget"] != 5 or item["task"] == "macro":
+                continue
+            detail.append(
+                f"{item['family']} & {TASK_NAMES[item['task']]} & "
+                + " & ".join(
+                    f"{100*item['models'][m][k]:.2f}" for m in MODELS for k in ("f1", "ap", "iou")
+                )
+                + r"\\"
+            )
+        detail.extend([r"\bottomrule\end{tabular}", r"\end{table*}"])
+        (out / f"product_{head}_detail.tex").write_text("\n".join(detail) + "\n")
+
     paired_svm_cost_cases = set.intersection(
         *[
             {
