@@ -6,6 +6,8 @@ import torch.distributed.nn.functional as distributed_nn
 import torch.nn.functional as F
 from torch import nn
 
+from xuannv_embedding.training.distillation import masked_latent_prediction_loss
+
 
 def reconstruction_loss(
     pred: torch.Tensor,
@@ -337,6 +339,7 @@ class TotalLoss(nn.Module):
         semantic_probe_hard_negative_ratio: float = 0.0,
         semantic_probe_hard_negative_weight: float = 0.0,
         semantic_probe_hard_negative_warmup_epochs: int = 0,
+        latent_prediction_weight: float = 0.0,
     ) -> None:
         super().__init__()
         self.target_cfg = target_cfg
@@ -344,6 +347,7 @@ class TotalLoss(nn.Module):
         self.uniformity_warmup_epochs = int(uniformity_warmup_epochs)
         self.uniformity_temperature = float(uniformity_temperature)
         self.semantic_probe_weight = float(semantic_probe_weight)
+        self.latent_prediction_weight = float(latent_prediction_weight)
         self.semantic_probe_warmup_epochs = int(semantic_probe_warmup_epochs)
         self.semantic_probe_tasks = tuple(semantic_probe_tasks)
         if self.semantic_probe_tasks and semantic_probe_embed_dim is None:
@@ -389,6 +393,7 @@ class TotalLoss(nn.Module):
         masks: dict[str, torch.Tensor],
         supervised_labels: dict[str, torch.Tensor] | None = None,
         supervised_label_masks: dict[str, torch.Tensor] | None = None,
+        teacher_output=None,
     ) -> dict[str, torch.Tensor]:
         embedding_map = output.embedding_map
         validity = getattr(output, "validity_mask", None)
@@ -449,6 +454,18 @@ class TotalLoss(nn.Module):
         )
         weighted_semantic = semantic_probe * semantic_weight
         total = total_recon + weighted_uniformity + weighted_semantic
+        if teacher_output is None and self.latent_prediction_weight > 0.0:
+            raise ValueError("latent_prediction_weight requires an explicit teacher output")
+        if self.latent_prediction_weight == 0.0:
+            latent_prediction = embedding_map.sum() * 0.0
+        else:
+            latent_prediction = masked_latent_prediction_loss(
+                embedding_map,
+                teacher_output.embedding_map,
+                getattr(teacher_output, "validity_mask", None),
+            )
+        weighted_latent_prediction = latent_prediction * self.latent_prediction_weight
+        total = total + weighted_latent_prediction
 
         result.update(
             {
@@ -460,6 +477,9 @@ class TotalLoss(nn.Module):
                 "semantic_probe": semantic_probe,
                 "semantic_probe_weighted": weighted_semantic,
                 "semantic_probe_weight": embedding_map.new_tensor(semantic_weight),
+                "latent_prediction": latent_prediction,
+                "latent_prediction_weighted": weighted_latent_prediction,
+                "latent_prediction_weight": embedding_map.new_tensor(self.latent_prediction_weight),
             }
         )
         for name, value in semantic_stats.items():

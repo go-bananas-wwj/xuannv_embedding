@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import torch
 import torch.nn.functional as F
 
+from xuannv_embedding.training.distillation import masked_latent_prediction_loss
 from xuannv_embedding.training.losses import (
     SemanticProbeLoss,
     TotalLoss,
@@ -42,6 +43,19 @@ def test_uniformity_accepts_monthly_embeddings() -> None:
 
     assert loss.ndim == 0
     assert torch.isfinite(loss)
+
+
+def test_latent_prediction_uses_teacher_without_gradient() -> None:
+    student = F.normalize(torch.randn(2, 2, 4, 3, 3), p=2, dim=2).requires_grad_()
+    teacher = F.normalize(torch.randn(2, 2, 4, 3, 3), p=2, dim=2).requires_grad_()
+    validity = torch.ones(2, 2, 1, 3, 3)
+
+    loss = masked_latent_prediction_loss(student, teacher, validity)
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert student.grad is not None
+    assert teacher.grad is None
 
 
 def test_semantic_probe_supports_hard_negative_warmup() -> None:

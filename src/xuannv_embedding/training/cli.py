@@ -25,6 +25,7 @@ from xuannv_embedding.training.checkpoint import (
     load_training_checkpoint,
     save_training_checkpoint,
 )
+from xuannv_embedding.training.distillation import freeze_teacher
 from xuannv_embedding.training.losses import TotalLoss
 from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.optimizer import build_optimizer, build_scheduler
@@ -64,6 +65,7 @@ def build_training_system(config: Config) -> TrainingSystem:
         semantic_probe_hard_negative_warmup_epochs=(
             training.semantic_probe_hard_negative_warmup_epochs
         ),
+        latent_prediction_weight=training.latent_prediction_weight,
     )
     return TrainingSystem(model, criterion)
 
@@ -181,6 +183,7 @@ class RegionBatchStream:
         seed: int,
         max_steps: int | None,
         masking_config: dict[str, Any],
+        teacher_enabled: bool = False,
         start_epoch: int = 0,
     ) -> None:
         if not loaders or len(loaders) != len(weights):
@@ -190,6 +193,7 @@ class RegionBatchStream:
         self.seed = seed
         self.max_steps = max_steps
         self.masking_config = masking_config
+        self.teacher_enabled = bool(teacher_enabled)
         if start_epoch < 0:
             raise ValueError("start_epoch 必须是非负整数")
         self.epoch = start_epoch
@@ -211,7 +215,40 @@ class RegionBatchStream:
             except StopIteration:
                 iterators[index] = iter(self.loaders[index])
                 batch = next(iterators[index])
-            yield apply_input_masking(batch, self.masking_config)
+            if self.teacher_enabled:
+                teacher_view = _clone_tensor_tree(
+                    {
+                        key: batch[key]
+                        for key in (
+                            "source_frames",
+                            "source_masks",
+                            "source_pixel_masks",
+                            "timestamps",
+                            "highres_frames",
+                            "highres_masks",
+                            "highres_months",
+                            "output_months",
+                        )
+                        if key in batch
+                    }
+                )
+                batch = apply_input_masking(batch, self.masking_config)
+                batch["teacher_view"] = teacher_view
+            else:
+                batch = apply_input_masking(batch, self.masking_config)
+            yield batch
+
+
+def _clone_tensor_tree(value: Any) -> Any:
+    if isinstance(value, torch.Tensor):
+        return value.clone()
+    if isinstance(value, dict):
+        return {key: _clone_tensor_tree(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_clone_tensor_tree(child) for child in value]
+    if isinstance(value, tuple):
+        return tuple(_clone_tensor_tree(child) for child in value)
+    return value
 
 
 def build_region_batch_stream(
@@ -221,6 +258,7 @@ def build_region_batch_stream(
     max_records: int | None,
     max_steps: int | None,
     start_epoch: int = 0,
+    teacher_enabled: bool = False,
 ) -> RegionBatchStream:
     from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
 
@@ -249,6 +287,7 @@ def build_region_batch_stream(
         seed=config.experiment.seed,
         max_steps=max_steps,
         masking_config=asdict(config.training.input_masking),
+        teacher_enabled=teacher_enabled,
         start_epoch=start_epoch,
     )
 
@@ -386,6 +425,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", type=Path)
+    parser.add_argument("--teacher-checkpoint", type=Path)
+    parser.add_argument("--teacher-config", type=Path)
     parser.add_argument("--device")
     parser.add_argument("--synthetic", action="store_true")
     parser.add_argument("--steps", type=int, default=0)
@@ -410,6 +451,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     config_sha256 = hashlib.sha256(args.config.read_bytes()).hexdigest()
     source_schema = {name: asdict(value) for name, value in config.model.input_sources.items()}
     regions = [dataset.region for dataset in config.data.datasets]
+    teacher_identity = None
+    if (args.teacher_checkpoint is None) != (args.teacher_config is None):
+        parser.error("--teacher-checkpoint 与 --teacher-config 必须一起提供")
+    if args.teacher_checkpoint is not None:
+        teacher_config = Config.from_yaml(args.teacher_config)
+        if teacher_config.model != config.model or teacher_config.data.months != config.data.months:
+            parser.error("教师与学生必须具有相同的模型与月份合同")
+        if teacher_config.data.target_months != config.data.target_months:
+            parser.error("教师与学生 target_months 必须一致")
+        teacher_system = build_training_system(teacher_config)
+        teacher_config_sha = hashlib.sha256(args.teacher_config.read_bytes()).hexdigest()
+        load_training_checkpoint(
+            args.teacher_checkpoint,
+            model=teacher_system.model,
+            device=device,
+            expected_source_schema=source_schema,
+            expected_regions=[dataset.region for dataset in teacher_config.data.datasets],
+            expected_config_sha256=teacher_config_sha,
+        )
+        with args.teacher_checkpoint.open("rb") as handle:
+            teacher_identity = {
+                "checkpoint_sha256": hashlib.file_digest(handle, "sha256").hexdigest(),
+                "config_sha256": teacher_config_sha,
+            }
+        system.set_teacher(freeze_teacher(teacher_system.model), device=device)
+    elif config.training.latent_prediction_weight > 0.0:
+        parser.error("启用 latent_prediction_weight 时必须提供 --teacher-checkpoint")
     optimizer = build_optimizer(
         system, lr=config.training.lr, weight_decay=config.training.weight_decay
     )
@@ -432,6 +500,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_regions=regions,
         )
         start_epoch = int(state["epoch"]) + 1
+        if state["metrics"].get("teacher_identity") != teacher_identity:
+            raise ValueError("恢复训练的 teacher_identity 不一致")
     wrapped: nn.Module = system
     if distributed:
         # precision_scale=1 时 AEFModel 会跳过 upsample_head（编码器输出已是输入分辨率），
@@ -450,6 +520,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             spatial_size=args.spatial_size,
             missing_sources=set(args.missing_source),
         )
+        if system.teacher_model is not None:
+            teacher_view = _clone_tensor_tree(batch)
+            batch = apply_input_masking(batch, asdict(config.training.input_masking))
+            batch["teacher_view"] = teacher_view
         batches: Any = [batch] * args.steps
     else:
         batches = build_region_batch_stream(
@@ -458,6 +532,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_records=args.max_records,
             max_steps=args.steps or None,
             start_epoch=start_epoch,
+            teacher_enabled=system.teacher_model is not None,
         )
     try:
         epoch_count = _epoch_count(config.training.epochs, args.epochs, start_epoch)
@@ -486,6 +561,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 metrics={
                     "checkpoint_kind": "periodic",
                     "completed_epoch": completed_epoch,
+                    "teacher_identity": teacher_identity,
                     "source_code_sha256": source_code_sha256,
                 },
             )
@@ -522,6 +598,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "spatial_size": args.spatial_size,
             "device_type": device.type,
             "source_code_sha256": source_code_sha256,
+            "teacher_identity": teacher_identity,
             "global_samples": global_samples,
             "wall_seconds": wall_seconds,
             "global_samples_per_second": global_samples / wall_seconds,

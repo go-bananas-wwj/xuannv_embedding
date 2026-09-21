@@ -12,6 +12,7 @@ import torch
 from torch import nn
 from torch.optim import Optimizer
 
+from xuannv_embedding.training.distillation import freeze_teacher
 from xuannv_embedding.training.losses import TotalLoss
 
 
@@ -80,10 +81,27 @@ def _observe_gradient_norm(system: nn.Module, optimizer: Optimizer, scaler: Any 
 class TrainingSystem(nn.Module):
     """把模型与带参数的 semantic probe 置于同一 DDP 边界。"""
 
-    def __init__(self, model: nn.Module, criterion: TotalLoss) -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        criterion: TotalLoss,
+        teacher: nn.Module | None = None,
+    ) -> None:
         super().__init__()
         self.model = model
         self.criterion = criterion
+        self.teacher_model = None if teacher is None else freeze_teacher(teacher)
+
+    def train(self, mode: bool = True) -> TrainingSystem:
+        super().train(mode)
+        if self.teacher_model is not None:
+            self.teacher_model.eval()
+        return self
+
+    def set_teacher(self, teacher: nn.Module, device: torch.device | None = None) -> None:
+        if device is not None:
+            teacher.to(device)
+        self.teacher_model = freeze_teacher(teacher)
 
     def forward(self, batch: dict[str, Any]) -> dict[str, torch.Tensor]:
         optional = {key: batch[key] for key in ("highres_months", "output_months") if key in batch}
@@ -96,12 +114,32 @@ class TrainingSystem(nn.Module):
             source_pixel_masks=batch.get("source_pixel_masks"),
             **optional,
         )
+        teacher_output = None
+        teacher_view = batch.get("teacher_view")
+        if self.teacher_model is not None:
+            if teacher_view is None:
+                raise ValueError("Frozen teacher requires an explicit teacher_view")
+            with torch.no_grad():
+                teacher_output = self.teacher_model(
+                    teacher_view["source_frames"],
+                    teacher_view["source_masks"],
+                    teacher_view["timestamps"],
+                    teacher_view.get("highres_frames"),
+                    teacher_view.get("highres_masks"),
+                    source_pixel_masks=teacher_view.get("source_pixel_masks"),
+                    **{
+                        key: teacher_view[key]
+                        for key in ("highres_months", "output_months")
+                        if key in teacher_view
+                    },
+                )
         return self.criterion(
             output,
             batch["targets"],
             batch["target_masks"],
             batch.get("supervised_labels"),
             batch.get("supervised_label_masks"),
+            teacher_output=teacher_output,
         )
 
 

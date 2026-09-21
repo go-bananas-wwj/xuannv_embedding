@@ -236,6 +236,7 @@ class TrainingConfig:
     semantic_probe_hard_negative_ratio: float = 0.0
     semantic_probe_hard_negative_weight: float = 0.0
     semantic_probe_hard_negative_warmup_epochs: int = 0
+    latent_prediction_weight: float = 0.0
     input_masking: InputMaskingConfig = field(default_factory=InputMaskingConfig)
 
 
@@ -557,6 +558,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "semantic_probe_hard_negative_ratio",
         "semantic_probe_hard_negative_weight",
         "semantic_probe_hard_negative_warmup_epochs",
+        "latent_prediction_weight",
         "input_masking",
     }
     required = {
@@ -646,6 +648,10 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         semantic_probe_hard_negative_warmup_epochs=_non_negative_int(
             raw.get("semantic_probe_hard_negative_warmup_epochs", 0),
             "training.semantic_probe_hard_negative_warmup_epochs",
+        ),
+        latent_prediction_weight=_non_negative_float(
+            raw.get("latent_prediction_weight", 0.0),
+            "training.latent_prediction_weight",
         ),
         input_masking=_parse_masking(raw.get("input_masking", {}), model),
     )
