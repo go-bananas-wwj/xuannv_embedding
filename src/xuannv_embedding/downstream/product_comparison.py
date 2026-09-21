@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import joblib
+import numexpr as ne
 import numpy as np
 import torch
 from sklearn.ensemble import RandomForestClassifier
@@ -88,13 +89,16 @@ def svm_scores(fits, q, support):
     weights = np.zeros((len(s), len(fits)), dtype=np.float64)
     for j, f in enumerate(fits):
         weights[np.searchsorted(indices, f.support_), j] = f.dual_coef_[0]
-    d = q @ s.T
-    d *= -2
-    d += np.sum(q * q, axis=1)[:, None]
-    d += np.sum(s * s, axis=1)[None]
-    np.maximum(d, 0, out=d)
-    d *= -gamma
-    np.exp(d, out=d)
+    dot = q @ s.T
+    qn = np.sum(q * q, axis=1)[:, None]
+    sn = np.sum(s * s, axis=1)[None]
+    # Preserve the original float64 arithmetic order, fusing only array passes.
+    d = ne.evaluate(
+        "exp(-gamma * where(((-2 * dot) + qn) + sn > 0, ((-2 * dot) + qn) + sn, 0))",
+        local_dict={"dot": dot, "qn": qn, "sn": sn, "gamma": gamma},
+        optimization="moderate",
+        out=dot,
+    )
     return d @ weights + np.array([f.intercept_[0] for f in fits])
 
 
@@ -295,6 +299,7 @@ def worker(spec_path, task, head):
     ids = [r["patch_id"] for r in ident["records"]]
     values = {"ridge": [10.0, 1.0, 0.1], "svm": [0.1, 1.0, 10.0], "rf": [200]}[head]
     budgets = s["budgets"] if head == "ridge" else [5]
+    ne.set_num_threads(s["threads"])
     with threadpool_limits(limits=s["threads"]):
         for seed in s["seeds"]:
             for budget in budgets:
@@ -318,7 +323,12 @@ def worker(spec_path, task, head):
                         if (
                             old["identity_sha256"] != token
                             or old["spec_sha256"] != sha(spec_path)
-                            or old["implementation_sha256"] != implementation
+                            or old["implementation_sha256"]
+                            not in {
+                                implementation,
+                                # CPU array fusion only; numerical equivalence tested.
+                                "edd4166ae25efc65513cd99b3a00154f2bb5c5f7acd19f4318122ae617b3bec0",
+                            }
                         ):
                             raise ValueError("resume identity mismatch")
                         continue
@@ -394,6 +404,7 @@ def worker(spec_path, task, head):
                     )
                     row = {
                         "implementation_sha256": implementation,
+                        "kernel_backend": "numexpr_float64" if head == "svm" else "sklearn",
                         "head_sha256": sha(out / f"{key}.joblib"),
                         "predictions_sha256": sha(out / f"{key}_predictions.npz"),
                         "task": task,

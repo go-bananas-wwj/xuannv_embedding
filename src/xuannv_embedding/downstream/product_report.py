@@ -136,10 +136,18 @@ def run(args):
             "test_seconds",
             "labeled_pixels",
             "fitted_pixels",
+            "kernel_backend",
+            "implementation_sha256",
         ]
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         for r in rows:
+            r = {
+                **r,
+                "kernel_backend": r.get(
+                    "kernel_backend", "numpy_float64" if r["head"] == "svm" else "sklearn"
+                ),
+            }
             writer.writerow(
                 {k: r["metrics"][k] if k in ("f1", "ap", "iou") else r[k] for k in fields}
             )
@@ -324,6 +332,7 @@ def run(args):
                     and r["head"] == h
                     and r["model"] == model
                     and r["budget"] == 5
+                    and (h != "svm" or r.get("kernel_backend") == "numexpr_float64")
                 ]
                 costs[f"{family}/{h}/{model}"] = {
                     k: float(np.median([r[k] for r in rr]))
@@ -335,7 +344,37 @@ def run(args):
                         "fitted_pixels",
                     )
                 }
+                costs[f"{family}/{h}/{model}"]["measured_configurations"] = len(rr)
     dump(out / "costs.json", costs)
+    cost_lines = [
+        r"\begin{table*}[t]",
+        r"\centering\small",
+        r"\caption{五图块设置的CPU读出成本中位数（秒）。候选拟合包括全部正则候选；"
+        r"验证包含候选预测、AP计算与阈值选择；测试预测覆盖57图块。"
+        r"测量在最多四任务并行、每任务四线程的运行条件下进行，"
+        r"SVM仅汇总数值等价的融合CPU实现，N为计时样本数；不包括影像准备、嵌入生成和人工标注。}\label{tab:product-cost}",
+        r"\begin{tabular}{llrrrr}\toprule",
+        r"特征 & 分类器 & N & 候选拟合 & 验证与选择 & 测试预测\\\midrule",
+    ]
+    for model in MODELS:
+        for head in ("ridge", "rf", "svm"):
+            selected = [
+                r
+                for r in rows
+                if r["model"] == model
+                and r["head"] == head
+                and r["budget"] == 5
+                and (head != "svm" or r.get("kernel_backend") == "numexpr_float64")
+            ]
+            fit = np.median([sum(r["fit_seconds_candidates"]) for r in selected])
+            val = np.median([r["validation_seconds"] for r in selected])
+            test = np.median([r["test_seconds"] for r in selected])
+            title = {"ridge": "Ridge", "rf": "随机森林", "svm": "RBF-SVM"}[head]
+            cost_lines.append(
+                f"{model} & {title} & {len(selected)} & {fit:.2f} & {val:.2f} & {test:.2f}" + r"\\"
+            )
+    cost_lines.extend([r"\bottomrule\end{tabular}", r"\end{table*}"])
+    (out / "product_cost.tex").write_text("\n".join(cost_lines) + "\n")
     dump(
         out / "artifacts.json",
         {p.name: sha(p) for p in out.iterdir() if p.is_file() and p.name != "artifacts.json"},
