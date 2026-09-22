@@ -3,8 +3,9 @@
 `downstream.strong_classifiers` fits RF, RBF-SVM and cosine kNN on explicit training support,
 selects SVM C and a classification threshold only on validation data, and saves a reloadable
 readout. It does not choose support tiles, read datasets, lock candidates or replace the
-paired final controller. MLP/convolution readouts and the shared strong-head file workflow
-remain required. Existing pinned training/evaluation experiments are unaffected.
+paired final controller. The companion `neural_readouts` module supplies MLP/convolution
+calibration and replay. The shared strong-head file workflow remains required. Existing
+pinned training/evaluation experiments are unaffected.
 
 The caller must provide the common spatial/validity domain and already paired class-balanced
 training positions from the G5 contract, in registered order. RF and SVM accept no more than
