@@ -594,6 +594,8 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--calibration-identity-sha256", required=True)
     p = sub.add_parser("audit-input-grids")
     p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("export-raw-monthly")
+    p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("summarize-strong")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--test-identity-sha256", required=True)
@@ -712,6 +714,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.downstream.input_grid_audit import audit
 
         audit(args.spec)
+    elif args.action == "export-raw-monthly":
+        from xuannv_embedding.downstream.raw_monthly import export as export_raw
+
+        export_raw(args.spec)
     elif args.action == "summarize-strong":
         from xuannv_embedding.downstream.strong_multitask_report import run as summarize_strong
 
