@@ -51,4 +51,5 @@ validation-label exclusion from fitting, support-only scaling, missing context, 
 inputs and modified payload/runtime rejection. A separate synthetic NPU gate checks both
 heads' forward/backward and saved prediction replay on a reserved idle device. These checks
 are software evidence, not measured superiority of any geographic embedding. The shared
-strong-head file workflow and actual locked-candidate evaluations remain required.
+strong-head file workflow is provided by `strong_multitask`; actual locked-candidate
+evaluations and their paired uncertainty report remain required.

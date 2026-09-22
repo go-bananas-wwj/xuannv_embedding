@@ -4,8 +4,8 @@
 selects SVM C and a classification threshold only on validation data, and saves a reloadable
 readout. It does not choose support tiles, read datasets, lock candidates or replace the
 paired final controller. The companion `neural_readouts` module supplies MLP/convolution
-calibration and replay. The shared strong-head file workflow remains required. Existing
-pinned training/evaluation experiments are unaffected.
+calibration and replay. `strong_multitask` supplies the shared strong-head file workflow.
+Existing pinned training/evaluation experiments are unaffected.
 
 The caller must provide the common spatial/validity domain and already paired class-balanced
 training positions from the G5 contract, in registered order. RF and SVM accept no more than
@@ -50,5 +50,5 @@ Tests verify persisted RF/SVM/kNN predictions, support-only scaling, independent
 neighbor ranking, selected SVM regularization, deterministic ties, kNN pixel caps, empty
 queries, forbidden refitting, payload checks before joblib loading, changed runtime/data,
 and invalid inputs. These are synthetic software checks, not a strong-baseline accuracy
-result. Shared file-backed strong-head calibration/scoring and the actual locked-candidate
-comparison still need integration and execution.
+result. `strong_multitask` supplies shared file-backed calibration/scoring; actual
+locked-candidate comparisons and their paired uncertainty report still need execution.
