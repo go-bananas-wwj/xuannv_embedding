@@ -61,10 +61,9 @@ forests and convolution heads in memory. Failed stages retain a failure record a
 silent overwrite; use a separately registered attempt when recovery is needed. Failed
 scoring explicitly records whether test data access began.
 
-This adds executable common-domain strong-head calibration and scoring; it does not yet
-supply the strong-head paired uncertainty report or certify actual geographic provenance.
-A final report still needs shared tile resampling across methods/heads/support seeds,
-training-realization metric averaging, all head results, undefined-case policy and the
-registered 2000-draw schedule. Actual split-label bundle preparation, external CRS auditing,
-recipe selection/multiple training seeds and final comparisons remain required. Historical
-unstandardized probes must remain separate from these standardized/masked results.
+This adds executable common-domain strong-head calibration and scoring. The companion
+`strong_multitask_report` supplies shared tile resampling, per-realization metric averaging,
+all-head AP intervals and undefined-case handling; see `strong-uncertainty.md`. Actual
+split-label bundle preparation, external CRS auditing, recipe selection/multiple training
+seeds and final comparisons remain required. Historical unstandardized probes must remain
+separate from these standardized/masked results.

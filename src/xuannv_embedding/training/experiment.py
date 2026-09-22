@@ -592,6 +592,11 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--spec", type=Path, required=True)
         if action == "score-strong":
             p.add_argument("--calibration-identity-sha256", required=True)
+    p = sub.add_parser("summarize-strong")
+    p.add_argument("--spec", type=Path, required=True)
+    p.add_argument("--test-identity-sha256", required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--threads", type=int, default=2)
     p = sub.add_parser("summarize-primary")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--test-identity-sha256", required=True)
@@ -701,6 +706,10 @@ def main(argv: list[str] | None = None) -> int:
             calibrate(args.spec)
         else:
             score(args.spec, args.calibration_identity_sha256)
+    elif args.action == "summarize-strong":
+        from xuannv_embedding.downstream.strong_multitask_report import run as summarize_strong
+
+        summarize_strong(args.spec, args.test_identity_sha256, args.output, threads=args.threads)
     elif args.action == "summarize-primary":
         from xuannv_embedding.downstream.paired_multitask_report import run as summarize_primary
 
