@@ -13,9 +13,12 @@ from xuannv_embedding.training.cli import synthetic_batch
 from xuannv_embedding.training.experiment import _sha, public_base_config, run
 
 
-@pytest.mark.parametrize("monthly,transformer", [(False, False), (True, False), (True, True)])
+@pytest.mark.parametrize(
+    "monthly,transformer,train_head",
+    [(False, False, False), (True, False, False), (True, True, False), (True, True, True)],
+)
 def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(
-    tmp_path, monthly, transformer
+    tmp_path, monthly, transformer, train_head
 ):
     torch.set_num_threads(1)
     raw = public_base_config(
@@ -110,6 +113,7 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(
     args.initialize = base_args.output / "best.pt"
     args.base_config = base_args.config
     args.freeze_base = True
+    args.train_semantic_head = train_head
     args.highres_encoding = "transformer" if transformer else "native"
     run(args)
     args.resume = args.output / "latest.pt"
@@ -119,8 +123,22 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(
     adapted = torch.load(args.resume, weights_only=True)
     for k, v in base["model"].items():
         torch.testing.assert_close(v, adapted["model"]["base." + k], rtol=0, atol=0)
+    if train_head:
+        assert any(
+            not torch.equal(v, adapted["criterion"][k])
+            for k, v in base["criterion"].items()
+            if k.startswith("semantic_probe.probes.")
+        )
+        registration = json.loads((args.output / "run.json").read_text())
+        assert registration["adaptation"]["train_semantic_head"] is True
+        # Changing the trainable set on resume must fail, even though shapes match.
+        args.train_semantic_head = False
+        with pytest.raises(ValueError, match="resume provenance mismatch: adaptation"):
+            run(args)
+        args.train_semantic_head = True
     for k, v in base["criterion"].items():
-        torch.testing.assert_close(v, adapted["criterion"][k], rtol=0, atol=0)
+        if not (train_head and k.startswith("semantic_probe.probes.")):
+            torch.testing.assert_close(v, adapted["criterion"][k], rtol=0, atol=0)
     correction = "injectors.1.output.weight" if transformer else "branches.extra.correction.weight"
     assert adapted["model"][correction].abs().sum() > 0
     assert json.loads((args.output / "run.json").read_text())["initialization"] == "registered_base"
@@ -202,3 +220,8 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(
             )
         )
         assert json.loads((destination / "status.json").read_text())["state"] == "complete"
+
+
+def test_semantic_head_training_requires_registered_base():
+    with pytest.raises(ValueError, match="registered adaptation initialization"):
+        run(argparse.Namespace(train_semantic_head=True, initialize=None))

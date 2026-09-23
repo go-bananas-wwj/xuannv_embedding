@@ -278,3 +278,18 @@ def test_synthetic_batch_keeps_missing_highres_out_of_input_and_supervision() ->
     assert torch.count_nonzero(batch["highres_masks"]["highres_sar"]) == 0
     assert torch.count_nonzero(batch["target_masks"]["highres_sar_recon"]) == 0
     assert torch.count_nonzero(batch["highres_masks"]["highres_optical"]) > 0
+
+
+def test_head_only_update_changes_probe_but_preserves_embedding_and_encoder():
+    from xuannv_embedding.training.head_diagnostic import head_only_step
+
+    torch.manual_seed(5)
+    system, batch = _system(), _batch()
+    batch["highres_frames"] = {}
+    batch["highres_masks"] = {}
+    report = head_only_step(system, batch, lr=1e-3, weight_decay=0.01)
+    assert report["embedding_unchanged"]
+    assert report["model_unchanged"]
+    assert report["head_changed"]
+    assert report["gradient_norm"] > 0
+    assert all(name.startswith("criterion.semantic_probe.probes.") for name in report["trainable"])

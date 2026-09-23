@@ -67,6 +67,7 @@ def run(args: argparse.Namespace) -> None:
                 initialize=Path(adaptation["base_checkpoint"]),
                 base_config=Path(adaptation["base_config"]),
                 freeze_base=adaptation["freeze_base"],
+                train_semantic_head=adaptation.get("train_semantic_head", False),
                 highres_encoding=adaptation["highres_encoding"],
                 continue_base=adaptation.get("mode") == "continue_existing_sources",
             ),

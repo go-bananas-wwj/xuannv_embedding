@@ -109,3 +109,20 @@ def test_pairing_rejects_support_changes_and_inconsistent_selection_error(tmp_pa
     (directories[1] / "results.json").write_text(json.dumps(candidate))
     with pytest.raises(ValueError, match="selection error"):
         paired_report(*directories)
+
+
+def test_followup_allows_only_registered_semantic_head_updates():
+    state, base, registration = checkpoint_fixture()
+    base["criterion"]["semantic_probe.probes.task.weight"] = torch.ones(1)
+    state["criterion"]["semantic_probe.probes.task.weight"] = torch.zeros(1)
+    registration["adaptation"] = {"freeze_base": True, "train_semantic_head": True}
+    result = audit_checkpoint(state, base, registration, epochs=2, steps=8)
+    assert result["updated_semantic_tensors"] == 1
+    assert result["frozen_criterion_tensors"] == 1
+    changed = copy.deepcopy(state)
+    changed["criterion"]["b"][0] += 1
+    with pytest.raises(ValueError, match="frozen criterion"):
+        audit_checkpoint(changed, base, registration, epochs=2, steps=8)
+    registration["adaptation"]["train_semantic_head"] = False
+    with pytest.raises(ValueError, match="frozen criterion"):
+        audit_checkpoint(state, base, registration, epochs=2, steps=8)

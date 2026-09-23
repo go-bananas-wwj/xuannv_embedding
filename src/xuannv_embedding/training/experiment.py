@@ -214,6 +214,8 @@ def validate_cached_targets(cached: dict, configured: dict) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
+    if getattr(args, "train_semantic_head", False) and getattr(args, "initialize", None) is None:
+        raise ValueError("train-semantic-head requires registered adaptation initialization")
     config = Config.from_yaml(args.config)
     document = json.loads((args.cache / "cache.json").read_text())
     if document["model_inputs"] != {k: asdict(v) for k, v in config.model.input_sources.items()}:
@@ -548,9 +550,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-config", type=Path)
     p.add_argument("--freeze-base", action="store_true")
     p.add_argument("--continue-base", action="store_true")
+    p.add_argument("--train-semantic-head", action="store_true")
     p.add_argument(
         "--highres-encoding", choices=["native", "resample", "transformer"], default="native"
     )
+    p = sub.add_parser("diagnose-head-only")
+    p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--cache", type=Path, required=True)
+    p.add_argument("--checkpoint", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--device", required=True)
     p = sub.add_parser("diagnose")
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--cache", type=Path, required=True)
@@ -652,6 +661,10 @@ def main(argv: list[str] | None = None) -> int:
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers, include_highres=args.include_highres)
+    elif args.action == "diagnose-head-only":
+        from xuannv_embedding.training.head_diagnostic import run as head_run
+
+        head_run(args)
     elif args.action == "diagnose":
         from xuannv_embedding.training.diagnostics import run as diagnose_run
 

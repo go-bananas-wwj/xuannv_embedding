@@ -62,9 +62,23 @@ def audit_checkpoint(state, base, registration, *, epochs: int, steps: int) -> d
             value, state["model"]["base." + key]
         ):
             raise ValueError(f"frozen model changed: {key}")
+    train_head = registration.get("adaptation", {}).get("train_semantic_head", False)
+    if set(base["criterion"]) != set(state["criterion"]):
+        raise ValueError("criterion tensor schema changed")
+    updated_semantic = 0
+    frozen_criterion = 0
     for key, value in base["criterion"].items():
-        if key not in state["criterion"] or not torch.equal(value, state["criterion"][key]):
-            raise ValueError(f"frozen criterion changed: {key}")
+        candidate = state["criterion"][key]
+        if value.shape != candidate.shape or value.dtype != candidate.dtype:
+            raise ValueError(f"criterion tensor schema changed: {key}")
+        if train_head and key.startswith("semantic_probe.probes."):
+            updated_semantic += int(not torch.equal(value, candidate))
+        else:
+            frozen_criterion += 1
+            if not torch.equal(value, candidate):
+                raise ValueError(f"frozen criterion changed: {key}")
+    if train_head and not updated_semantic:
+        raise ValueError("registered semantic head did not update")
     for group in (state["model"], state["criterion"], *state["optimizer"]["state"].values()):
         if any(isinstance(v, torch.Tensor) and not torch.isfinite(v).all() for v in group.values()):
             raise ValueError("nonfinite checkpoint tensor")
@@ -72,7 +86,8 @@ def audit_checkpoint(state, base, registration, *, epochs: int, steps: int) -> d
         "actual_optimizer_steps": actual,
         "epoch": epochs,
         "frozen_model_tensors": len(base["model"]),
-        "frozen_criterion_tensors": len(base["criterion"]),
+        "frozen_criterion_tensors": frozen_criterion,
+        **({"updated_semantic_tensors": updated_semantic} if train_head else {}),
         "world_size": registration["world_size"],
     }
 

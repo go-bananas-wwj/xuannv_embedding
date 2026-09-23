@@ -57,6 +57,7 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
                 initialize=Path(previous["base_checkpoint"]),
                 base_config=Path(previous["base_config"]),
                 freeze_base=previous["freeze_base"],
+                train_semantic_head=previous.get("train_semantic_head", False),
                 highres_encoding=previous["highres_encoding"],
                 continue_base=previous.get("mode") == "continue_existing_sources",
             ),
@@ -103,8 +104,17 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
         if v.source in sources
     ):
         raise ValueError("highres adaptation targets must be continuous")
+    train_head = getattr(args, "train_semantic_head", False)
+    if train_head and (not args.freeze_base or not transformer or continuing):
+        raise ValueError("train-semantic-head requires frozen-base transformer adaptation")
+    if train_head and (
+        system.criterion.semantic_probe is None or config.training.semantic_probe_weight <= 0
+    ):
+        raise ValueError("train-semantic-head requires an active semantic objective")
     system.criterion.load_state_dict(state["criterion"], strict=True)
     system.criterion.requires_grad_(not args.freeze_base)
+    if train_head:
+        system.criterion.semantic_probe.probes.requires_grad_(True)
     if continuing:
         system.model = base.model
         system.model.requires_grad_(True)
@@ -147,6 +157,14 @@ def initialize_adaptation(system, config, args, split, *, _ancestors=()):
         "new_sources": list(sources),
         "source_order": list(getattr(system.model, "branches", {})),
     }
+    if train_head:
+        # Omit the new key for legacy runs: their strict resume identity is unchanged.
+        result["train_semantic_head"] = True
+        result["semantic_head_parameters"] = [
+            name
+            for name, parameter in system.criterion.named_parameters()
+            if parameter.requires_grad
+        ]
     if transformer:
         result["transformer_settings"] = json.loads(
             json.dumps(asdict(config.model.highres_transformer))
