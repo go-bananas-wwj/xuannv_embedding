@@ -39,8 +39,10 @@ def test_partial_export_keeps_original_record_order_and_full_default():
         export_indices(document, ["validation"])
 
 
-@pytest.mark.parametrize("splits", [None, ["validation"]])
-def test_export_materializes_only_requested_cache_records(tmp_path, monkeypatch, splits):
+@pytest.mark.parametrize(
+    "splits,preserve", [(None, False), (["validation"], False), (["validation"], True)]
+)
+def test_export_materializes_only_requested_cache_records(tmp_path, monkeypatch, splits, preserve):
     cache = tmp_path / "cache"
     cache.mkdir()
     configuration = tmp_path / "config.yaml"
@@ -96,14 +98,24 @@ def test_export_materializes_only_requested_cache_records(tmp_path, monkeypatch,
         lambda doc, ix: [{"patch_ids": [doc["records"][i]["patch_id"]]} for i in ix],
     )
     monkeypatch.setattr(experiment_export, "DataLoader", lambda ds, **kw: ds)
+    monkeypatch.setattr(
+        experiment_export,
+        "collate_region_batch",
+        lambda samples: {
+            "patch_ids": [sample["patch_ids"][0] for sample in samples],
+        },
+    )
 
     def export(model, batches, output, **kwargs):
         output.mkdir(exist_ok=True)
         result = []
         for batch in batches:
-            for patch in batch["patch_ids"]:
+            keep = kwargs.get("output_indices")
+            keep = range(len(batch["patch_ids"])) if keep is None else keep
+            for position in keep:
+                patch = batch["patch_ids"][position]
                 p = output / (patch + ".npz")
-                np.savez(p, embedding=np.zeros((1, 1, 1, 1)), timestamps=[202605])
+                np.savez(p, embedding=np.full((1, 1, 1, 1), position), timestamps=[202605])
                 result.append(p)
         return result
 
@@ -114,8 +126,9 @@ def test_export_materializes_only_requested_cache_records(tmp_path, monkeypatch,
         checkpoint=checkpoint,
         output=tmp_path / "export",
         device="cpu",
-        batch_size=1,
+        batch_size=4,
         export_split=splits,
+        preserve_batch_slots=preserve,
     )
     experiment_export.run(args)
     manifest = json.loads((args.output / "manifest.json").read_text())
@@ -127,3 +140,7 @@ def test_export_materializes_only_requested_cache_records(tmp_path, monkeypatch,
         assert "exported_indices" not in manifest
     else:
         assert manifest["exported_indices"] == [3] and manifest["exported_splits"] == splits
+        assert manifest["preserve_batch_slots"] is preserve
+        if preserve:
+            with np.load(args.output / "embeddings/p3.npz") as data:
+                assert data["embedding"].item() == 3

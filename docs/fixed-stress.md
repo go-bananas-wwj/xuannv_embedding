@@ -41,6 +41,16 @@ the argument preserves full-export behavior. This avoids duplicating training an
 embeddings for every artificial mask. An actual partial full-retention export must still
 pass the numerical identity control before interpreting a robustness curve.
 
+For exact comparison with a previous full export, also set `--batch-size` to the original
+value and pass `--preserve-batch-slots`. Partial exports otherwise move samples to different
+positions in the inference batch. On the evaluated NPU model this produced reproducible
+feature differences even when inputs were unchanged. Slot preservation groups selected
+records by the original full-export batches. It fills unselected slots with copies of an
+already selected, already masked sample, and writes only selected positions. It never reads
+an unselected sample to pad a batch. The underlying model must process samples independently;
+verify full-retention parity with the real checkpoint, as tensor shape checks alone cannot
+establish that property. The final batch keeps its original full-export length.
+
 Each model's exported validity mask must be unchanged. Evaluation reuses the original
 comparison's common valid domain, truths, query order and regression blocks. It fails instead
 of shrinking the domain to hide newly missing features. All saved prediction files are checked

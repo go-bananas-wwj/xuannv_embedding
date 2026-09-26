@@ -661,6 +661,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--highres-retention", type=float)
     p.add_argument("--retention-seed", type=int, default=20260926)
     p.add_argument("--export-split", nargs="+", choices=["train", "validation", "test", "buffer"])
+    p.add_argument("--preserve-batch-slots", action="store_true")
     p.add_argument("--probe-output", type=Path)
     p.add_argument("--probe-slots", type=Path)
     p = sub.add_parser("queue")

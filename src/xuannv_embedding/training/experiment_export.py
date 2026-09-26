@@ -8,6 +8,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
+import torch
 from torch.utils.data import DataLoader
 
 from xuannv_embedding.config import Config
@@ -49,6 +50,38 @@ def export_indices(document: dict, splits: list[str] | None) -> list[int]:
     return sorted(selected)
 
 
+def export_groups(total: int, indices: list[int], batch_size: int):
+    """Map selected records back to their original full-export batch positions."""
+    if (
+        type(total) is not int
+        or total < 1
+        or type(batch_size) is not int
+        or batch_size < 1
+        or not indices
+        or len(set(indices)) != len(indices)
+        or any(type(i) is not int or not 0 <= i < total for i in indices)
+    ):
+        raise ValueError("invalid export batch geometry")
+    selected = set(indices)
+    for start in range(0, total, batch_size):
+        slots = list(range(start, min(total, start + batch_size)))
+        real = [i for i in slots if i in selected]
+        if real:
+            lookup = {i: j for j, i in enumerate(real)}
+            yield real, [lookup.get(i, 0) for i in slots], [i - start for i in real]
+
+
+def expand_export_batch(value, positions):
+    """Fill unused slots from already selected samples, after input masking."""
+    if isinstance(value, dict):
+        return {k: expand_export_batch(v, positions) for k, v in value.items()}
+    if isinstance(value, list):
+        return [value[i] for i in positions]
+    if isinstance(value, torch.Tensor):
+        return value.index_select(0, torch.tensor(positions, device=value.device))
+    raise TypeError("unsupported batch value during export slot preservation")
+
+
 def run(args: argparse.Namespace) -> None:
     if args.batch_size < 1:
         raise ValueError("batch_size must be positive")
@@ -87,6 +120,9 @@ def run(args: argparse.Namespace) -> None:
     cache_path = args.cache / "cache.json"
     document = json.loads(cache_path.read_text())
     splits = getattr(args, "export_split", None)
+    preserve_slots = getattr(args, "preserve_batch_slots", False)
+    if preserve_slots and splits is None:
+        raise ValueError("batch-slot preservation requires an explicit partial export")
     indices = export_indices(document, splits)
     if splits is not None and getattr(args, "probe_output", None):
         raise ValueError("partial exports require an explicitly registered downstream evaluation")
@@ -153,6 +189,8 @@ def run(args: argparse.Namespace) -> None:
     if splits is not None:
         metadata["exported_indices"] = indices
         metadata["exported_splits"] = sorted(splits)
+        metadata["export_batch_size"] = args.batch_size
+        metadata["preserve_batch_slots"] = preserve_slots
     if ablation:
         metadata["masking"] = "registered inference input ablation; targets unchanged"
         metadata["input_ablation"] = {
@@ -179,13 +217,27 @@ def run(args: argparse.Namespace) -> None:
     paths = []
     input_audits = []
     try:
-        loader = DataLoader(
-            CachedSamples(document, indices),
-            batch_size=args.batch_size,
-            num_workers=0,
-            collate_fn=collate_region_batch,
-        )
-        for batch in loader:
+        if preserve_slots:
+
+            def selected_batches():
+                for selected, padding, keep in export_groups(
+                    len(document["records"]), indices, args.batch_size
+                ):
+                    samples = CachedSamples(document, selected)
+                    yield collate_region_batch(
+                        [samples[i] for i in range(len(samples))]
+                    ), padding, keep
+
+            loader = selected_batches()
+        else:
+            batches = DataLoader(
+                CachedSamples(document, indices),
+                batch_size=args.batch_size,
+                num_workers=0,
+                collate_fn=collate_region_batch,
+            )
+            loader = ((batch, None, None) for batch in batches)
+        for batch, padding, keep in loader:
             if ablation:
                 original_audit = mask_audit(batch)
                 batch = ablate_inputs(batch, dropped, last_month=prefix)
@@ -198,8 +250,14 @@ def run(args: argparse.Namespace) -> None:
                     {"original": before, "ablated": after}
                     for before, after in zip(original_audit, changed_audit, strict=True)
                 )
+            if padding is not None:
+                batch = expand_export_batch(batch, padding)
             written = export_embedding_batches(
-                system.model, [batch], args.output / "embeddings", device=device
+                system.model,
+                [batch],
+                args.output / "embeddings",
+                device=device,
+                output_indices=keep,
             )
             paths.extend(written)
             status = {
