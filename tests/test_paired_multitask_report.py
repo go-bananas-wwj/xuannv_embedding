@@ -208,6 +208,62 @@ def test_resigned_predictions_with_different_positions_are_not_a_paired_domain(t
         reporting.run(path, sha(stage / "identity.json"), tmp_path / "report", repeats=20)
 
 
+@pytest.mark.parametrize("change", ["positions", "regression_truth"])
+def test_shared_corruption_cannot_replace_the_archived_label_domain(tmp_path, change):
+    path, spec, _ = fixture_spec(tmp_path)
+    workflow.calibrate(path)
+    root = Path(spec["output"])
+    workflow.score(path, sha(root / "calibration/identity.json"))
+    stage = root / "test"
+    results = json.loads((stage / "results.json").read_text())
+    for model, rows in results.items():
+        for row in rows:
+            if (change == "positions" and row["family"] == "R") or (
+                change == "regression_truth" and row["family"] != "R"
+            ):
+                continue
+            p = stage / "predictions" / model / (row["key"] + ".npz")
+            with np.load(p) as data:
+                arrays = {k: data[k] for k in data.files}
+            if change == "positions":
+                arrays["valid_indices"] = arrays["valid_indices"][::-1]
+            else:
+                arrays["truth"] = 1 - arrays["truth"]
+                row["metrics"]["rmse"] = float(
+                    np.sqrt(np.mean((arrays["scores"] - arrays["truth"]) ** 2))
+                )
+            np.savez(p, **arrays)
+            row["prediction_sha256"] = sha(p)
+    (stage / "results.json").write_text(json.dumps(results))
+    identity = json.loads((stage / "identity.json").read_text())
+    identity["results_sha256"] = sha(stage / "results.json")
+    (stage / "identity.json").write_text(json.dumps(identity))
+    with pytest.raises(ValueError, match="archived label"):
+        reporting.run(path, sha(stage / "identity.json"), tmp_path / "report", repeats=20)
+
+
+def test_archived_regression_domain_preserves_block_order_and_validity_cutoff(tmp_path):
+    y = np.zeros((2, 32, 32), np.int8)
+    y[0, :16, :16] = 1
+    sparse = np.full(256, -1, np.int8)
+    sparse[:204] = 1
+    y[0, 16:, :16] = sparse.reshape(16, 16)
+    sparse[:] = -1
+    sparse[:205] = 0
+    sparse[0] = 1
+    y[0, 16:, 16:] = sparse.reshape(16, 16)
+    tasks = workflow.OSM_TASKS + workflow.ESRI_TASKS
+    np.savez(tmp_path / "common_labels.npz", **{name: y for name in tasks})
+    np.save(tmp_path / "common_valid.npy", np.ones(y.shape, bool))
+    domains = reporting._archived_domains(
+        tmp_path, {"split": {"test": [7, 12]}, "data": {"patch_size": 32}}
+    )
+    truth, tiles, positions = domains["R", "esri_built"]
+    np.testing.assert_array_equal(truth, [1, 0, 1 / 205, 0, 0, 0, 0])
+    np.testing.assert_array_equal(tiles, [0, 0, 0, 1, 1, 1, 1])
+    assert positions.size == 0
+
+
 def test_report_cli_has_registered_defaults_and_dispatch(tmp_path, monkeypatch):
     from xuannv_embedding.training.experiment import main
 

@@ -244,11 +244,46 @@ def _verified_metric(observed, recorded):
         raise ValueError("saved metric differs from independent prediction recomputation")
 
 
+def _archived_domains(stage, cache):
+    """Recover query truth/order independently from the archived maps, without features."""
+    count, size = len(cache["split"]["test"]), cache["data"]["patch_size"]
+    valid = np.load(stage / "common_valid.npy", allow_pickle=False)
+    if valid.dtype != np.bool_ or valid.shape != (count, size, size) or size % 16:
+        raise ValueError("invalid archived label domain geometry")
+    tasks = paired_multitask.OSM_TASKS + paired_multitask.ESRI_TASKS
+    domains = {}
+    with np.load(stage / "common_labels.npz", allow_pickle=False) as data:
+        if set(data.files) != set(tasks):
+            raise ValueError("archived label task set differs")
+        for task in tasks:
+            y = data[task]
+            if (
+                y.shape != valid.shape
+                or not np.isin(y, [-1, 0, 1]).all()
+                or (y[~valid] != -1).any()
+            ):
+                raise ValueError("invalid archived label values or validity")
+            positions = np.flatnonzero(y.ravel() >= 0)
+            tiles = positions // (size * size)
+            for family in ("C", "Q"):
+                domains[family, task] = (y.ravel()[positions], tiles, positions)
+            if task in paired_multitask.ESRI_TASKS:
+                blocks = y.reshape(count, size // 16, 16, size // 16, 16).transpose(0, 1, 3, 2, 4)
+                eligible_counts = (blocks >= 0).sum((-2, -1))
+                positives = (blocks == 1).sum((-2, -1))
+                eligible = eligible_counts >= 0.8 * 256
+                truth = positives[eligible] / eligible_counts[eligible]
+                tiles = np.broadcast_to(np.arange(count)[:, None, None], eligible.shape)[eligible]
+                domains["R", task] = (truth, tiles, np.empty(0, np.int64))
+    return domains
+
+
 def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, seed=20260921):
     """Read archived predictions only; fixed CLI resampling, API overrides for fixtures."""
     if type(threads) is not int or not 1 <= threads <= 4:
         raise ValueError("use one to four bootstrap threads")
     spec, cache, stage, rows = _inputs(spec_path, test_identity_sha256)
+    expected_domains = _archived_domains(stage, cache)
     canonical = cache["split"]["test"]
     tile_ids = [cache["records"][i]["patch_id"] for i in canonical]
     weights = tile_weights(tile_ids, repeats=repeats, seed=seed)
@@ -282,6 +317,12 @@ def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, see
                         score, truth, tiles, positions = _prediction(
                             stage / "predictions" / model / (key + ".npz"), canonical
                         )
+                        expected = expected_domains[family, task]
+                        if any(
+                            not np.array_equal(actual, target)
+                            for actual, target in zip((truth, tiles, positions), expected)
+                        ):
+                            raise ValueError("prediction and archived label domains differ")
                         domain = multitask_bootstrap._digest(truth, tiles, positions)
                         # Domains must also match between budgets and support realizations.
                         if domains.setdefault((family, task), domain) != domain:
@@ -347,6 +388,7 @@ def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, see
                 "weights_sha256": sha(output / "tile_weights.npy"),
             },
             "refitted": False,
+            "archived_label_domains_verified": True,
             "new_feature_data_read": False,
             "aggregation": (
                 "metrics over realizations/support seeds within each common tile draw; "

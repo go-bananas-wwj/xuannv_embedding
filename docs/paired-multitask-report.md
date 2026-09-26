@@ -27,7 +27,12 @@ The report retains every registered task/budget condition and each realization/s
 point metric. Missing, duplicate or changed conditions fail. For each condition, the saved
 point metric is independently recomputed from archived predictions and must match within
 1e-12. Truth, tile mappings and valid positions must agree between methods, support seeds,
-and budgets. All ordered method pairs are reported, including unfavorable comparisons.
+and budgets. They must also match query domains independently recovered from the archived
+common label maps. Classification/retrieval use the exact valid-pixel order; regression
+reconstructs ordered 16-by-16 blocks and their 80% validity cutoff from label counts. This
+rejects a shared indexing or truth error even if every model and revised hash agrees.
+No source observations or unavailable original label files are needed for this check.
+All ordered method pairs are reported, including unfavorable comparisons.
 
 For raw family metrics, average support and model-realization metrics per task/budget.
 Average tasks and budgets equally within each source. Classification then gives OSM and
