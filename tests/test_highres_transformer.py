@@ -1,4 +1,5 @@
 import copy
+from dataclasses import replace
 
 import pytest
 import torch
@@ -8,7 +9,7 @@ from xuannv_embedding.models.highres_transformer import HighResTransformerModel
 from xuannv_embedding.models.model import AEFModel
 
 
-def example():
+def example(**settings_overrides):
     torch.set_num_threads(1)
     torch.manual_seed(41)
     base = AEFModel(
@@ -41,6 +42,7 @@ def example():
         reference_gsd_m=10.0,
         window_chunk=32,
     )
+    settings = replace(settings, **settings_overrides)
     model = HighResTransformerModel(
         base,
         {"optical": 3, "sar": 1},

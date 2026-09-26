@@ -138,7 +138,16 @@ class HighResWindowEncoder(nn.Module):
                     checkpoint(block, *args, use_reentrant=False) if self.training else block(*args)
                 )
             flat = torch.cat(pieces)
-        return flat.reshape(b, t, nw, nk, s.dim), visible.reshape(b, t, nw, nk), xy
+        encoded = (flat.reshape(b, t, nw, nk, s.dim), visible.reshape(b, t, nw, nk), xy)
+        if not s.coverage_gating:
+            return encoded
+        # Include actual image pixels only: padded boundary patches and empty
+        # packing slots must not make a fully valid native image appear incomplete.
+        area = F.avg_pool2d(F.pad(torch.ones_like(mask[:1, :1]).flatten(0, 1), pad), s.patch_pixels)
+        area = area.flatten(1)[:, indices] * occupied[None]
+        covered = (fraction * occupied[None]).sum(-1, keepdim=True)
+        coverage = covered / area.sum(-1, keepdim=True).clamp_min(1e-6)
+        return (*encoded, coverage.reshape(b, t, nw, 1))
 
 
 class CrossResolutionInjector(nn.Module):
@@ -154,6 +163,23 @@ class CrossResolutionInjector(nn.Module):
         self.output = nn.Linear(settings.dim, precision_dim)
         nn.init.zeros_(self.output.weight)
         nn.init.zeros_(self.output.bias)
+        # Optional modules must not shift initialization of later shared modules
+        # or the training/masking RNG of a paired control.
+        with torch.random.fork_rng(devices=[]):
+            if settings.allow_base_only:
+                self.base_gate = nn.Linear(settings.dim, 1)
+                nn.init.zeros_(self.base_gate.weight)
+                nn.init.zeros_(self.base_gate.bias)
+            if settings.coverage_gating:
+                self.coverage_gates = nn.ModuleDict(
+                    {name: nn.Linear(1, 1, bias=False) for name in sources}
+                )
+                for layer in self.coverage_gates.values():
+                    nn.init.zeros_(layer.weight)
+        if settings.spatial_readout == "mean":
+            # Construct then remove only after shared initialization, keeping
+            # the random stream identical to attention controls.
+            self.attention = nn.ModuleDict()
 
     def forward(self, precision, encoded):
         b, t, h, w, d = precision.shape
@@ -171,24 +197,48 @@ class CrossResolutionInjector(nn.Module):
             qc = query[start:end]
             # Source-specific attention avoids a source winning solely through token count.
             values, gates, active = [], [], []
-            for name, (tokens, valid, xy) in encoded.items():
+            for name, source in encoded.items():
+                tokens, valid, xy = source[:3]
                 nk = tokens.shape[-2]
                 keys = tokens.reshape(-1, nk, s.dim)[start:end]
                 visible = valid.reshape(-1, nk)[start:end]
                 positions = xy[torch.arange(start, end, device=q.device) % xy.shape[0]]
-                value = self.attention[name](
-                    qc, self.norm(keys), visible, qxy.expand(end - start, -1, -1), positions
-                )
+                if s.spatial_readout == "mean":
+                    clean = torch.where(visible[..., None], keys, 0)
+                    normal = self.norm(clean) * visible[..., None]
+                    pooled = normal.sum(1) / visible.sum(1, keepdim=True).clamp_min(1)
+                    value = pooled[:, None].expand(-1, qc.shape[1], -1)
+                else:
+                    value = self.attention[name](
+                        qc, self.norm(keys), visible, qxy.expand(end - start, -1, -1), positions
+                    )
                 present = visible.any(-1)[:, None, None]
                 gate = self.gates[name](torch.cat((qc, value), -1))
+                if s.coverage_gating:
+                    if len(source) != 4:
+                        raise ValueError("coverage gating requires native input-mask coverage")
+                    coverage = source[3].reshape(-1, 1)[start:end].to(qc.dtype)
+                    gate = gate + self.coverage_gates[name](coverage)[:, None]
                 values.append(value)
                 gates.append(gate.masked_fill(~present, -1e4))
                 active.append(present)
-            weights = torch.stack(gates, -1).softmax(-1) * torch.stack(active, -1)
-            weights = weights / weights.sum(-1, keepdim=True).clamp_min(1e-6)
-            fused = (torch.stack(values, -1) * weights).sum(-1)
-            any_active = torch.stack(active, -1).any(-1)
-            parts.append(self.output(fused) * any_active)
+            if s.allow_base_only:
+                logits = torch.stack([self.base_gate(qc), *gates], -1)
+                available = torch.stack([torch.ones_like(active[0]), *active], -1)
+                weights = logits.softmax(-1) * available
+                weights = weights / weights.sum(-1, keepdim=True).clamp_min(1e-6)
+                # Weight the complete affine increment, including its bias.
+                # The base-only option contributes exactly zero.
+                increments = torch.stack([self.output(value) for value in values], -1)
+                parts.append((increments * weights[..., 1:]).sum(-1))
+            else:
+                # Preserve the historical floating-point operation order when
+                # the new option is disabled (including checkpoint replay).
+                weights = torch.stack(gates, -1).softmax(-1) * torch.stack(active, -1)
+                weights = weights / weights.sum(-1, keepdim=True).clamp_min(1e-6)
+                fused = (torch.stack(values, -1) * weights).sum(-1)
+                any_active = torch.stack(active, -1).any(-1)
+                parts.append(self.output(fused) * any_active)
         delta = torch.cat(parts).reshape(b, t, h // side, w // side, side, side, d)
         delta = delta.permute(0, 1, 2, 4, 3, 5, 6).reshape_as(precision)
         return precision + delta

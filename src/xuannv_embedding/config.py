@@ -177,6 +177,9 @@ class TransformerAdapterSettings:
     window_cells: int = 4
     reference_gsd_m: float = 10.0
     window_chunk: int = 128
+    allow_base_only: bool = False
+    coverage_gating: bool = False
+    spatial_readout: Literal["attention", "mean"] = "attention"
 
 
 @dataclass(frozen=True)
@@ -458,6 +461,12 @@ def _parse_transformer(value: Any, stp: STPConfig) -> TransformerAdapterSettings
             values[key] = tuple(_positive_int(i, field_name) for i in value)
         elif key == "reference_gsd_m":
             values[key] = _positive_float(value, field_name)
+        elif key in {"allow_base_only", "coverage_gating"}:
+            values[key] = _boolean(value, field_name)
+        elif key == "spatial_readout":
+            if value not in ("attention", "mean"):
+                raise ConfigError(f"{field_name} must be attention or mean")
+            values[key] = value
         else:
             values[key] = _positive_int(value, field_name)
     settings = TransformerAdapterSettings(**values)
