@@ -607,6 +607,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("export-late-fusion")
     p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("diagnose-compression")
+    p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("summarize-strong")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--test-identity-sha256", required=True)
@@ -737,6 +739,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.downstream.late_fusion import export as export_late_fusion
 
         export_late_fusion(args.spec)
+    elif args.action == "diagnose-compression":
+        from xuannv_embedding.downstream.compression_diagnostics import run as compression_run
+
+        compression_run(args.spec)
     elif args.action == "summarize-strong":
         from xuannv_embedding.downstream.strong_multitask_report import run as summarize_strong
 
