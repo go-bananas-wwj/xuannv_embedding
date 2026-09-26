@@ -67,3 +67,17 @@ all-head AP intervals and undefined-case handling; see `strong-uncertainty.md`. 
 split-label bundle preparation, external CRS auditing, recipe selection/multiple training
 seeds and final comparisons remain required. Historical unstandardized probes must remain
 separate from these standardized/masked results.
+# Preselected head subsets
+
+The `heads` field may contain a nonempty subset of `rf`, `svm`, `knn`, `mlp`,
+`conv3x3`, in that canonical order. Freeze this choice in the specification lock
+before calibration and use exactly the same heads for all compared models.
+The full five-head setting remains supported. Empty, duplicate, unknown or
+reordered head lists are rejected.
+
+Calibration, held-out scoring and paired uncertainty preserve the selected list
+and require every registered task, budget and support draw for each selected
+head. The reporting API defaults to the original full matrix; a reduced matrix
+requires an explicit head list and is never inferred from missing results.
+Changing the head list after calibration invalidates the contract. Selecting a
+subset for resource reasons is not evidence of performance across omitted heads.

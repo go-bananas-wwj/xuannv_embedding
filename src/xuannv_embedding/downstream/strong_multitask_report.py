@@ -1,4 +1,4 @@
-"""Paired tile uncertainty for all five heads, using archived predictions only."""
+"""Paired tile uncertainty for registered heads, using archived predictions only."""
 
 from __future__ import annotations
 
@@ -14,25 +14,26 @@ from xuannv_embedding.downstream import strong_multitask as workflow
 from xuannv_embedding.export.context import dump, sha
 
 
-def conditions(cohort):
+def conditions(cohort, heads=workflow.HEADS):
     return list(
         {
             (c["head"], c["task"], c["budget"]): {
                 k: v for k, v in c.items() if k not in ("key", "seed")
             }
-            for c in workflow._conditions(cohort)
+            for c in workflow._conditions(cohort, heads)
         }.values()
     )
 
 
-def compare(registered, baseline, candidate):
+def compare(registered, baseline, candidate, *, heads=workflow.HEADS):
     """Compare AP arrays [head/task/budget, support seed, observed + paired draws]."""
+    selected = workflow.selected_heads(heads)
     tasks = workflow.primary.OSM_TASKS + workflow.primary.ESRI_TASKS
     keys, budgets = [], set()
     for c in registered:
         if (
             set(c) != {"head", "family", "task", "source", "budget"}
-            or c["head"] not in workflow.HEADS
+            or c["head"] not in selected
             or c["family"] != "C"
             or c["task"] not in tasks
             or c["source"] != c["task"].split("_")[0]
@@ -42,9 +43,9 @@ def compare(registered, baseline, candidate):
             raise ValueError("invalid strong-head condition")
         keys.append((c["head"], c["task"], c["budget"]))
         budgets.add(c["budget"])
-    expected = {(h, t, b) for h in workflow.HEADS for t in tasks for b in budgets}
+    expected = {(h, t, b) for h in selected for t in tasks for b in budgets}
     if not budgets or len(set(keys)) != len(keys) or set(keys) != expected:
-        raise ValueError("incomplete or duplicate five-head matrix")
+        raise ValueError("incomplete or duplicate registered-head matrix")
     a, b = np.asarray(baseline, float), np.asarray(candidate, float)
     if (
         a.ndim != 3
@@ -65,13 +66,13 @@ def compare(registered, baseline, candidate):
         }
 
     heads = {}
-    for head in workflow.HEADS:
+    for head in selected:
         sources, arrays = {}, []
         for source in ("osm", "esri"):
-            selected = [
+            row_indices = [
                 i for i, c in enumerate(registered) if c["head"] == head and c["source"] == source
             ]
-            x, y = a[selected].mean(0), b[selected].mean(0)
+            x, y = a[row_indices].mean(0), b[row_indices].mean(0)
             sources[source] = summary(x, y)
             arrays.append((x, y))
         x, y = np.mean(arrays, axis=0)
@@ -96,8 +97,8 @@ def _stage(root, name, expected, spec, cohort):
         or identity.get("contract_sha256") != workflow.contract_sha256(spec)
         or identity.get("primary_contract_sha256") != workflow.primary.contract_sha256(cohort)
         or identity.get("implementation") != workflow._code()
-        or identity.get("heads") != list(workflow.HEADS)
-        or identity.get("conditions") != workflow._conditions(cohort)
+        or identity.get("heads") != list(spec["heads"])
+        or identity.get("conditions") != workflow._conditions(cohort, spec["heads"])
         or identity.get("method_groups") != cohort["method_groups"]
         or workflow.primary._load(stage / "status.json").get("state") != "complete"
     ):
@@ -140,7 +141,7 @@ def _inputs(spec_path, expected):
     identity = _stage(root, "test", expected, spec, cohort)
     calibrated = _stage(root, "calibration", identity["calibration_identity_sha256"], spec, cohort)
     cal = root / "calibration"
-    for c in workflow._conditions(cohort):
+    for c in workflow._conditions(cohort, spec["heads"]):
         key, head = c["key"], c["head"]
         record = calibrated["readouts"][key]
         directory = cal / "readouts" / key
@@ -216,7 +217,7 @@ def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, see
     try:
         numba.set_num_threads(threads)
         np.save(output / "tile_weights.npy", weights)
-        registered = conditions(cohort)
+        registered = conditions(cohort, spec["heads"])
         seeds, groups = cohort["support_seeds"], cohort["method_groups"]
         means = {method: [] for method in groups}
         observations, saved = [], {}
@@ -278,14 +279,18 @@ def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, see
         arrays = {method: np.asarray(values) for method, values in means.items()}
         np.savez_compressed(output / "draws.npz", **arrays)
         comparisons = [
-            {"baseline": a, "candidate": b, **compare(registered, arrays[a], arrays[b])}
+            {
+                "baseline": a,
+                "candidate": b,
+                **compare(registered, arrays[a], arrays[b], heads=spec["heads"]),
+            }
             for a, b in itertools.permutations(groups, 2)
         ]
         result = {
             "state": "complete",
             "protocol": "paired-strong-uncertainty-v1",
             "conditions": len(registered),
-            "heads": list(workflow.HEADS),
+            "heads": list(spec["heads"]),
             "comparisons": comparisons,
             "observations": observations,
             "method_groups": groups,

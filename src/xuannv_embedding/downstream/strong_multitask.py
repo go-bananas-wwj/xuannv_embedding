@@ -1,4 +1,4 @@
-"""Locked, paired five-head classification calibration and held-out scoring."""
+"""Locked, paired classification calibration for preselected frozen readout heads."""
 
 from __future__ import annotations
 
@@ -14,6 +14,17 @@ from xuannv_embedding.export.context import dump, sha
 
 PROTOCOL = "multitask-final-strong-v1"
 HEADS = ("rf", "svm", "knn", "mlp", "conv3x3")
+
+
+def selected_heads(heads):
+    """A nonempty canonical subset; selection must be frozen before calibration."""
+    if (
+        not isinstance(heads, (list, tuple))
+        or not heads
+        or tuple(heads) != tuple(head for head in HEADS if head in heads)
+    ):
+        raise ValueError("readout heads must be a nonempty canonical subset")
+    return tuple(heads)
 
 
 def contract_sha256(spec):
@@ -34,11 +45,11 @@ def _spec(path):
     if (
         set(spec) != {"protocol", "primary_spec", "heads", "neural_device", "output", "lock"}
         or spec["protocol"] != PROTOCOL
-        or spec["heads"] != list(HEADS)
         or not isinstance(spec["neural_device"], str)
         or not re.fullmatch(r"cpu|npu:[0-9]+", spec["neural_device"])
     ):
-        raise ValueError("invalid five-head classification specification")
+        raise ValueError("invalid strong classification specification")
+    selected_heads(spec["heads"])
     lock = primary._registered(spec["lock"])
     if lock.get("state") != "locked" or lock.get("contract_sha256") != contract_sha256(spec):
         raise ValueError("strong evaluation contract is not locked or has changed")
@@ -49,12 +60,12 @@ def _spec(path):
     return spec, cohort, cache
 
 
-def _conditions(cohort):
+def _conditions(cohort, heads=HEADS):
     return [
         {**c, "head": head, "key": c["key"] + "_" + head}
         for c in primary._conditions(cohort)
         if c["family"] == "C"
-        for head in HEADS
+        for head in selected_heads(heads)
     ]
 
 
@@ -179,8 +190,8 @@ def _identity(spec, cohort, spec_path, batches, stage, *, test, elapsed):
         "contract_sha256": contract_sha256(spec),
         "primary_contract_sha256": primary.contract_sha256(cohort),
         "implementation": _code(),
-        "heads": list(HEADS),
-        "conditions": _conditions(cohort),
+        "heads": list(spec["heads"]),
+        "conditions": _conditions(cohort, spec["heads"]),
         "models": {name: batch.identity for name, batch in batches.items()},
         "method_groups": cohort["method_groups"],
         "common_valid_sha256": sha(stage / "common_valid.npy"),
@@ -211,7 +222,7 @@ def calibrate(spec_path):
             for seed in cohort["support_seeds"]:
                 primary.nested_support(y, ids, train, max(cohort["budgets"]), seed)
         rows, records = {name: [] for name in batches}, {}
-        for condition in _conditions(cohort):
+        for condition in _conditions(cohort, spec["heads"]):
             key, y = condition["key"], labels[condition["task"]]
             tiles, incoming, positions, support = _support(y, ids, train, indices, condition)
             directory = stage / "readouts" / key
@@ -267,8 +278,8 @@ def _calibration(spec, cohort, expected):
         or identity.get("contract_sha256") != contract_sha256(spec)
         or identity.get("primary_contract_sha256") != primary.contract_sha256(cohort)
         or identity.get("implementation") != _code()
-        or identity.get("conditions") != _conditions(cohort)
-        or identity.get("heads") != list(HEADS)
+        or identity.get("conditions") != _conditions(cohort, spec["heads"])
+        or identity.get("heads") != list(spec["heads"])
         or identity.get("method_groups") != cohort["method_groups"]
         or primary._load(stage / "status.json").get("state") != "complete"
     ):
@@ -280,7 +291,7 @@ def _calibration(spec, cohort, expected):
     ):
         if sha(stage / filename) != identity[key]:
             raise ValueError("strong calibration data or report changed")
-    for condition in _conditions(cohort):
+    for condition in _conditions(cohort, spec["heads"]):
         key = condition["key"]
         record = identity["readouts"][key]
         directory = stage / "readouts" / key
@@ -319,7 +330,7 @@ def score(spec_path, calibration_identity_sha256):
         valid = np.load(stage / "common_valid.npy", allow_pickle=False)
         query = list(range(len(indices)))
         rows = {name: [] for name in batches}
-        for number, condition in enumerate(_conditions(cohort)):
+        for number, condition in enumerate(_conditions(cohort, spec["heads"])):
             key, y = condition["key"], labels[condition["task"]]
             directory = calibration / "readouts" / key
             support = primary._load(directory / "support.json")
