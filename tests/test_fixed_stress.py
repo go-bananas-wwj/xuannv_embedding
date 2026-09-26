@@ -7,6 +7,7 @@ import pytest
 from test_paired_multitask import fixture_spec, write_json
 
 from xuannv_embedding.downstream import fixed_stress, paired_multitask
+from xuannv_embedding.downstream.multitask_features import FeatureSelection, read_features
 from xuannv_embedding.export.context import sha
 
 
@@ -141,3 +142,24 @@ def test_stress_rejects_changed_model_mask_domain_or_missing_control(tmp_path, c
     path.write_text(json.dumps(spec))
     with pytest.raises(ValueError):
         fixed_stress.run(path)
+
+
+def test_partial_stress_exports_never_require_training_or_test_features(tmp_path):
+    path, spec, _ = fixture_stress(tmp_path)
+    for variant in spec["variants"].values():
+        feature = variant["features"]
+        manifest_path = Path(feature["manifest_path"])
+        manifest = json.loads(manifest_path.read_text())
+        manifest.update(exported_indices=[1], exported_splits=["validation"])
+        for i in [0, 2]:
+            Path(manifest["records"][i]["path"]).unlink()
+        feature["tile_sha256"] = {"p1": feature["tile_sha256"]["p1"]}
+        manifest_path.write_text(json.dumps(manifest))
+        feature["manifest_sha256"] = sha(manifest_path)
+    path.write_text(json.dumps(spec))
+    assert fixed_stress.run(path)["state"] == "complete"
+    feature = spec["variants"]["retain100"]["features"]
+    with pytest.raises(ValueError, match="not materialized"):
+        read_features(
+            **dict(feature, selection=FeatureSelection(**feature["selection"])), splits=("test",)
+        )

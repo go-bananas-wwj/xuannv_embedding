@@ -180,6 +180,24 @@ def read_features(
     indices = tuple(i for split in splits for i in cache["split"][split])
     if not indices:
         raise ValueError("requested splits have no records")
+    if "exported_indices" in manifest or "exported_splits" in manifest:
+        exported = manifest.get("exported_indices", [])
+        if (
+            not exported
+            or any(type(i) is not int or not 0 <= i < len(cache["records"]) for i in exported)
+            or len(set(exported)) != len(exported)
+            or not set(indices) <= set(exported)
+        ):
+            raise ValueError("requested features were not materialized by this partial export")
+        if "exported_splits" in manifest:
+            exported_splits = manifest["exported_splits"]
+            if (
+                not exported_splits
+                or len(set(exported_splits)) != len(exported_splits)
+                or any(s not in ("train", "validation", "test", "buffer") for s in exported_splits)
+                or set(exported) != {i for s in exported_splits for i in cache["split"][s]}
+            ):
+                raise ValueError("materialized indices differ from declared export splits")
     for i in indices:
         if manifest["records"][i]["patch_id"] not in tile_sha256:
             raise ValueError("registered tile digest inventory is incomplete")

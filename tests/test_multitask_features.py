@@ -83,6 +83,20 @@ def rewrite_manifest(args, edit):
     args["manifest_sha256"] = sha(path)
 
 
+def test_existing_index_only_export_remains_readable(tmp_path):
+    args = setup_exports(tmp_path)
+    rewrite_manifest(args, lambda d: d.update(exported_indices=[1, 0]))
+    assert read_features(**args).indices == (0, 1)
+
+
+@pytest.mark.parametrize("indices", [[0], [0, 1, 1], [False, 1], [0, 1, 9]])
+def test_partial_export_rejects_missing_duplicate_or_invalid_indices(tmp_path, indices):
+    args = setup_exports(tmp_path)
+    rewrite_manifest(args, lambda d: d.update(exported_indices=indices))
+    with pytest.raises(ValueError, match="not materialized"):
+        read_features(**args)
+
+
 @pytest.mark.parametrize(
     "edit",
     [

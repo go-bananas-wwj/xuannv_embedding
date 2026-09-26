@@ -29,6 +29,26 @@ def validate_export_identity(run: dict, *, config_sha: str, cache_sha: str) -> N
             raise ValueError(f"export {key} differs from the training registration")
 
 
+def export_indices(document: dict, splits: list[str] | None) -> list[int]:
+    """Keep original grid order while materializing only explicitly requested splits."""
+    if splits is None:
+        return list(range(len(document["records"])))
+    if (
+        not splits
+        or len(set(splits)) != len(splits)
+        or any(s not in ("train", "validation", "test", "buffer") for s in splits)
+    ):
+        raise ValueError("export splits must be distinct canonical partitions")
+    selected = [i for s in splits for i in document["split"][s]]
+    if (
+        not selected
+        or any(type(i) is not int or not 0 <= i < len(document["records"]) for i in selected)
+        or len(set(selected)) != len(selected)
+    ):
+        raise ValueError("export splits are empty, overlap or contain invalid indices")
+    return sorted(selected)
+
+
 def run(args: argparse.Namespace) -> None:
     if args.batch_size < 1:
         raise ValueError("batch_size must be positive")
@@ -66,11 +86,16 @@ def run(args: argparse.Namespace) -> None:
         raise ValueError("ablation requires an explicitly registered downstream evaluation")
     cache_path = args.cache / "cache.json"
     document = json.loads(cache_path.read_text())
+    splits = getattr(args, "export_split", None)
+    indices = export_indices(document, splits)
+    if splits is not None and getattr(args, "probe_output", None):
+        raise ValueError("partial exports require an explicitly registered downstream evaluation")
     training = json.loads((args.checkpoint.parent / "run.json").read_text())
     validate_export_identity(training, config_sha=_sha(args.config), cache_sha=_sha(cache_path))
     if args.output.exists():
         raise FileExistsError("export output exists; use a new directory")
-    for record in document["records"]:
+    for i in indices:
+        record = document["records"][i]
         if _sha(Path(record["path"])) != record["sha256"]:
             raise ValueError("cached sample checksum mismatch")
     system = build_training_system(config)
@@ -125,6 +150,9 @@ def run(args: argparse.Namespace) -> None:
         ),
         "adaptation": adaptation,
     }
+    if splits is not None:
+        metadata["exported_indices"] = indices
+        metadata["exported_splits"] = sorted(splits)
     if ablation:
         metadata["masking"] = "registered inference input ablation; targets unchanged"
         metadata["input_ablation"] = {
@@ -152,7 +180,7 @@ def run(args: argparse.Namespace) -> None:
     input_audits = []
     try:
         loader = DataLoader(
-            CachedSamples(document, list(range(len(document["records"])))),
+            CachedSamples(document, indices),
             batch_size=args.batch_size,
             num_workers=0,
             collate_fn=collate_region_batch,
@@ -177,7 +205,7 @@ def run(args: argparse.Namespace) -> None:
             status = {
                 "state": "running",
                 "patches": len(paths),
-                "total": len(document["records"]),
+                "total": len(indices),
                 "elapsed_seconds": time.monotonic() - started,
             }
             _json(args.output / "status.json", status)
@@ -186,13 +214,20 @@ def run(args: argparse.Namespace) -> None:
         if ablation:
             _json(args.output / "input_masks.json", input_audits)
             metadata["input_masks_sha256"] = _sha(args.output / "input_masks.json")
+        written = dict(zip(indices, paths, strict=True))
         _json(
             args.output / "manifest.json",
             {
                 **metadata,
                 "records": [
-                    {"patch_id": r["patch_id"], "bounds": r["bounds"], "path": str(p)}
-                    for r, p in zip(document["records"], paths, strict=True)
+                    {
+                        "patch_id": r["patch_id"],
+                        "bounds": r["bounds"],
+                        "path": str(
+                            written.get(i, args.output / "embeddings" / (r["patch_id"] + ".npz"))
+                        ),
+                    }
+                    for i, r in enumerate(document["records"])
                 ],
             },
         )

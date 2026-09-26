@@ -31,6 +31,16 @@ the original feature values and frozen predictions exactly. These checks do not 
 audit raw-image georeferencing or prove the exporter implementation: run the separate raw
 input mask gate and the original geographic audit.
 
+Use `experiment export --export-split validation` or `--export-split test` when only that
+partition is needed. The manifest retains the complete original grid and split definitions,
+and records `exported_indices` and `exported_splits`. Unmaterialized record paths are explicit
+future locations, not existing artifacts. The feature reader rejects requests outside the
+materialized partitions before opening tile arrays. No other partition's cached samples are
+hashed or decoded by a partial export, and automatic legacy probing is disabled. Omitting
+the argument preserves full-export behavior. This avoids duplicating training and buffer
+embeddings for every artificial mask. An actual partial full-retention export must still
+pass the numerical identity control before interpreting a robustness curve.
+
 Each model's exported validity mask must be unchanged. Evaluation reuses the original
 comparison's common valid domain, truths, query order and regression blocks. It fails instead
 of shrinking the domain to hide newly missing features. All saved prediction files are checked
