@@ -11,7 +11,11 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 
 from xuannv_embedding.config import Config
-from xuannv_embedding.data.observation_ablation import ablate_inputs, mask_audit
+from xuannv_embedding.data.observation_ablation import (
+    ablate_inputs,
+    mask_audit,
+    retain_highres_inputs,
+)
 from xuannv_embedding.data.raster_dataset import collate_region_batch
 from xuannv_embedding.export.embedding import export_embedding_batches
 from xuannv_embedding.training.checkpoint import load_training_checkpoint
@@ -31,13 +35,33 @@ def run(args: argparse.Namespace) -> None:
     config = Config.from_yaml(args.config)
     dropped = getattr(args, "drop_source", [])
     prefix = getattr(args, "prefix_month", None)
+    retained = getattr(args, "retain_highres_source", [])
+    fraction = getattr(args, "highres_retention", None)
+    retention_seed = getattr(args, "retention_seed", 20260926)
     if len(set(dropped)) != len(dropped) or not set(dropped) <= set(config.model.input_sources):
         raise ValueError("ablation sources must be unique registered inputs")
     if prefix is not None and (
         type(prefix) is not int or not 0 <= prefix < len(config.data.months)
     ):
         raise ValueError("invalid prefix month")
-    ablation = bool(dropped) or prefix is not None
+    if bool(retained) != (fraction is not None):
+        raise ValueError("high-resolution retention requires both sources and fraction")
+    if retained and (
+        len(set(retained)) != len(retained)
+        or set(retained) & set(dropped)
+        or any(
+            name not in config.model.input_sources
+            or config.model.input_sources[name].role != "highres"
+            for name in retained
+        )
+        or not isinstance(fraction, (int, float))
+        or isinstance(fraction, bool)
+        or not 0 <= fraction <= 1
+        or type(retention_seed) is not int
+        or retention_seed < 0
+    ):
+        raise ValueError("invalid registered high-resolution retention")
+    ablation = bool(dropped) or prefix is not None or bool(retained)
     if ablation and getattr(args, "probe_output", None):
         raise ValueError("ablation requires an explicitly registered downstream evaluation")
     cache_path = args.cache / "cache.json"
@@ -110,6 +134,13 @@ def run(args: argparse.Namespace) -> None:
             "undated_static_inputs": "hidden" if prefix is not None else "unchanged unless dropped",
             "training_time_causality_claim": False,
         }
+        if retained:
+            metadata["input_ablation"]["highres_retention"] = {
+                "sources": sorted(retained),
+                "fraction": fraction,
+                "seed": retention_seed,
+                "rule": "hashed edge, nested raster prefix of originally valid pixels per month",
+            }
     del state
     device, distributed, _ = _setup_device(args.device)
     if distributed:
@@ -130,6 +161,10 @@ def run(args: argparse.Namespace) -> None:
             if ablation:
                 original_audit = mask_audit(batch)
                 batch = ablate_inputs(batch, dropped, last_month=prefix)
+                if retained:
+                    batch = retain_highres_inputs(
+                        batch, retained, fraction=fraction, seed=retention_seed
+                    )
                 changed_audit = mask_audit(batch)
                 input_audits.extend(
                     {"original": before, "ablated": after}

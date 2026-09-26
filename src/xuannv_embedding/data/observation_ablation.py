@@ -4,10 +4,74 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Sequence
 from typing import Any
 
 import torch
+
+
+def retain_highres_inputs(batch, sources, *, fraction, seed):
+    """Keep an edge-anchored prefix of each month's originally valid HR pixels.
+
+    A fixed hash selects the edge for a tile/source. Fractions are nested and keep
+    floor(fraction * valid_count) pixels. No global RNG or target arrays are used.
+    """
+    frames = batch.get("highres_frames", {})
+    ids = batch["patch_ids"]
+    if (
+        not sources
+        or len(set(sources)) != len(sources)
+        or not set(sources) <= set(frames)
+        or isinstance(fraction, bool)
+        or not isinstance(fraction, (int, float))
+        or not math.isfinite(fraction)
+        or not 0 <= fraction <= 1
+        or type(seed) is not int
+        or seed < 0
+        or len(set(ids)) != len(ids)
+        or any(not isinstance(i, str) or not i for i in ids)
+    ):
+        raise ValueError("invalid registered high-resolution retention request")
+    result = dict(batch)
+    result["highres_frames"] = dict(frames)
+    result["highres_masks"] = dict(batch["highres_masks"])
+    for source in sources:
+        original, mask = frames[source], batch["highres_masks"][source]
+        if original.ndim not in (4, 5) or original.shape[0] != len(ids):
+            raise ValueError("invalid high-resolution retention frame shape")
+        h, w = original.shape[-2:]
+        leading = original.shape[:2] if original.ndim == 5 else original.shape[:1]
+        if (
+            min(h, w) < 1
+            or mask.shape != (*leading, 1, h, w)
+            or mask.device != original.device
+            or not ((mask == 0) | (mask == 1)).all()
+            or (original.ndim == 5 and original.shape[1] != batch["timestamps"].shape[1])
+        ):
+            raise ValueError("invalid monthly high-resolution retention mask")
+        if fraction == 1:
+            continue
+        output, kept_masks = original.clone(), mask.clone()
+        for b, patch_id in enumerate(ids):
+            digest = hashlib.sha256(json.dumps([seed, patch_id, source]).encode()).digest()
+            order = torch.arange(h * w, device=original.device).reshape(h, w)
+            if digest[0] % 2:
+                order = order.T
+            if digest[1] % 2:
+                order = order.flip(0)
+            order = order.reshape(-1)
+            for month in range(original.shape[1] if original.ndim == 5 else 1):
+                index = (b, month) if original.ndim == 5 else b
+                valid = mask[index].reshape(-1) > 0
+                eligible = order[valid[order]]
+                keep = torch.zeros(h * w, dtype=torch.bool, device=original.device)
+                keep[eligible[: int(fraction * len(eligible))]] = True
+                keep = keep.reshape(1, h, w)
+                output[index] = torch.where(keep, original[index], 0)
+                kept_masks[index] = torch.where(keep, mask[index], 0)
+        result["highres_frames"][source], result["highres_masks"][source] = output, kept_masks
+    return result
 
 
 def ablate_inputs(
