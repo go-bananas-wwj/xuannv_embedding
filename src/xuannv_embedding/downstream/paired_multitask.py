@@ -5,7 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from pathlib import Path
+from threading import Event
 
 import numpy as np
 from sklearn.metrics import average_precision_score, balanced_accuracy_score
@@ -373,7 +376,36 @@ def _identity(spec, spec_path, batches, stage, *, test):
     }
 
 
-def calibrate(spec_path: Path):
+def _workers(value):
+    if type(value) is not int or value not in (1, 2):
+        raise ValueError("primary workers must be one or two")
+
+
+def _map(pool, function, items):
+    return map(function, items) if pool is None else pool.map(function, items)
+
+
+def _calibrate_model(stage, name, batch, condition, y, train, val, ids, indices):
+    model, support = _fit(batch.values, y, train, val, ids, indices, condition)
+    directory = stage / "readouts" / condition["key"] / name
+    save_readout(model, directory)
+    digest = sha(directory / "identity.json")
+    loaded = load_readout(directory, digest)
+    replay = None
+    if condition["family"] != "Q":
+        query, truth, _, _ = _query(batch.values, y, val, condition["family"])
+        replay = verify_validation(loaded, query, truth)
+    row = _predict(stage, name, condition, batch, y, val, indices, loaded, support)
+    record = {
+        "readout_identity_sha256": digest,
+        "validation_prediction_sha256": row["prediction_sha256"],
+        "validation_replay": replay,
+    }
+    return name, support, row, record
+
+
+def calibrate(spec_path: Path, *, workers: int = 1):
+    _workers(workers)
     spec, cache = _spec(spec_path)
     stage = Path(spec["output"]) / "calibration"
     stage.mkdir(parents=True, exist_ok=False)
@@ -389,40 +421,35 @@ def calibrate(spec_path: Path):
             for seed in spec["support_seeds"]:
                 nested_support(y, ids, train, max(spec["budgets"]), seed)
         rows, records = {name: [] for name in batches}, {}
-        for condition in _conditions(spec):
-            key, y = condition["key"], labels[condition["task"]]
-            record, shared_support = {"models": {}}, None
-            for name, batch in batches.items():
-                model, support = _fit(batch.values, y, train, val, ids, indices, condition)
-                if shared_support is not None and support != shared_support:
-                    raise ValueError("models used different training support")
-                shared_support = support
-                directory = stage / "readouts" / key / name
-                save_readout(model, directory)
-                digest = sha(directory / "identity.json")
-                loaded = load_readout(directory, digest)
-                replay = None
-                if condition["family"] != "Q":
-                    query, truth, _, _ = _query(batch.values, y, val, condition["family"])
-                    replay = verify_validation(loaded, query, truth)
-                row = _predict(stage, name, condition, batch, y, val, indices, loaded, support)
-                rows[name].append(row)
-                record["models"][name] = {
-                    "readout_identity_sha256": digest,
-                    "validation_prediction_sha256": row["prediction_sha256"],
-                    "validation_replay": replay,
-                }
-            support_path = stage / "readouts" / key / "support.json"
-            dump(support_path, shared_support)
-            record["support_sha256"] = sha(support_path)
-            records[key] = record
-            dump(
-                stage / "status.json",
-                {"state": "running", "conditions_complete": len(records), "test_scored": False},
-            )
+        with ThreadPoolExecutor(max_workers=workers) if workers > 1 else nullcontext() as pool:
+            for condition in _conditions(spec):
+                key, y = condition["key"], labels[condition["task"]]
+                record, shared_support = {"models": {}}, None
+
+                def fit_one(item):
+                    name, batch = item
+                    return _calibrate_model(
+                        stage, name, batch, condition, y, train, val, ids, indices
+                    )
+
+                for name, support, row, model_record in _map(pool, fit_one, batches.items()):
+                    if shared_support is not None and support != shared_support:
+                        raise ValueError("models used different training support")
+                    shared_support = support
+                    rows[name].append(row)
+                    record["models"][name] = model_record
+                support_path = stage / "readouts" / key / "support.json"
+                dump(support_path, shared_support)
+                record["support_sha256"] = sha(support_path)
+                records[key] = record
+                dump(
+                    stage / "status.json",
+                    {"state": "running", "conditions_complete": len(records), "test_scored": False},
+                )
         dump(stage / "results.json", rows)
         identity = _identity(spec, spec_path, batches, stage, test=False)
         identity["readouts"] = records
+        identity["workers"] = workers
         dump(stage / "identity.json", identity)
         dump(
             stage / "status.json",
@@ -434,7 +461,8 @@ def calibrate(spec_path: Path):
         raise
 
 
-def score(spec_path: Path, calibration_identity_sha256: str):
+def score(spec_path: Path, calibration_identity_sha256: str, *, workers: int = 1):
+    _workers(workers)
     spec, cache = _spec(spec_path)
     calibration = Path(spec["output"]) / "calibration"
     identity_path = calibration / "identity.json"
@@ -478,16 +506,18 @@ def score(spec_path: Path, calibration_identity_sha256: str):
     stage = Path(spec["output"]) / "test"
     stage.mkdir(parents=True, exist_ok=False)
     dump(stage / "status.json", {"state": "running", "phase": "prepare", "test_scored": False})
-    scored = False
+    scored = Event()
     try:
         batches, labels, indices = _common(spec, cache, ("test",), stage)
         query_indices = list(range(len(indices)))
         rows = {name: [] for name in batches}
-        for condition in _conditions(spec):
-            key, y = condition["key"], labels[condition["task"]]
-            for name, batch in batches.items():
-                rows[name].append(
-                    _predict(
+        with ThreadPoolExecutor(max_workers=workers) if workers > 1 else nullcontext() as pool:
+            for condition in _conditions(spec):
+                key, y = condition["key"], labels[condition["task"]]
+
+                def predict_one(item):
+                    name, batch = item
+                    row = _predict(
                         stage,
                         name,
                         condition,
@@ -498,19 +528,23 @@ def score(spec_path: Path, calibration_identity_sha256: str):
                         frozen[key][name],
                         supports[key],
                     )
+                    scored.set()
+                    return name, row
+
+                for name, row in _map(pool, predict_one, batches.items()):
+                    rows[name].append(row)
+                dump(
+                    stage / "status.json",
+                    {
+                        "state": "running",
+                        "conditions_complete": len(rows[next(iter(rows))]),
+                        "test_scored": True,
+                    },
                 )
-                scored = True
-            dump(
-                stage / "status.json",
-                {
-                    "state": "running",
-                    "conditions_complete": len(rows[next(iter(rows))]),
-                    "test_scored": True,
-                },
-            )
         dump(stage / "results.json", rows)
         result = _identity(spec, spec_path, batches, stage, test=True)
         result["calibration_identity_sha256"] = calibration_identity_sha256
+        result["workers"] = workers
         dump(stage / "identity.json", result)
         dump(
             stage / "status.json",
@@ -527,7 +561,7 @@ def score(spec_path: Path, calibration_identity_sha256: str):
             {
                 "state": "failed",
                 "error": repr(exc),
-                "test_scored": scored,
+                "test_scored": scored.is_set(),
                 "test_data_access_started": True,
             },
         )

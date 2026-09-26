@@ -596,6 +596,7 @@ def main(argv: list[str] | None = None) -> int:
     for action in ("calibrate-primary", "score-primary"):
         p = sub.add_parser(action)
         p.add_argument("--spec", type=Path, required=True)
+        p.add_argument("--workers", type=int, choices=[1, 2], default=1)
         if action == "score-primary":
             p.add_argument("--calibration-identity-sha256", required=True)
     for action in ("calibrate-strong", "score-strong"):
@@ -725,10 +726,11 @@ def main(argv: list[str] | None = None) -> int:
     elif args.action in ("calibrate-primary", "score-primary"):
         from xuannv_embedding.downstream.paired_multitask import calibrate, score
 
+        options = {} if args.workers == 1 else {"workers": args.workers}
         if args.action == "calibrate-primary":
-            calibrate(args.spec)
+            calibrate(args.spec, **options)
         else:
-            score(args.spec, args.calibration_identity_sha256)
+            score(args.spec, args.calibration_identity_sha256, **options)
     elif args.action in ("calibrate-strong", "score-strong"):
         from xuannv_embedding.downstream.strong_multitask import calibrate, score
 

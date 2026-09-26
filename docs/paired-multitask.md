@@ -7,6 +7,17 @@ data. After reviewing and registering the resulting `calibration/identity.json` 
 loads those frozen parameters and scores test data without refitting. Each phase requires
 a new output subdirectory; a partial or complete run is never silently overwritten.
 
+Both commands accept `--workers 2` to evaluate two model readouts concurrently within each
+registered condition. The default remains serial (`--workers 1`). Conditions and model
+report order are preserved, and the coordinator still verifies identical support across
+models. Workers write separate model directories; shared feature and label arrays are read
+only. Identities record the worker count. Keep numerical-library thread limits explicit in
+the launch environment to avoid oversubscription. This does not change model selection,
+sampling, regularization choices, frozen prediction parameters or the test-access lock.
+Tests require exact equality of all saved serial/parallel C/R/Q predictions and metrics,
+with held-out files absent during calibration. If one worker fails after another has scored,
+the failed stage records test exposure and cannot be used as a completed result.
+
 This is the primary C/R/Q controller, not completion of the research benchmark. Strong
 heads, real label-bundle preparation/provenance review,
 external geographic audit, and the actual locked-candidate comparison remain required.
