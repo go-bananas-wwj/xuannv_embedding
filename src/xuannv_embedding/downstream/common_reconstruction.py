@@ -79,7 +79,20 @@ def grid_support(embedding, truth, valid, *, stride):
     return embedding[:, yy, xx].T, truth[:, yy, xx].T, np.column_stack([yy, xx])
 
 
-def masked_embedding(model, sample, sources, month, *, prefix, device, allow_missing_sources=False):
+def masked_embedding(
+    model,
+    sample,
+    sources,
+    month,
+    *,
+    prefix,
+    device,
+    allow_missing_sources=False,
+    representation="monthly",
+    normalize_embedding=False,
+):
+    if representation not in {"monthly", "mean"} or type(normalize_embedding) is not bool:
+        raise ValueError("invalid reconstruction representation or normalization")
     batch = hidden_month_inputs(
         collate_region_batch([sample]),
         sources,
@@ -102,13 +115,21 @@ def masked_embedding(model, sample, sources, month, *, prefix, device, allow_mis
             inputs.get("highres_frames"),
             inputs.get("highres_masks"),
         )
-        embedding = result.embedding_map[0, month].float().cpu().numpy()
+        maps = result.embedding_map[0].float()
+        embedding = maps[month] if representation == "monthly" else maps.mean(0)
+        if normalize_embedding:
+            embedding = torch.nn.functional.normalize(embedding, dim=0, eps=1e-12)
+        embedding = embedding.cpu().numpy()
     if embedding.ndim != 3 or not np.isfinite(embedding).all():
         raise ValueError("masked model output must be a finite DHW embedding")
     return embedding, digest.hexdigest()
 
 
 def run(args):
+    representation = getattr(args, "representation", "monthly")
+    normalize_embedding = getattr(args, "normalize_embedding", False)
+    if representation not in {"monthly", "mean"} or type(normalize_embedding) is not bool:
+        raise ValueError("invalid reconstruction representation or normalization")
     if args.output.exists():
         raise FileExistsError("never overwrite a common reconstruction run")
     if not np.isfinite(args.alpha) or args.alpha <= 0 or args.sample_stride < 1:
@@ -170,6 +191,9 @@ def run(args):
         absent_hidden_sources=sorted(set(sources) - set(config.model.input_sources)),
         months=args.months,
         context=args.context,
+        representation=representation,
+        normalize_embedding=normalize_embedding,
+        temporal_pooling_after_input_masking=True,
         training_indices=train,
         validation_indices=validation,
         test_scored=False,
@@ -214,6 +238,8 @@ def run(args):
                     prefix=args.context == "prefix",
                     device=device,
                     allow_missing_sources=target_cache is not None,
+                    representation=representation,
+                    normalize_embedding=normalize_embedding,
                 )
                 x, y, positions = grid_support(embedding, truth, domain, stride=args.sample_stride)
                 support[month]["features"].append(x)
@@ -266,6 +292,8 @@ def run(args):
                     prefix=args.context == "prefix",
                     device=device,
                     allow_missing_sources=target_cache is not None,
+                    representation=representation,
+                    normalize_embedding=normalize_embedding,
                 )
                 truth, domain = values[month], valid[month]
                 flat = embedding.reshape(embedding.shape[0], -1).T

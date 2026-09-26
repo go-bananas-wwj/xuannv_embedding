@@ -584,6 +584,8 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--target-cache", type=Path)
             p.add_argument("--alpha", type=float, default=10.0)
             p.add_argument("--sample-stride", type=int, default=8)
+            p.add_argument("--representation", choices=["monthly", "mean"], default="monthly")
+            p.add_argument("--normalize-embedding", action="store_true")
     p = sub.add_parser("report-multitask")
     p.add_argument("--plan", type=Path, required=True)
     p.add_argument("--baseline-verification", type=Path, required=True)
