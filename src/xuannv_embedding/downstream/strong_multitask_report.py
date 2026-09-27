@@ -25,10 +25,11 @@ def conditions(cohort, heads=workflow.HEADS):
     )
 
 
-def compare(registered, baseline, candidate, *, heads=workflow.HEADS):
+def compare(registered, baseline, candidate, *, heads=workflow.HEADS, task_schema=None):
     """Compare AP arrays [head/task/budget, support seed, observed + paired draws]."""
     selected = workflow.selected_heads(heads)
-    tasks = workflow.primary.OSM_TASKS + workflow.primary.ESRI_TASKS
+    schema_spec = {"task_schema": task_schema} if task_schema is not None else None
+    tasks = workflow.primary.task_names(schema_spec)
     keys, budgets = [], set()
     for c in registered:
         if (
@@ -68,7 +69,7 @@ def compare(registered, baseline, candidate, *, heads=workflow.HEADS):
     heads = {}
     for head in selected:
         sources, arrays = {}, []
-        for source in ("osm", "esri"):
+        for source in workflow.primary.task_groups(schema_spec)["C"]:
             row_indices = [
                 i for i, c in enumerate(registered) if c["head"] == head and c["source"] == source
             ]
@@ -177,12 +178,13 @@ def _inputs(spec_path, expected):
     return spec, cohort, cache, stage, indexed
 
 
-def _domains(stage, cache):
+def _domains(stage, cache, task_schema=None):
     count, size = len(cache["split"]["test"]), cache["data"]["patch_size"]
     valid = np.load(stage / "common_valid.npy", allow_pickle=False)
     if valid.dtype != np.bool_ or valid.shape != (count, size, size):
         raise ValueError("invalid archived common feature domain")
-    tasks = workflow.primary.OSM_TASKS + workflow.primary.ESRI_TASKS
+    schema_spec = {"task_schema": task_schema} if task_schema is not None else None
+    tasks = workflow.primary.task_names(schema_spec)
     domains = {}
     with np.load(stage / "common_labels.npz", allow_pickle=False) as data:
         if set(data.files) != set(tasks):
@@ -203,13 +205,13 @@ def _domains(stage, cache):
 
 def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, seed=20260921):
     """Fixed CLI resampling; explicit API overrides are only for synthetic checks."""
-    if type(threads) is not int or not 1 <= threads <= 4:
-        raise ValueError("use one to four bootstrap threads")
+    if type(threads) is not int or not 1 <= threads <= min(32, numba.config.NUMBA_NUM_THREADS):
+        raise ValueError("use one to thirty-two available bootstrap threads")
     spec, cohort, cache, stage, rows = _inputs(spec_path, test_identity_sha256)
     canonical = cache["split"]["test"]
     tile_ids = [cache["records"][i]["patch_id"] for i in canonical]
     weights = multitask_bootstrap.tile_weights(tile_ids, repeats=repeats, seed=seed)
-    domains = _domains(stage, cache)
+    domains = _domains(stage, cache, cohort.get("task_schema"))
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     prior_threads = numba.get_num_threads()
@@ -282,7 +284,13 @@ def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, see
             {
                 "baseline": a,
                 "candidate": b,
-                **compare(registered, arrays[a], arrays[b], heads=spec["heads"]),
+                **compare(
+                    registered,
+                    arrays[a],
+                    arrays[b],
+                    heads=spec["heads"],
+                    task_schema=cohort.get("task_schema"),
+                ),
             }
             for a, b in itertools.permutations(groups, 2)
         ]

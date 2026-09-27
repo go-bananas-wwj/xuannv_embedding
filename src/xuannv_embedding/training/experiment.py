@@ -596,7 +596,7 @@ def main(argv: list[str] | None = None) -> int:
     for action in ("calibrate-primary", "score-primary"):
         p = sub.add_parser(action)
         p.add_argument("--spec", type=Path, required=True)
-        p.add_argument("--workers", type=int, choices=[1, 2], default=1)
+        p.add_argument("--workers", type=int, choices=range(1, 9), default=1)
         if action == "score-primary":
             p.add_argument("--calibration-identity-sha256", required=True)
     for action in ("calibrate-strong", "score-strong"):
@@ -605,6 +605,10 @@ def main(argv: list[str] | None = None) -> int:
         if action == "score-strong":
             p.add_argument("--calibration-identity-sha256", required=True)
     p = sub.add_parser("audit-input-grids")
+    p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("prepare-worldcover")
+    p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("export-temporal-mean")
     p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("export-raw-monthly")
     p.add_argument("--spec", type=Path, required=True)
@@ -742,6 +746,14 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.downstream.input_grid_audit import audit
 
         audit(args.spec)
+    elif args.action == "prepare-worldcover":
+        from xuannv_embedding.downstream.worldcover_reference import prepare as prepare_worldcover
+
+        prepare_worldcover(args.spec)
+    elif args.action == "export-temporal-mean":
+        from xuannv_embedding.downstream.temporal_mean import export as export_mean
+
+        export_mean(args.spec)
     elif args.action == "export-raw-monthly":
         from xuannv_embedding.downstream.raw_monthly import export as export_raw
 

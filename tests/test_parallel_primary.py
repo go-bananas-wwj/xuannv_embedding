@@ -11,10 +11,13 @@ from xuannv_embedding.export.context import sha
 from xuannv_embedding.training import experiment
 
 
-def test_parallel_calibration_and_score_exactly_match_serial_without_test_access(tmp_path):
+@pytest.mark.parametrize("parallel", [2, 8])
+def test_parallel_calibration_and_score_exactly_match_serial_without_test_access(
+    tmp_path, parallel
+):
     path, spec, test_paths = fixture_spec(tmp_path)
     outputs = []
-    for workers in [1, 2]:
+    for workers in [1, parallel]:
         spec["output"] = str(tmp_path / f"workers{workers}")
         path.write_text(json.dumps(spec))
         for p in test_paths:
@@ -38,7 +41,7 @@ def test_parallel_calibration_and_score_exactly_match_serial_without_test_access
                         np.testing.assert_array_equal(a[key], b[key])
 
 
-@pytest.mark.parametrize("workers", [0, 3, True, 1.5])
+@pytest.mark.parametrize("workers", [0, 9, True, 1.5])
 def test_parallel_worker_bound_rejected_before_input_access(tmp_path, workers):
     missing = tmp_path / "absent.json"
     with pytest.raises(ValueError, match="workers"):

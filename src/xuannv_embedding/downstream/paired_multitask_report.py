@@ -28,12 +28,9 @@ def _condition_key(condition):
     return condition["family"], condition["task"], condition["budget"]
 
 
-def _validate_conditions(conditions):
-    tasks = {
-        "C": paired_multitask.OSM_TASKS + paired_multitask.ESRI_TASKS,
-        "R": paired_multitask.ESRI_TASKS,
-        "Q": paired_multitask.OSM_TASKS,
-    }
+def _validate_conditions(conditions, task_schema=None):
+    schema_spec = {"task_schema": task_schema} if task_schema is not None else None
+    tasks = {family: paired_multitask.task_names(schema_spec, family) for family in ("C", "R", "Q")}
     keys = []
     for c in conditions:
         if (
@@ -60,7 +57,7 @@ def _validate_conditions(conditions):
 
 
 def _family_mean(conditions, values, family):
-    groups = ("osm", "esri") if family == "C" else ("esri" if family == "R" else "osm",)
+    groups = tuple(dict.fromkeys(c["source"] for c in conditions if c["family"] == family))
     return np.mean(
         [
             values[
@@ -76,14 +73,14 @@ def _family_mean(conditions, values, family):
     )
 
 
-def compare(conditions, baseline, candidate):
+def compare(conditions, baseline, candidate, *, task_schema=None):
     """Summarize [task/budget, support seed, observed + shared bootstrap draws].
 
     Values already average metrics over model realizations, never predictions. Two-dimensional
     input represents one support seed. Normalize reference errors before averaging support seeds.
     This numerical rule is not a substitute for recipe, geography or multi-seed audits.
     """
-    _validate_conditions(conditions)
+    _validate_conditions(conditions, task_schema)
     baseline, candidate = np.asarray(baseline, float), np.asarray(candidate, float)
     if baseline.ndim == 2:
         baseline = baseline[:, None, :]
@@ -244,13 +241,15 @@ def _verified_metric(observed, recorded):
         raise ValueError("saved metric differs from independent prediction recomputation")
 
 
-def _archived_domains(stage, cache):
+def _archived_domains(stage, cache, task_schema=None):
     """Recover query truth/order independently from the archived maps, without features."""
     count, size = len(cache["split"]["test"]), cache["data"]["patch_size"]
     valid = np.load(stage / "common_valid.npy", allow_pickle=False)
     if valid.dtype != np.bool_ or valid.shape != (count, size, size) or size % 16:
         raise ValueError("invalid archived label domain geometry")
-    tasks = paired_multitask.OSM_TASKS + paired_multitask.ESRI_TASKS
+    schema_spec = {"task_schema": task_schema} if task_schema is not None else None
+    tasks = paired_multitask.task_names(schema_spec)
+    regression_tasks = paired_multitask.task_names(schema_spec, "R")
     domains = {}
     with np.load(stage / "common_labels.npz", allow_pickle=False) as data:
         if set(data.files) != set(tasks):
@@ -267,7 +266,7 @@ def _archived_domains(stage, cache):
             tiles = positions // (size * size)
             for family in ("C", "Q"):
                 domains[family, task] = (y.ravel()[positions], tiles, positions)
-            if task in paired_multitask.ESRI_TASKS:
+            if task in regression_tasks:
                 blocks = y.reshape(count, size // 16, 16, size // 16, 16).transpose(0, 1, 3, 2, 4)
                 eligible_counts = (blocks >= 0).sum((-2, -1))
                 positives = (blocks == 1).sum((-2, -1))
@@ -280,10 +279,10 @@ def _archived_domains(stage, cache):
 
 def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, seed=20260921):
     """Read archived predictions only; fixed CLI resampling, API overrides for fixtures."""
-    if type(threads) is not int or not 1 <= threads <= 4:
-        raise ValueError("use one to four bootstrap threads")
+    if type(threads) is not int or not 1 <= threads <= min(32, numba.config.NUMBA_NUM_THREADS):
+        raise ValueError("use one to thirty-two available bootstrap threads")
     spec, cache, stage, rows = _inputs(spec_path, test_identity_sha256)
-    expected_domains = _archived_domains(stage, cache)
+    expected_domains = _archived_domains(stage, cache, spec.get("task_schema"))
     canonical = cache["split"]["test"]
     tile_ids = [cache["records"][i]["patch_id"] for i in canonical]
     weights = tile_weights(tile_ids, repeats=repeats, seed=seed)
@@ -300,7 +299,7 @@ def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, see
                 for c in paired_multitask._conditions(spec)
             }.values()
         )
-        _validate_conditions(conditions)
+        _validate_conditions(conditions, spec.get("task_schema"))
         seeds, groups = spec["support_seeds"], spec["method_groups"]
         means = {method: [] for method in groups}
         observations, saved = [], {}
@@ -370,7 +369,11 @@ def run(spec_path, test_identity_sha256, output, *, threads=2, repeats=2000, see
         arrays = {method: np.asarray(values) for method, values in means.items()}
         np.savez_compressed(output / "draws.npz", **arrays)
         comparisons = [
-            {"baseline": a, "candidate": b, **compare(conditions, arrays[a], arrays[b])}
+            {
+                "baseline": a,
+                "candidate": b,
+                **compare(conditions, arrays[a], arrays[b], task_schema=spec.get("task_schema")),
+            }
             for a, b in itertools.permutations(groups, 2)
         ]
         result = {

@@ -13,6 +13,71 @@ def write_json(path, value):
     return {"path": str(path), "sha256": sha(path)}
 
 
+def test_explicit_worldcover_tasks_keep_their_source_and_use_new_binary_labels(tmp_path):
+    from xuannv_embedding.downstream import paired_multitask_report
+
+    path, _, _ = fixture_spec(tmp_path)
+    spec = json.loads(path.read_text())
+    spec["task_schema"] = {
+        "C": {"osm": ["osm_building"], "worldcover": ["worldcover_tree"]},
+        "R": {"worldcover": ["worldcover_tree"]},
+        "Q": {"osm": ["osm_building"]},
+    }
+    for split, record in spec["labels"].items():
+        label_path = Path(record["path"])
+        with np.load(label_path) as z:
+            new = {key: z[key] for key in ["indices", "cache_sha256", "osm_building"]}
+            new["worldcover_tree"] = (z["esri"] == 1).astype(np.int8)
+        np.savez(label_path, **new)
+        record["sha256"] = sha(label_path)
+    lock_path = Path(spec["lock"]["path"])
+    spec["lock"] = write_json(
+        lock_path, {"state": "locked", "contract_sha256": workflow.contract_sha256(spec)}
+    )
+    write_json(path, spec)
+    calibrated = workflow.calibrate(path)
+    assert {c["source"] for c in calibrated["conditions"]} == {"osm", "worldcover"}
+    identity_path = Path(spec["output"]) / "calibration/identity.json"
+    workflow.score(path, sha(identity_path))
+    test = Path(spec["output"]) / "test/identity.json"
+    result = paired_multitask_report.run(path, sha(test), tmp_path / "report", threads=1, repeats=8)
+    assert result["state"] == "complete"
+    assert {r["source"] for r in result["observations"]} == {"osm", "worldcover"}
+    paired_multitask_report.run(path, sha(test), tmp_path / "report_parallel", threads=8, repeats=8)
+    with (
+        np.load(tmp_path / "report/draws.npz") as serial,
+        np.load(tmp_path / "report_parallel/draws.npz") as parallel,
+    ):
+        for name in serial.files:
+            np.testing.assert_array_equal(serial[name], parallel[name])
+    from xuannv_embedding.downstream import strong_multitask, strong_multitask_report
+
+    strong = {
+        "protocol": strong_multitask.PROTOCOL,
+        "primary_spec": {"path": str(path), "sha256": sha(path)},
+        "heads": ["mlp"],
+        "neural_device": "cpu",
+        "output": str(tmp_path / "strong_wc"),
+    }
+    strong["lock"] = write_json(
+        tmp_path / "strong_wc_lock.json",
+        {"state": "locked", "contract_sha256": strong_multitask.contract_sha256(strong)},
+    )
+    strong_path = tmp_path / "strong_wc.json"
+    write_json(strong_path, strong)
+    strong_multitask.calibrate(strong_path)
+    root = Path(strong["output"])
+    strong_multitask.score(strong_path, sha(root / "calibration/identity.json"))
+    result = strong_multitask_report.run(
+        strong_path,
+        sha(root / "test/identity.json"),
+        tmp_path / "strong_report",
+        threads=1,
+        repeats=8,
+    )
+    assert {r["source"] for r in result["observations"]} == {"osm", "worldcover"}
+
+
 def fixture_spec(tmp_path):
     size = 16
     records = [{"patch_id": f"p{i}", "bounds": [i * 160, 0, i * 160 + 160, 160]} for i in range(3)]

@@ -41,6 +41,44 @@ OSM_TASKS = ("osm_building", "osm_road", "osm_water", "osm_green")
 ESRI_TASKS = tuple("esri_" + name for name in ("water", "trees", "range", "crops", "built", "bare"))
 
 
+def task_groups(spec=None):
+    """Return a self-contained family/source/task contract; preserve archived legacy schemas."""
+    schema = (spec or {}).get("task_schema")
+    if schema is None:
+        return {
+            "C": {"osm": OSM_TASKS, "esri": ESRI_TASKS},
+            "R": {"esri": ESRI_TASKS},
+            "Q": {"osm": OSM_TASKS},
+        }
+    if not isinstance(schema, dict) or set(schema) != {"C", "R", "Q"}:
+        raise ValueError("task_schema must declare C, R and Q task families")
+    for sources in schema.values():
+        if not isinstance(sources, dict) or not sources:
+            raise ValueError("task_schema needs nonempty source groups")
+        for source, tasks in sources.items():
+            if (
+                not isinstance(source, str)
+                or not re.fullmatch(r"[a-z][a-z0-9]*", source)
+                or not isinstance(tasks, list)
+                or not tasks
+                or any(
+                    not isinstance(t, str) or not re.fullmatch(source + r"_[a-z0-9_]+", t)
+                    for t in tasks
+                )
+                or len(set(tasks)) != len(tasks)
+            ):
+                raise ValueError("task_schema has invalid or duplicate source tasks")
+    classified = {t for tasks in schema["C"].values() for t in tasks}
+    for family in ["R", "Q"]:
+        if not {t for tasks in schema[family].values() for t in tasks} <= classified:
+            raise ValueError("R/Q tasks must share the registered binary classification labels")
+    return schema
+
+
+def task_names(spec=None, family="C"):
+    return tuple(t for tasks in task_groups(spec)[family].values() for t in tasks)
+
+
 def _pairs(items):
     result = {}
     for key, value in items:
@@ -96,8 +134,9 @@ def _spec(path):
         "geographic_audit",
         "lock",
     }
-    if set(spec) != allowed or spec["protocol"] != PROTOCOL:
+    if set(spec) - {"task_schema"} != allowed or spec["protocol"] != PROTOCOL:
         raise ValueError("invalid paired primary specification")
+    task_groups(spec)
     lock = _registered(spec["lock"])
     if lock.get("state") != "locked" or lock.get("contract_sha256") != contract_sha256(spec):
         raise ValueError("evaluation contract is not locked or has changed")
@@ -158,9 +197,9 @@ def _spec(path):
 def _conditions(spec):
     result = []
     for family, tasks, budgets in (
-        ("C", OSM_TASKS + ESRI_TASKS, spec["budgets"]),
-        ("R", ESRI_TASKS, spec["budgets"]),
-        ("Q", OSM_TASKS, spec["retrieval_budgets"]),
+        ("C", task_names(spec, "C"), spec["budgets"]),
+        ("R", task_names(spec, "R"), spec["budgets"]),
+        ("Q", task_names(spec, "Q"), spec["retrieval_budgets"]),
     ):
         for task in tasks:
             for seed in spec["support_seeds"]:
@@ -179,6 +218,31 @@ def _conditions(spec):
 
 
 def _labels(spec, cache, splits):
+    if "task_schema" in spec:
+        collected = {task: [] for task in task_names(spec)}
+        size = cache["data"]["patch_size"]
+        for split in splits:
+            record = spec["labels"][split]
+            path = Path(record["path"])
+            if sha(path) != record["sha256"]:
+                raise ValueError("label bundle digest changed")
+            with np.load(path, allow_pickle=False) as data:
+                if (
+                    set(data.files) != {"indices", "cache_sha256", *collected}
+                    or str(data["cache_sha256"].item()) != spec["reference_cache"]["sha256"]
+                    or not np.issubdtype(data["indices"].dtype, np.integer)
+                    or not np.array_equal(data["indices"], cache["split"][split])
+                ):
+                    raise ValueError("binary label schema, partition or cache binding differs")
+                for task in collected:
+                    y = data[task]
+                    if (
+                        y.shape != (len(cache["split"][split]), size, size)
+                        or not np.isin(y, [-1, 0, 1]).all()
+                    ):
+                        raise ValueError("binary label geometry or encoding differs")
+                    collected[task].append(y.astype(np.int8))
+        return {task: np.concatenate(values) for task, values in collected.items()}
     collected = {task: [] for task in OSM_TASKS + ESRI_TASKS}
     size = cache["data"]["patch_size"]
     for split in splits:
@@ -377,8 +441,8 @@ def _identity(spec, spec_path, batches, stage, *, test):
 
 
 def _workers(value):
-    if type(value) is not int or value not in (1, 2):
-        raise ValueError("primary workers must be one or two")
+    if type(value) is not int or not 1 <= value <= 8:
+        raise ValueError("primary workers must be between one and eight")
 
 
 def _map(pool, function, items):

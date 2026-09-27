@@ -83,6 +83,32 @@ def rewrite_manifest(args, edit):
     args["manifest_sha256"] = sha(path)
 
 
+def test_period_mean_has_one_vector_and_keeps_its_actual_time_window(tmp_path):
+    args = setup_exports(tmp_path)
+    for i in range(2):
+        path = tmp_path / f"p{i}.npz"
+        with np.load(path) as data:
+            mean = data["embedding"].mean(axis=0, keepdims=True)
+        np.savez(path, embedding=mean)
+        args["tile_sha256"][f"p{i}"] = sha(path)
+    rewrite_manifest(
+        args,
+        lambda d: d.update(
+            kind="temporal_mean",
+            months=["mean_2026-04_2026-05"],
+            observation_months=["2026-04", "2026-05"],
+        ),
+    )
+    args["selection"] = FeatureSelection("temporal_mean", "2026-04/2026-05", "2026-05", 3)
+    result = read_features(**args)
+    np.testing.assert_array_equal(result.values[0], np.full((2, 2, 3), 0.75))
+    assert result.identity["temporal_resolution"] == "period_mean"
+    assert result.identity["feature_period"] == "2026-04/2026-05"
+    rewrite_manifest(args, lambda d: d.update(observation_months=["2026-05"]))
+    with pytest.raises(ValueError, match="mean period"):
+        read_features(**args)
+
+
 def test_existing_index_only_export_remains_readable(tmp_path):
     args = setup_exports(tmp_path)
     rewrite_manifest(args, lambda d: d.update(exported_indices=[1, 0]))

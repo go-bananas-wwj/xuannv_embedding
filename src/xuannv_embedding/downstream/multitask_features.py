@@ -25,17 +25,23 @@ def _month(value: str) -> bool:
 
 @dataclass(frozen=True)
 class FeatureSelection:
-    kind: Literal["monthly", "annual", "raw"]
+    kind: Literal["monthly", "annual", "raw", "temporal_mean"]
     period: str
     evaluation_month: str
     channels: int
 
     def __post_init__(self):
-        if self.kind not in ("monthly", "annual", "raw") or not _month(self.evaluation_month):
+        if self.kind not in ("monthly", "annual", "raw", "temporal_mean") or not _month(
+            self.evaluation_month
+        ):
             raise ValueError("invalid feature kind or evaluation month")
         if type(self.channels) is not int or self.channels < 1:
             raise ValueError("feature channels must be a positive integer")
-        if self.kind == "annual":
+        if self.kind == "temporal_mean":
+            parts = self.period.split("/") if isinstance(self.period, str) else []
+            if len(parts) != 2 or not all(_month(p) for p in parts) or parts[0] > parts[1]:
+                raise ValueError("temporal mean period must be YYYY-MM/YYYY-MM")
+        elif self.kind == "annual":
             if not isinstance(self.period, str) or not re.fullmatch(r"[1-9][0-9]{3}", self.period):
                 raise ValueError("annual feature period must be a year")
         elif not _month(self.period):
@@ -58,6 +64,19 @@ def _registered_json(path: Path, expected: str, name: str) -> dict:
 
 def _period_index(selection: FeatureSelection, manifest: dict) -> int:
     months = manifest["months"]
+    if selection.kind == "temporal_mean":
+        start, end = selection.period.split("/")
+        observed = manifest.get("observation_months", [])
+        if (
+            manifest.get("kind") != "temporal_mean"
+            or months != [f"mean_{start}_{end}"]
+            or not observed
+            or not all(_month(m) for m in observed)
+            or observed != sorted(set(observed))
+            or (observed[0], observed[-1]) != (start, end)
+        ):
+            raise ValueError("temporal mean period differs from its registered window")
+        return 0
     if selection.kind == "annual":
         if months != ["annual_" + selection.period]:
             raise ValueError("annual product period differs from the registered manifest")
@@ -116,9 +135,9 @@ def _tile(path: Path, selection: FeatureSelection, manifest: dict, index: int, s
             raise ValueError("embedding period/channel/grid shape differs from its contract")
         if not (np.issubdtype(array.dtype, np.floating) or np.issubdtype(array.dtype, np.integer)):
             raise ValueError("embedding must have a real numeric dtype")
-        if selection.kind == "annual":
+        if selection.kind in ("annual", "temporal_mean"):
             if "timestamps" in archive:
-                raise ValueError("annual export must not claim monthly timestamps")
+                raise ValueError("annual or temporal mean export must not claim monthly timestamps")
         elif "timestamps" in archive:
             expected = np.array([int(m.replace("-", "")) for m in manifest["months"]])
             if not np.array_equal(archive["timestamps"], expected):
@@ -168,6 +187,11 @@ def read_features(
         raise ValueError("export is not bound to the supplied source cache")
     if selection.evaluation_month not in cache["data"]["months"]:
         raise ValueError("evaluation month is outside the registered reference period")
+    if (
+        selection.kind == "temporal_mean"
+        and manifest.get("observation_months") != cache["data"]["months"]
+    ):
+        raise ValueError("temporal mean period must cover the complete registered input window")
     size, layout = _grid(cache, manifest)
     index = _period_index(selection, manifest)
     splits = tuple(splits)
@@ -234,7 +258,11 @@ def read_features(
         "kind": selection.kind,
         "feature_period": selection.period,
         "evaluation_month": selection.evaluation_month,
-        "temporal_resolution": "annual" if selection.kind == "annual" else "monthly",
+        "temporal_resolution": (
+            "period_mean"
+            if selection.kind == "temporal_mean"
+            else "annual" if selection.kind == "annual" else "monthly"
+        ),
         "channels": selection.channels,
         "splits": list(splits),
         "indices": list(indices),
