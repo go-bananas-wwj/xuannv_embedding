@@ -109,12 +109,22 @@ def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(
     if transformer:
         # Objective-weight search reuses materialized targets, without rewriting cache data.
         adapted_raw["model"]["target_heads"]["extra_recon"]["weight"] = 0.45
+        adapted_raw["training"]["semantic_probe_month_index"] = 0
         args.config.write_text(yaml.safe_dump(adapted_raw))
     args.initialize = base_args.output / "best.pt"
     args.base_config = base_args.config
     args.freeze_base = True
     args.train_semantic_head = train_head
     args.highres_encoding = "transformer" if transformer else "native"
+    if transformer:
+        from xuannv_embedding.training.adaptation import initialize_adaptation
+        from xuannv_embedding.training.cli import build_training_system
+
+        config = Config.from_yaml(args.config)
+        initialized = build_training_system(config)
+        split = json.loads((args.cache / "cache.json").read_text())["split"]
+        initialize_adaptation(initialized, config, args, split)
+        assert initialized.criterion.semantic_probe.month_index == 0
     run(args)
     args.resume = args.output / "latest.pt"
     args.epochs = 2

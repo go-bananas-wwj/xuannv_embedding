@@ -250,6 +250,7 @@ class TrainingConfig:
     semantic_probe_pos_weight: float = 1.0
     semantic_probe_pos_weights: dict[str, float] = field(default_factory=dict)
     semantic_probe_hidden_dim: int = 64
+    semantic_probe_month_index: int = -1
     semantic_probe_hard_negative_ratio: float = 0.0
     semantic_probe_hard_negative_weight: float = 0.0
     semantic_probe_hard_negative_warmup_epochs: int = 0
@@ -604,6 +605,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "semantic_probe_pos_weight",
         "semantic_probe_pos_weights",
         "semantic_probe_hidden_dim",
+        "semantic_probe_month_index",
         "semantic_probe_hard_negative_ratio",
         "semantic_probe_hard_negative_weight",
         "semantic_probe_hard_negative_warmup_epochs",
@@ -618,6 +620,12 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "save_every",
     }
     raw = _strict(value, "training", allowed=fields, required=required)
+    semantic_month = raw.get("semantic_probe_month_index", -1)
+    if (
+        type(semantic_month) is not int
+        or not -model.num_months <= semantic_month < model.num_months
+    ):
+        raise ConfigError("training.semantic_probe_month_index 必须是观测窗口内的整数索引")
     tasks_raw = raw.get("semantic_probe_tasks", [])
     if not isinstance(tasks_raw, list):
         raise ConfigError("training.semantic_probe_tasks 必须是字符串列表")
@@ -685,6 +693,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         semantic_probe_hidden_dim=_non_negative_int(
             raw.get("semantic_probe_hidden_dim", 64), "training.semantic_probe_hidden_dim"
         ),
+        semantic_probe_month_index=semantic_month,
         semantic_probe_hard_negative_ratio=_finite_float(
             raw.get("semantic_probe_hard_negative_ratio", 0.0),
             "training.semantic_probe_hard_negative_ratio",

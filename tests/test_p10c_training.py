@@ -14,6 +14,33 @@ from xuannv_embedding.training.losses import (
 from xuannv_embedding.training.masking import InputMaskingConfig, apply_input_masking
 
 
+def test_semantic_loss_gradients_reach_only_the_selected_output_month():
+    criterion = TotalLoss(
+        target_cfg={},
+        uniformity_weight=0,
+        semantic_probe_embed_dim=4,
+        semantic_probe_weight=1,
+        semantic_probe_tasks=["osm_building"],
+        semantic_probe_hidden_dim=0,
+        semantic_probe_month_index=0,
+    )
+    with torch.no_grad():
+        criterion.semantic_probe.probes["osm_building"].weight.fill_(0.25)
+        criterion.semantic_probe.probes["osm_building"].bias.zero_()
+    embedding = torch.zeros(2, 2, 4, 3, 3, requires_grad=True)
+    output = SimpleNamespace(embedding_map=embedding, reconstructions={})
+    losses = criterion(
+        output,
+        {},
+        {},
+        {"osm_building": torch.ones(2, 3, 3)},
+        {"osm_building": torch.ones(2)},
+    )
+    losses["semantic_probe_weighted"].backward()
+    assert torch.count_nonzero(embedding.grad[:, 0]) > 0
+    assert torch.count_nonzero(embedding.grad[:, 1]) == 0
+
+
 def test_reconstruction_loss_l1_respects_mask() -> None:
     pred = torch.tensor([[[[1.0, 3.0], [5.0, 7.0]]]])
     target = torch.zeros_like(pred)

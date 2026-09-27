@@ -120,6 +120,30 @@ def _write(tmp_path: Path, text: str) -> Path:
     return path
 
 
+def test_semantic_supervision_month_reaches_training_system(tmp_path):
+    from xuannv_embedding.training.cli import build_training_system
+
+    text = _valid_config().replace(
+        "  semantic_probe_hidden_dim: 0",
+        "  semantic_probe_hidden_dim: 0\n  semantic_probe_month_index: 0",
+    )
+    config = Config.from_yaml(_write(tmp_path, text))
+    assert config.training.semantic_probe_month_index == 0
+    assert build_training_system(config).criterion.semantic_probe.month_index == 0
+
+
+@pytest.mark.parametrize("value", [-3, 2, True, 0.5, "0"])
+def test_rejects_invalid_semantic_month_index(tmp_path, value):
+    import yaml
+
+    raw = yaml.safe_load(_valid_config())
+    raw["training"]["semantic_probe_month_index"] = value
+    path = tmp_path / "invalid_month.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError, match="semantic_probe_month_index"):
+        Config.from_yaml(path)
+
+
 def test_loads_strict_region_agnostic_config(tmp_path: Path) -> None:
     cfg = Config.from_yaml(_write(tmp_path, _valid_config()))
 
