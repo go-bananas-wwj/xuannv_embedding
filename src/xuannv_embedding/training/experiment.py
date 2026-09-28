@@ -615,6 +615,9 @@ def main(argv: list[str] | None = None) -> int:
     for action in ["review-calibrate", "review-score"]:
         p = sub.add_parser(action)
         p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("review-baseline")
+    p.add_argument("--spec", type=Path, required=True)
+    p.add_argument("--phase", choices=["calibration", "test"], required=True)
     p = sub.add_parser("review-convergence")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--phase", choices=["calibration", "test"], required=True)
@@ -718,6 +721,10 @@ def main(argv: list[str] | None = None) -> int:
             review_readouts.calibrate(args.spec)
         else:
             review_readouts.score(args.spec)
+    elif args.action == "review-baseline":
+        from xuannv_embedding.downstream.baseline_review import run as baseline_run
+
+        baseline_run(args.spec, args.phase)
     elif args.action == "review-convergence":
         from xuannv_embedding.downstream.review_trajectory import run as convergence_run
 
