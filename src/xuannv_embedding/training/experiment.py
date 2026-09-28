@@ -608,6 +608,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("prepare-worldcover")
     p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("prepare-static-worldcover")
+    p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("refine-region")
+    p.add_argument("--spec", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--device", required=True)
+    p.add_argument("--resume", type=Path)
+    p.add_argument("--stop-after-updates", type=int)
+    p = sub.add_parser("export-refinement")
+    p.add_argument("--spec", type=Path, required=True)
+    p.add_argument("--checkpoint", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--device", required=True)
+    p.add_argument("--batch-size", type=int, default=4)
     p = sub.add_parser("export-temporal-mean")
     p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("export-raw-monthly")
@@ -679,6 +693,18 @@ def main(argv: list[str] | None = None) -> int:
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers, include_highres=args.include_highres)
+    elif args.action == "prepare-static-worldcover":
+        from xuannv_embedding.training.static_targets import prepare as prepare_static
+
+        prepare_static(args.spec)
+    elif args.action in {"refine-region", "export-refinement"}:
+        from xuannv_embedding.training.refinement_run import export as export_refinement
+        from xuannv_embedding.training.refinement_run import run as refine_region
+
+        if args.action == "refine-region":
+            refine_region(args)
+        else:
+            export_refinement(args)
     elif args.action == "diagnose-head-only":
         from xuannv_embedding.training.head_diagnostic import run as head_run
 
