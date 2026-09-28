@@ -620,6 +620,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--phase", choices=["calibration", "test"], required=True)
     p = sub.add_parser("prepare-native-landcover")
     p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("full-region-readout")
+    p.add_argument("--spec", type=Path, required=True)
+    p.add_argument("--phase", choices=["calibration", "full_region"], required=True)
     p = sub.add_parser("review-convergence")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--phase", choices=["calibration", "test"], required=True)
@@ -731,6 +734,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.downstream.native_landcover import prepare as prepare_native
 
         prepare_native(args.spec)
+    elif args.action == "full-region-readout":
+        from xuannv_embedding.downstream.full_region_readouts import run as run_full_region
+
+        run_full_region(args.spec, args.phase)
     elif args.action == "review-convergence":
         from xuannv_embedding.downstream.review_trajectory import run as convergence_run
 
