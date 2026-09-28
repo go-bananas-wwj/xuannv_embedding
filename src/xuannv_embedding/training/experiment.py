@@ -618,6 +618,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("review-baseline")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--phase", choices=["calibration", "test"], required=True)
+    p = sub.add_parser("prepare-native-landcover")
+    p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("review-convergence")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--phase", choices=["calibration", "test"], required=True)
@@ -725,6 +727,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.downstream.baseline_review import run as baseline_run
 
         baseline_run(args.spec, args.phase)
+    elif args.action == "prepare-native-landcover":
+        from xuannv_embedding.downstream.native_landcover import prepare as prepare_native
+
+        prepare_native(args.spec)
     elif args.action == "review-convergence":
         from xuannv_embedding.downstream.review_trajectory import run as convergence_run
 
