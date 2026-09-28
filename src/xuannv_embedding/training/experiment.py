@@ -608,6 +608,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("prepare-worldcover")
     p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("review-prepare")
+    p.add_argument("--spec", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--phase", choices=["calibration", "test"], required=True)
+    for action in ["review-calibrate", "review-score"]:
+        p = sub.add_parser(action)
+        p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("review-convergence")
+    p.add_argument("--spec", type=Path, required=True)
+    p.add_argument("--phase", choices=["calibration", "test"], required=True)
+    p = sub.add_parser("review-retrieval")
+    p.add_argument("--spec", type=Path, required=True)
+    p = sub.add_parser("review-cluster")
+    p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("prepare-static-worldcover")
     p.add_argument("--spec", type=Path, required=True)
     p = sub.add_parser("refine-region")
@@ -693,6 +707,29 @@ def main(argv: list[str] | None = None) -> int:
     torch.set_num_threads(1)
     if args.action == "prepare":
         prepare(args.config, args.output, args.workers, include_highres=args.include_highres)
+    elif args.action == "review-prepare":
+        from xuannv_embedding.downstream.review_readouts import prepare_shared
+
+        prepare_shared(args.spec, args.output, args.phase)
+    elif args.action in {"review-calibrate", "review-score"}:
+        from xuannv_embedding.downstream import review_readouts
+
+        if args.action == "review-calibrate":
+            review_readouts.calibrate(args.spec)
+        else:
+            review_readouts.score(args.spec)
+    elif args.action == "review-convergence":
+        from xuannv_embedding.downstream.review_trajectory import run as convergence_run
+
+        convergence_run(args.spec, args.phase)
+    elif args.action == "review-retrieval":
+        from xuannv_embedding.downstream.review_retrieval import run as review_retrieval
+
+        review_retrieval(args.spec)
+    elif args.action == "review-cluster":
+        from xuannv_embedding.downstream.cluster_diagnostics import run as cluster_run
+
+        cluster_run(args.spec)
     elif args.action == "prepare-static-worldcover":
         from xuannv_embedding.training.static_targets import prepare as prepare_static
 
