@@ -226,3 +226,16 @@ def test_highres_loss_weight_scales_only_the_highres_term():
     assert torch.allclose(
         three["total"] - one["total"], 2 * one["highres_recon"], rtol=1e-4, atol=1e-5
     )
+
+
+def test_visible_highres_targets_cover_unmasked_pixels():
+    config = annual_config()
+    generator = torch.Generator().manual_seed(11)
+    default = prepare_annual_batch(raw_batch(), config, training=True, generator=generator)
+    config = replace(config, training=replace(config.training, highres_visible_targets=True))
+    generator = torch.Generator().manual_seed(11)
+    visible = prepare_annual_batch(raw_batch(), config, training=True, generator=generator)
+    for held, full in zip(default["highres_targets"][0], visible["highres_targets"][0]):
+        assert (full["mask"] >= held["mask"] - 1e-6).all()
+        assert full["mask"].sum() > held["mask"].sum()
+        assert torch.allclose(full["mask"], torch.ones_like(full["mask"]))

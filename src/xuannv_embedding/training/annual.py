@@ -116,7 +116,10 @@ def prepare_annual_batch(batch: dict, config, *, training: bool, generator=None)
                 }
             )
             heldout = (coverage[0, 0] <= 1e-6) | month_hidden
-            target_mask = original_mask & (heldout if training else torch.ones_like(heldout))
+            # 默认只监督被遮住的高分像素；打开 highres_visible_targets 后可见像素也作为目标，
+            # 要求 64 维瓶颈保留高分细节，而不仅是从低分推断缺失的高分。
+            supervise_all = not training or config.training.highres_visible_targets
+            target_mask = original_mask & (torch.ones_like(heldout) if supervise_all else heldout)
             values5, support5 = masked_resample(
                 item["values"][None], target_mask[None, None].float(), output_size
             )

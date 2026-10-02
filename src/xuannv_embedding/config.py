@@ -243,6 +243,7 @@ class TrainingConfig:
     semantic_probe_hard_negative_warmup_epochs: int = 0
     latent_prediction_weight: float = 0.0
     highres_loss_weight: float = 1.0
+    highres_visible_targets: bool = False
     input_masking: InputMaskingConfig = field(default_factory=InputMaskingConfig)
 
 
@@ -595,6 +596,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "semantic_probe_hard_negative_warmup_epochs",
         "latent_prediction_weight",
         "highres_loss_weight",
+        "highres_visible_targets",
         "input_masking",
     }
     required = {
@@ -691,6 +693,9 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         ),
         highres_loss_weight=_non_negative_float(
             raw.get("highres_loss_weight", 1.0), "training.highres_loss_weight"
+        ),
+        highres_visible_targets=_boolean(
+            raw.get("highres_visible_targets", False), "training.highres_visible_targets"
         ),
         input_masking=_parse_masking(raw.get("input_masking", {}), model),
     )
