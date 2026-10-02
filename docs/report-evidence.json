@@ -1,8 +1,8 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.7",
-  "verified_date": "2026-09-20",
-  "scope": "v6全国年度5m训练数据合同、PAN与高分质量筛选、全量相对配准诊断、跨清单重复审计、600个真实样本读取、年度模型测试和8卡4步真实数据短跑；不构成长训或独立科学精度认证。",
+  "report_version": "1.8",
+  "verified_date": "2026-10-02",
+  "scope": "v6全国年度5m训练数据合同、PAN与高分质量筛选、全量相对配准诊断、跨清单重复审计、600个真实样本读取、年度模型测试、8卡真实数据短跑，以及200轮正式训练的收敛、冻结嵌入探针评测、与外部年度嵌入基线的同协议对照和5m原生协议评测；不构成独立真值下的精度认证，也不代表生产推理条件已闭环。",
   "evidence": {
     "E1": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
@@ -144,6 +144,59 @@
         }
       ],
       "scope": "全量高分相对配准结果和目视诊断；用于定义保守隔离边界，不替代地面控制点或独立精度验证。"
+    },
+    "E9": {
+      "run_dir": "outputs/annual5m/run_200ep_20260921_092149/",
+      "files": [
+        {
+          "path": "outputs/annual5m/run_200ep_20260921_092149/train.log",
+          "sha256": "3dfb58630f3a038156414917692debbdc5d3e7d98bc572720b1a8158c11612d9"
+        },
+        {
+          "path": "outputs/annual5m/run_200ep_20260921_092149/annual5m_v1.pt",
+          "sha256": "849416369671bd21e0b9137e3c5f1f9d9cb521e267e8f939cd6c8e189219ee6d"
+        },
+        {
+          "path": "outputs/annual5m/run_200ep_20260921_092149/git_sha.txt",
+          "sha256": "8915a23378048b3751de37c6434fb1d243fbbd59db3195c3b40249f2b9619af2"
+        },
+        {
+          "path": "outputs/annual5m/run_200ep_20260921_092149/config.yaml",
+          "sha256": "04e1fe066625a31e6e86497b0c58850835ae0db5ed2cafbac767a060d1a3e77f"
+        }
+      ],
+      "note": "200轮正式训练日志、权重与来源SHA；配置SHA与checkpoint内记录一致。权重不进入Git。"
+    },
+    "E10": {
+      "files": [
+        {
+          "path": "outputs/eval/quick_rapid124/results.json",
+          "sha256": "f01f1d4d9c19faae3fa18ee3e16f9372f029b2b4b100eed44e4d8502fe8346bf"
+        },
+        {
+          "path": "outputs/eval/quick_rapid124/aef_results.json",
+          "sha256": "c6a357f7f480f7a7bdc451cf8bd5eadea72aa1b158d934360048733a0bbe9d66"
+        },
+        {
+          "path": "outputs/eval/city5m/results5m.json",
+          "sha256": "bd5556683f6d8398092be7e8d83d388ed1ce8418e586e6d5fa63e41f0a6c321e"
+        },
+        {
+          "path": "/data/xuannv-earth-embedding/outputs/aef-cache-audit-20260923-complete/manifest.json",
+          "sha256": "9e8ff8909ef3ddf646cb66be8a9f905de59c2ae2de23c57c9724f3ece2b7d051"
+        },
+        {
+          "path": "outputs/eval/quick_rapid124/figures/water.png",
+          "sha256": "72686942eaa75a60626c4cd64d39d2c2e3b5b2da7670ad948f9781796a6c5d10"
+        },
+        {
+          "path": "outputs/eval/quick_rapid124/figures/landcover.png",
+          "sha256": "daefa9bd9e4cb0b3db68230ecabcbe8bf61e82bb7a4ac43b69d95e2aa1faeb10"
+        }
+      ],
+      "labels": "WorldCover 2021（与输入同源）、OSM Geofabrik 2022-01-01（国内建筑覆盖稀疏）",
+      "scope": "冻结上游权重、只训练小探针；按patch或城市做聚类bootstrap。外部基线为公开年度嵌入，其训练集可能覆盖本地测试区域。",
+      "figures_note": "报告第10节两张实测样例图按绝对路径引用；PNG属仓库禁止类型，不进入Git，以本摘要核对。"
     }
   },
   "verified_metrics": {
@@ -256,7 +309,7 @@
     "src/xuannv_embedding/training/annual_data.py": "c24df17b6140243e2f011385c9cdc9bc0805b3e9a835bc4d75b7c9e9d4e2d0bf",
     "src/xuannv_embedding/export/annual.py": "cdd35df9cc16b9f922c175422a63458c09abcf98ad22c848916d0d27e263849b",
     "configs/production/annual5m_v1.yaml": "4f4f680a8843493d57eacf8a939b3301156cba1e6ff0eea068d6c0373d62666d",
-    "docs/xuannv_annual5m_report.tex": "a0983f40b1925b9579bef0a89b862b41ffa8e70996bbfb2c64a1afff5e3d782d"
+    "docs/xuannv_annual5m_report.tex": "c048d2027a1d40a46d5cc409eb28b664c48a2a8d924e84f140982aba5aefe9eb"
   },
   "loader_samples_read": 600,
   "build": {
@@ -267,6 +320,6 @@
     "fonts": "Fandol via TeX bundle; embedded in PDF"
   },
   "targeted_tests_passed": 348,
-  "report_source_sha256": "a0983f40b1925b9579bef0a89b862b41ffa8e70996bbfb2c64a1afff5e3d782d",
-  "report_pdf_sha256": "b322c5c50d089c144b5a459c26fe8e704bda5f08a3c64b70d3b52e9fe3fac6e1"
+  "report_source_sha256": "c048d2027a1d40a46d5cc409eb28b664c48a2a8d924e84f140982aba5aefe9eb",
+  "report_pdf_sha256": "a6017f4fc5337113172c81dc6382b40e51bc075163342e92215244220dc1ffea"
 }

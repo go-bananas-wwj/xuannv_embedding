@@ -15,7 +15,7 @@
  pdftitle={玄女：全国年度5米地理嵌入技术报告},pdfauthor={heyuhang},bookmarksnumbered=true}
 \pagestyle{fancy}\fancyhf{}
 \fancyhead[L]{\small\color{muted}玄女 / 年度 5m 地理嵌入}
-\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.7}
+\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.8}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \ctexset{section={format=\Large\bfseries\color{ink}},subsection={format=\large\bfseries\color{ink}}}
@@ -63,7 +63,7 @@
 \vfill
 {\color{ink!20}\rule{\linewidth}{.4pt}\par}
 \vspace{3mm}
-{\small\color{muted}v1.4\hfill 2026-09-18\par}
+{\small\color{muted}v1.8\hfill 2026-10-02\par}
 \end{titlepage}
 
 \pagenumbering{roman}
@@ -72,7 +72,7 @@
 \tableofcontents
 \vfill
 \note{阅读顺序：第1节了解决策；第2--3节确认数据事实；第4--8节审阅方法与训练；
-第9--10节评估实验与生产；附录用于追溯证据和维护文档。标注为实测样例的质量检查图来自本轮数据，其余架构与网格图为原理图。}
+第9节评测协议，第10节训练与评测结果，第11节生产交付与风险；附录用于追溯证据和维护文档。标注为实测样例的质量检查图来自本轮数据，其余架构与网格图为原理图。}
 \reportpage
 \pagenumbering{arabic}
 
@@ -166,7 +166,7 @@ PAN缺少经验证的云影QA；光学模型对积雪、山地阴影仍需专项
 {\scriptsize\texttt{scientific\_quality\_validated}} & false：质量规则和产品语义仍待科学验证。\\
 \texttt{annual\_model\_ready} & false：年度模型接口与训练闭环尚待完成。\\\bottomrule
 \end{tabularx}
-\source{[E1、E3、E8] v6摘要、读取检查与合同门禁；[E2] S2历史运行；核验于2026-09-18。}
+\source{[E1、E3、E8] v6摘要、读取检查与合同门禁；[E2] S2历史运行；核验于2026-09-18。第10节的训练与评测结论依据[E9、E10]，核验于2026-10-02。}
 
 \reportpage
 \subsection{本版质量筛选的依据与限制}
@@ -540,6 +540,131 @@ B组 & 在优选模型上逐项改变骨干、损失或上采样 & 收益能否�
 缺少合格独立标签时，结论只能停留在工程可运行，不能宣称正式模型优于基线。
 \source{本节为待执行评测协议。已有月度pilot仅作接口背景，不能替代年度三分支的效果证据。}
 
+\section{训练结果、冻结嵌入评测与外部对照}
+\subsection{正式训练与收敛}
+\noindent\begin{tabularx}{\linewidth}{@{}p{3.4cm}Y@{}}
+\toprule 项 & 实测值\\\midrule
+模型与规模 & \texttt{annual5m\_v1}，4{,}010{,}057参数（推理路径3{,}636{,}257）；输出64维、5m、$64\times256\times256$\\
+硬件与耗时 & 单节点8卡A100-SXM4-40GB；200 epoch，337{,}753\,s（约3.91天）\\
+样本与步数 & 20{,}224{,}000样本曝光，632{,}000次优化器更新，全局吞吐59.9样本/s\\
+数据等待 & 25{,}864\,s，占wall time的7.7\%\\
+数值健康 & 非有限梯度步0次；峰值显存23.3\,GB/卡；全程无异常退出\\
+来源 & 配置SHA \texttt{04e1fe06}$\cdots$，Git SHA \texttt{9fb2e67}（标签\texttt{annual5m-v1.0}）\\
+掩蔽重建误差 & 第1轮0.682$\to$第10轮0.515$\to$第200轮0.466；批内标准差0.249$\to$0.108\\\bottomrule
+\end{tabularx}
+
+\source{[E9] 训练日志与checkpoint。重建误差为训练批次上的逐轮均值，尚未在验证集与测试集上单独计算，不能据此判断过拟合。}
+
+\subsection{评测口径}
+本轮评测使用外部弱标签，冻结上游权重，只训练参数极少的探针；这与“数据合同通过不等于模型已验收”的
+既有边界一致，本节结论不得外推为独立精度认证。
+
+\begin{enumerate}
+\item \textbf{标签来源与同源风险}：地表覆盖与水体取自ESA WorldCover 2021，水体另有JRC交叉来源；建筑、道路取自
+OSM（Geofabrik 2022-01-01快照），按5m栅格化。WorldCover由Sentinel-1/2训练得到，与本项目输入同源，
+其上的绝对分数偏乐观，只用于方法间相对比较。
+\item \textbf{探针与划分}：逐像元线性回归与$k$近邻（$k=5$）用于点协议；线性与$3\times3$卷积头用于5m稠密协议。
+训练集内评测按patch五折交叉验证；与外部基线的对比按城市分组划分，使测试城市对探针完全未出现。
+\item \textbf{统计}：置信区间按patch做1000次聚类bootstrap；模型间比较使用配对bootstrap，
+报告差值的95\%区间。同一patch内像元相关，未按像元计算独立性。
+\item \textbf{分辨率对齐}：与10m标签对比时，先对嵌入做$2\times2$平均池化；5m评测直接使用原生输出，
+并把外部10m基线双线性上采样到5m网格，同时以最近邻上采样作为敏感性对照。
+\end{enumerate}
+
+\subsection{与外部年度嵌入基线的对照}
+外部基线为公开的AlphaEarth年度嵌入（Google DeepMind，64维、10m、2021年）。两套嵌入在同一批patch、
+同一折划分、同一探针下评测。需说明：外部基线的训练数据很可能已覆盖本项目的测试区域，因此“未见区域”一组
+对外部基线并非严格未见，该对照只能说明方法之间的差距，不能据此判定泛化能力。
+
+\begin{table}[h]
+\caption{10m点协议，按patch五折；数值为折外结果，括号内为配对bootstrap的95\%区间。}
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{2.6cm}YYYY@{}}
+\toprule 任务与指标 & 本项目 & 外部基线 & 原始波段 & 配对差值（本项目$-$外部）\\\midrule
+水体F1（每类全量） & 0.923 & 0.932 & 0.817 & $-0.009$ [$-0.036$, $+0.022$]\\
+地表覆盖mIoU（每类10） & 0.344 & 0.411 & 0.297 & $-0.089$ [$-0.123$, $-0.035$]\\
+地表覆盖mIoU（每类100） & 0.395 & 0.474 & 0.393 & $-0.068$ [$-0.095$, $-0.043$]\\
+地表覆盖mIoU（每类全量） & 0.481 & 0.533 & 0.428 & $-0.052$ [$-0.082$, $-0.024$]\\\bottomrule
+\end{tabularx}
+\end{table}
+
+差距集中在依赖物候的类别（耕地IoU 0.660对0.836、草地0.637对0.745、建筑0.647对0.782），
+水体、裸地持平。该结果支持“时间上下文与多年信息不足”是当前主要短板，也说明本轮训练有效但不完整。
+
+\source{[E10] 110个训练集patch上的折外探针结果与配对检验。}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\linewidth]{/data/heyuhang/xuannv_embedding/outputs/eval/quick_rapid124/figures/water.png}
+\caption{实测样例：水体提取（10m，折外线性探针）。每行一个训练集patch，列依次为S2年度中位数真彩色、
+WorldCover水体标签、本项目嵌入预测、本项目误差、原始波段基线误差、嵌入前三主成分。误差图中蓝色为正确水体，
+橙色为误报，品红为漏检。样例按水体面积分位选取，不按效果挑选。}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\linewidth]{/data/heyuhang/xuannv_embedding/outputs/eval/quick_rapid124/figures/landcover.png}
+\caption{实测样例：地表覆盖分类（10m，WorldCover 11类，折外线性探针）。列依次为真彩色、标签、本项目嵌入预测、
+原始波段基线预测、嵌入前三主成分。样例取类别最丰富的五个patch，单块精度（0.44--0.86）低于总体的0.84。
+第3行工业厂房在标签中为“裸地”，属标签误差；第1、5行湿地与灌木未被识别，与该两类IoU接近0一致。
+多张主成分图的右缘与下缘可见细色带，提示patch边界伪影，需在拼接验收中单独检查。}
+\end{figure}
+
+\subsection{5m原生协议与外部基线的对照}
+5m网格使用OSM道路、水体与建筑标签。外部基线在10m上采样到5m网格；同时给出本项目自身池化到10m再上采样
+的结果（下表“10m对照”），用于把“分辨率”与“模型内容”两种贡献分开。
+
+\begin{table}[h]
+\caption{5m稠密协议，按城市分组五折；$3\times3$卷积头。道路186个patch，建筑38个（标签覆盖不足），水体80个。}
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{3.4cm}YYYY@{}}
+\toprule 任务与分组 & 本项目5m & 10m对照 & 外部基线 & 配对差值（本项目$-$外部）\\\midrule
+道路F1（全部） & 0.228 & 0.230 & 0.204 & $+0.024$ [$+0.008$, $+0.038$]\\
+道路边界F1（全部） & 0.321 & 0.323 & 0.270 & $+0.051$ [$+0.035$, $+0.069$]\\
+道路F1（未见城市） & 0.213 & 0.218 & 0.170 & $+0.043$ [$+0.012$, $+0.077$]\\
+水体F1（未见城市） & 0.710 & 0.701 & 0.570 & $+0.140$ [$+0.043$, $+0.235$]\\
+建筑F1（全部） & 0.251 & 0.248 & 0.259 & $-0.008$ [$-0.066$, $+0.040$]\\\bottomrule
+\end{tabularx}
+\end{table}
+
+道路与城市水体上的领先在统计上成立，但同一张表显示：本项目5m与自身的10m对照几乎一致，
+说明该领先来自嵌入内容而非分辨率。对融合过程的逐层测量给出了直接原因。
+
+\begin{table}[h]
+\caption{高分辨率信息在各融合阶段的保留情况（16个含高分观测的patch均值）。}
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{4.4cm}YY@{}}
+\toprule 阶段 & 特征范数 & 5m频段能量占比\\\midrule
+低分主干$L_5$（10m上采样） & 5.30 & 2.6\%\\
+高分全色分支（2m输入） & —— & 18.5\%\\
+高分残差$\alpha_5R_5$（门控均值0.395） & 0.68 & 8.3\%\\
+最终嵌入（vMF球面单位向量） & 1.00 & 3.1\%\\\bottomrule
+\end{tabularx}
+\end{table}
+
+高分分支确实编码了细节，但残差幅值仅为低分主干的约13\%，叠加后被主干淹没：含高分patch的最终高频占比
+（3.0\%）与不含高分的（3.2\%）没有区别。当前产品可概括为“10m质量的语义、5m格式的输出”，
+尚未兑现高分辨率相对外部基线唯一的结构性差异。
+
+\source{[E9、E10] 原生5m导出、OSM标签（含860MB全国快照）与逐层钩子测量；城市标签共3901栋建筑、
+8092条道路、600个水体面，国内OSM建筑覆盖偏稀，建筑一组不作为结论依据。}
+
+\subsection{已知问题与后续动作}
+\begin{enumerate}
+\item \textbf{高分融合稀释细节（首要）}：按M1方向改造——融合前统一各分支尺度、把高分特征拼接进5m解码器
+而非仅作小残差、提高高分重建权重并对含高分样本过采样。用“本项目5m相对自身10m的增益”和“含高分时的高频能量”
+作为验收量，可在10轮短训内判断。
+\item \textbf{土地覆盖落后于外部基线}：优先消融时间建模，包括月合成是否损失物候、是否需要多年上下文、
+随机遮蔽比例是否过高。
+\item \textbf{5m标签不足}：国内OSM在多数地点建筑稀疏，建筑与道路的绝对精度不可比；需要可靠5m真值
+（高分影像人工精标或高质量公开轮廓）才能独立证明分辨率收益。
+\item \textbf{推理输入规格未闭环}：训练低分数据的波段定义未随数据发布（\texttt{band\_semantics}标注为待核实），
+现有导出命令也只能按训练清单导出，尚不能指向任意manifest；两项未解决前不具备生产推理条件。
+\item \textbf{基线对照的公平性}：本项目参数规模与训练数据量较外部基线低两个数量级，
+且外部基线训练集可能覆盖本地测试区域；结论应表述为“在同一评测协议下与外部基线的差距”，
+不得表述为全面优劣。
+\end{enumerate}
+
 \reportpage
 \section{实现边界、生产交付与风险}
 \subsection{代码实现与验证边界}
@@ -632,7 +757,9 @@ PAN先提取结构再按地面交叠聚合到5m，低分特征插值到同一网
 \subsection{证据优先级与快照}
 本地状态使用实际产物和代码，方法论使用原论文，拟实施配置标明为设计。旧Markdown叙述与机器摘要冲突时，
 先核验版本与时间，不以“最新”字样自动覆盖证据。本版完成PAN筛选、吉林一号质量筛选、全量高分相对配准、
-跨集合重复审计、600个真实样本读取、年度模型单元测试和8卡4步真实数据短跑；没有长训指标或独立下游精度结论。
+跨集合重复审计、600个真实样本读取、年度模型单元测试、8卡4步真实数据短跑，以及200轮正式训练的收敛、
+冻结嵌入探针评测、与外部年度嵌入基线在同一协议下的对照和5m原生协议评测；没有独立真值下的精度认证，
+也没有生产推理条件的闭环结论。
 以下路径以服务器 \texttt{/data/heyuhang/processed/} 为基准；完整SHA-256及源码文件列表保存在
 \texttt{docs/report-evidence.json}，它是证据索引，不是第二份方案正文。
 
@@ -646,7 +773,9 @@ E4 & \path{national_training_v1/summary.json} & 原catalog与父格背景；状�
 E5 & 仓库实际模型、年度读取器、质检代码 & 逐模块实现边界；源码摘要优先于仅Git基线。\\
 E6 & \path{national_annual5m_quality_v6/pan-screening-summary.json} & 同景MUX关联、云影传播、面积阈值和PAN筛选计数。\\
 E7 & \path{national_annual5m_quality_v6/run.json} 及合并核验记录 & 5m波段映射、模型与处理器摘要、合并输入版本及最终合同核验。\\
-E8 & \path{national_annual5m_quality_v6/registration-full-summary.json}、\path{pan-screening-summary.json}、\path{visual-review.json} & 全量相对配准、PAN筛选和目视诊断；用于说明隔离边界，不替代独立精度验证。\\\bottomrule
+E8 & \path{national_annual5m_quality_v6/registration-full-summary.json}、\path{pan-screening-summary.json}、\path{visual-review.json} & 全量相对配准、PAN筛选和目视诊断；用于说明隔离边界，不替代独立精度验证。\\
+E9 & \path{outputs/annual5m/run_200ep_20260921_092149/}（\texttt{train.log}、\texttt{annual5m\_v1.pt}、\texttt{git\_sha.txt}） & 200轮正式训练日志、权重摘要与来源SHA；不含独立精度结论。\\
+E10 & \path{outputs/eval/quick\_rapid124/}、\path{outputs/eval/city5m/} 结果与脚本 & 冻结嵌入探针、外部基线对照、5m OSM评测与逐层融合测量；标签为外部弱标签，非独立真值。\\\bottomrule
 \end{tabularx}
 \endgroup
 
@@ -667,6 +796,7 @@ v1.1 & 2026-09-17 & 完善封面与作者信息；围绕产品需求阐明方法
 v1.2 & 2026-09-17 & 接入2m PAN候选，补做5m云筛选；更新三路支持、隔离记录与正式放行边界。\\
 v1.3 & 2026-09-18 & 完成v6全量高分配准诊断、PAN筛选、合同门禁和600样本读取；修正最终支持统计并明确训练放行边界。\\
 v1.4 & 2026-09-18 & 同步最终来源计数与代码边界，明确数据已放行而年度模型尚未就绪；清理并行历史文档和多节点旧路线。\\
-v1.7 & 2026-09-20 & 接入年度原生尺度三分支、2m到5m面积聚合、留出遮挡训练、年度导出与8卡真实数据短跑；更新实现边界。\\\bottomrule
+v1.7 & 2026-09-20 & 接入年度原生尺度三分支、2m到5m面积聚合、留出遮挡训练、年度导出与8卡真实数据短跑；更新实现边界。\\
+v1.8 & 2026-10-02 & 加入200轮正式训练结果、冻结嵌入探针评测、外部年度嵌入基线的同协议对照与5m原生协议评测；记录高分融合稀释细节等已知问题与后续动作。\\\bottomrule
 \end{tabularx}
 \end{document}
