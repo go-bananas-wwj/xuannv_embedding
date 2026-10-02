@@ -157,6 +157,7 @@ class AnnualLoss(nn.Module):
         self.uniformity_temperature = config.training.uniformity_temperature
         self.warmup = config.training.uniformity_warmup_epochs
         self.latent_prediction_weight = config.training.latent_prediction_weight
+        self.highres_loss_weight = config.training.highres_loss_weight
         self.latent_predictor = (
             nn.Conv2d(config.model.embed_dim, config.model.embed_dim, 1)
             if self.latent_prediction_weight
@@ -223,7 +224,7 @@ class AnnualLoss(nn.Module):
         result.update(
             {
                 "total": reconstruction
-                + highres_loss
+                + self.highres_loss_weight * highres_loss
                 + weight * uniformity
                 + self.latent_prediction_weight * latent,
                 "recon": reconstruction,

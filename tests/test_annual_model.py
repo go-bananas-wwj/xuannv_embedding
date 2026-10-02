@@ -172,3 +172,57 @@ def test_annual_rejects_unmeasured_registration():
     raw["highres_observations"][0][0]["metadata"]["relative_registration"]["status"] = "unresolved"
     with pytest.raises(ValueError, match="Unmeasured"):
         prepare_annual_batch(raw, annual_config(), training=False)
+
+
+def concat_config(highres_loss_weight=1.0):
+    config = annual_config()
+    return replace(
+        config,
+        model=replace(config.model, annual_fusion="concat"),
+        training=replace(config.training, highres_loss_weight=highres_loss_weight),
+    )
+
+
+def test_concat_fusion_trains_highres_branches_and_falls_back_without_highres():
+    config = concat_config()
+    system = build_training_system(config)
+    assert not hasattr(build_training_system(annual_config()).model, "branch_norms")
+    batch = prepare_annual_batch(
+        raw_batch(), config, training=True, generator=torch.Generator().manual_seed(9)
+    )
+    losses = system(batch)
+    assert torch.isfinite(losses["total"])
+    losses["total"].backward()
+    norms = system.model.branch_norms
+    assert norms["ms"].weight.grad.abs().sum() > 0
+    assert norms["pan"].weight.grad.abs().sum() > 0
+    model = system.model.eval()
+    batch = prepare_annual_batch(raw_batch(), config, training=False)
+    with torch.no_grad():
+        for observation in batch["highres_observations"][0]:
+            observation["mask"].zero_()
+            observation["values"].fill_(float("nan"))
+        missing = model_forward(model, batch)
+        batch["highres_observations"] = [[]]
+        absent = model_forward(model, batch)
+    assert torch.equal(missing.embedding_map, absent.embedding_map)
+    assert torch.isfinite(absent.embedding_map).all()
+
+
+def test_highres_loss_weight_scales_only_the_highres_term():
+    batch = None
+    totals = {}
+    for weight in (1.0, 3.0):
+        config = concat_config(weight)
+        torch.manual_seed(0)
+        system = build_training_system(config)
+        if batch is None:
+            # training=False keeps every highres pixel as a target, so the term is never empty.
+            batch = prepare_annual_batch(raw_batch(), config, training=False)
+        torch.manual_seed(1)
+        totals[weight] = system(batch)
+    one, three = totals[1.0], totals[3.0]
+    assert one["highres_recon"] > 0
+    assert torch.allclose(
+        three["total"] - one["total"], 2 * one["highres_recon"], rtol=1e-4, atol=1e-5
+    )

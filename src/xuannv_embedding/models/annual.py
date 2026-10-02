@@ -117,6 +117,19 @@ class DateDecoder(nn.Module):
         return self.head(features + self.date(date.float())[:, :, None, None])
 
 
+class ChannelRMSNorm(nn.Module):
+    """Per-pixel channel RMS scaling without bias, so an all-zero branch stays exactly zero."""
+
+    def __init__(self, channels: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(1, channels, 1, 1))
+        self.eps = eps
+
+    def forward(self, values: torch.Tensor) -> torch.Tensor:
+        scale = values.float().pow(2).mean(dim=1, keepdim=True).add(self.eps).rsqrt()
+        return values * scale.to(values.dtype) * self.weight
+
+
 @dataclass
 class AnnualOutput(AEFOutput):
     highres_reconstructions: list[list[torch.Tensor]] = field(default_factory=list)
@@ -139,6 +152,7 @@ class Annual5mModel(nn.Module):
         stp: dict[str, Any],
         gradient_checkpointing: bool = False,
         backbone: str = "stp",
+        fusion: str = "residual",
     ) -> None:
         super().__init__()
         self.sensor_channels = dict(sensor_channels)
@@ -148,6 +162,9 @@ class Annual5mModel(nn.Module):
         self.feature_dim = feature_dim
         self.embed_dim = embed_dim
         self.backbone = backbone
+        if fusion not in {"residual", "concat"}:
+            raise ValueError("Annual fusion must be residual or concat")
+        self.fusion = fusion
         self.temporal_sources = tuple(
             name for name in sensor_channels if source_roles[name] == "temporal"
         )
@@ -199,6 +216,12 @@ class Annual5mModel(nn.Module):
         self.gate = nn.Conv2d(feature_dim * 3 + 2, 1, 1)
         nn.init.zeros_(self.gate.weight)
         nn.init.constant_(self.gate.bias, -2.2)
+        if fusion == "concat":
+            # 逐分支归一化后再联合解码：高分特征以与低分主干相同的量级进入 5 m 表征，
+            # 不再是被门控压缩的小残差。无高分时分支为零，输出只由低分主干决定。
+            self.branch_norms = nn.ModuleDict(
+                {name: ChannelRMSNorm(feature_dim) for name in ("low", "ms", "pan")}
+            )
         self.bottleneck = VMFBottleneck(feature_dim, embed_dim)
         self.bottleneck.log_kappa.requires_grad_(False)
         self.decoders = nn.ModuleDict(
@@ -276,9 +299,16 @@ class Annual5mModel(nn.Module):
         if len(highres_observations) != batch_size:
             raise ValueError("Annual observation batch mismatch")
         multispectral, pan, ms_support, pan_support = self._highres(highres_observations, low5)
+        if self.fusion == "concat":
+            low5 = self.branch_norms["low"](low5)
+            multispectral = self.branch_norms["ms"](multispectral) * ms_support
+            pan = self.branch_norms["pan"](pan) * pan_support
         combined = torch.cat((low5, multispectral, pan, ms_support, pan_support), dim=1)
         available = torch.maximum(ms_support, pan_support)
-        refined = low5 + available * self.gate(combined).sigmoid() * self.joint(combined)
+        if self.fusion == "concat":
+            refined = low5 + available * self.joint(combined)
+        else:
+            refined = low5 + available * self.gate(combined).sigmoid() * self.joint(combined)
         embedding = self.bottleneck(refined)
         scene = (embedding * validity).sum(dim=(-2, -1)) / validity.sum(dim=(-2, -1)).clamp(min=1)
         scene = functional.normalize(scene, dim=1)

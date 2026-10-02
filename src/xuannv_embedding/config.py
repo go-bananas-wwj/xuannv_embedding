@@ -180,6 +180,7 @@ class ModelConfig:
     annual_feature_dim: int = 128
     annual_pan_sources: list[str] = field(default_factory=list)
     annual_backbone: Literal["stp", "conv"] = "stp"
+    annual_fusion: Literal["residual", "concat"] = "residual"
 
     @property
     def sensor_channels(self) -> dict[str, int]:
@@ -241,6 +242,7 @@ class TrainingConfig:
     semantic_probe_hard_negative_weight: float = 0.0
     semantic_probe_hard_negative_warmup_epochs: int = 0
     latent_prediction_weight: float = 0.0
+    highres_loss_weight: float = 1.0
     input_masking: InputMaskingConfig = field(default_factory=InputMaskingConfig)
 
 
@@ -453,6 +455,7 @@ def _parse_model(value: Any) -> ModelConfig:
             "annual_feature_dim",
             "annual_pan_sources",
             "annual_backbone",
+            "annual_fusion",
         },
         required={"embed_dim", "num_months", "input_sources", "target_heads"},
     )
@@ -470,6 +473,9 @@ def _parse_model(value: Any) -> ModelConfig:
     backbone = _string(raw.get("annual_backbone", "stp"), "model.annual_backbone")
     if architecture not in {"monthly", "annual5m"} or backbone not in {"stp", "conv"}:
         raise ConfigError("Invalid model architecture or annual_backbone")
+    fusion = _string(raw.get("annual_fusion", "residual"), "model.annual_fusion")
+    if fusion not in {"residual", "concat"}:
+        raise ConfigError("model.annual_fusion must be residual or concat")
     pan_sources = raw.get("annual_pan_sources", [])
     if not isinstance(pan_sources, list) or not all(isinstance(name, str) for name in pan_sources):
         raise ConfigError("model.annual_pan_sources must be a source list")
@@ -495,6 +501,7 @@ def _parse_model(value: Any) -> ModelConfig:
         ),
         annual_pan_sources=list(pan_sources),
         annual_backbone=backbone,
+        annual_fusion=fusion,
     )
 
 
@@ -587,6 +594,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "semantic_probe_hard_negative_weight",
         "semantic_probe_hard_negative_warmup_epochs",
         "latent_prediction_weight",
+        "highres_loss_weight",
         "input_masking",
     }
     required = {
@@ -680,6 +688,9 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         latent_prediction_weight=_non_negative_float(
             raw.get("latent_prediction_weight", 0.0),
             "training.latent_prediction_weight",
+        ),
+        highres_loss_weight=_non_negative_float(
+            raw.get("highres_loss_weight", 1.0), "training.highres_loss_weight"
         ),
         input_masking=_parse_masking(raw.get("input_masking", {}), model),
     )

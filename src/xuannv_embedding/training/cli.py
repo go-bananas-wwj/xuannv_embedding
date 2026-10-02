@@ -48,6 +48,7 @@ def build_training_system(config: Config) -> TrainingSystem:
             stp=asdict(config.model.stp),
             gradient_checkpointing=config.training.gradient_checkpointing,
             backbone=config.model.annual_backbone,
+            fusion=config.model.annual_fusion,
         )
         return TrainingSystem(model, AnnualLoss(config))
     model = AEFModel(
