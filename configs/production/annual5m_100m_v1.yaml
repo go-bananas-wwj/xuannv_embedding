@@ -40,15 +40,19 @@ model:
     temporal_fusion: gated_sum
     time_attention_mode: full
     highres_fusion_to_embedding: true
+    reorder_resample: true
 training:
   epochs: 200
   lr: 0.0001
   weight_decay: 0.01
   warmup_epochs: 5
-  gradient_accumulation_steps: 2
+  gradient_accumulation_steps: 1
   save_every: 50
   amp: true
   gradient_checkpointing: false
+  compile: true
+  highres_visible_targets: true
+  highres_loss_weight: 1.0
   uniformity_weight: 0.05
   uniformity_warmup_epochs: 10
   uniformity_temperature: 2.0
@@ -62,7 +66,7 @@ training:
     spatial_block_ratio: 0.25
 data:
   months: [2020-01, 2020-02, 2020-03, 2020-04, 2020-05, 2020-06, 2020-07, 2020-08, 2020-09, 2020-10, 2020-11, 2020-12]
-  batch_size: 2
+  batch_size: 4
   num_workers: 8
   patch_size: 128
   highres_mode: observations
