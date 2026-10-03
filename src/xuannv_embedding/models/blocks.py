@@ -342,7 +342,9 @@ class LearnedSpatialResampling(nn.Module):
     旧 checkpoint 兼容映射与 embedding 逐元素一致性门禁。
     """
 
-    def __init__(self, in_channels: int, out_channels: int, scale_factor: float) -> None:
+    def __init__(
+        self, in_channels: int, out_channels: int, scale_factor: float, reorder: bool = False
+    ) -> None:
         """初始化 LearnedSpatialResampling。
 
         Args:
@@ -352,6 +354,9 @@ class LearnedSpatialResampling(nn.Module):
         """
         super().__init__()
         self.scale_factor = scale_factor
+        # 1x1 卷积与双线性插值可交换（插值权重和为 1，偏置也可交换），先降通道再上采样
+        # 在数学上等价，但计算量按通道比例下降。参数与键名不变，仅改变运算顺序。
+        self.reorder = reorder
         groups = 8 if out_channels % 8 == 0 else 1
         self.proj = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1),
@@ -376,6 +381,13 @@ class LearnedSpatialResampling(nn.Module):
                 max(1, int(round(x.shape[3] * self.scale_factor))),
             )
         if x.shape[2:] != target_size:
+            upsample = target_size[0] >= x.shape[2] and target_size[1] >= x.shape[3]
+            if self.reorder and upsample:
+                conv, norm, activation = self.proj
+                resized = F.interpolate(
+                    conv(x), size=target_size, mode="bilinear", align_corners=False
+                )
+                return activation(norm(resized))
             if target_size[0] < x.shape[2] or target_size[1] < x.shape[3]:
                 out = F.adaptive_avg_pool2d(x, target_size)
             else:
@@ -400,6 +412,7 @@ class MultiResolutionSTPBlock(nn.Module):
         num_heads: int = 8,
         time_attention_mode: str = "full",
         precision_scale: int = 2,
+        reorder_resample: bool = False,
     ) -> None:
         """初始化 MultiResolutionSTPBlock。
 
@@ -422,19 +435,23 @@ class MultiResolutionSTPBlock(nn.Module):
         self.time_op = STPTimeOperator(time_dim, num_heads, attention_mode=time_attention_mode)
         self.precision_op = STPPrecisionOperator(precision_dim)
 
-        self.space_to_time = LearnedSpatialResampling(space_dim, time_dim, 2.0)
-        self.space_to_precision = LearnedSpatialResampling(
-            space_dim, precision_dim, 16.0 / self.precision_scale
+        self.space_to_time = LearnedSpatialResampling(
+            space_dim, time_dim, 2.0, reorder=reorder_resample
         )
-        self.time_to_space = LearnedSpatialResampling(time_dim, space_dim, 0.5)
+        self.space_to_precision = LearnedSpatialResampling(
+            space_dim, precision_dim, 16.0 / self.precision_scale, reorder=reorder_resample
+        )
+        self.time_to_space = LearnedSpatialResampling(
+            time_dim, space_dim, 0.5, reorder=reorder_resample
+        )
         self.time_to_precision = LearnedSpatialResampling(
-            time_dim, precision_dim, 8.0 / self.precision_scale
+            time_dim, precision_dim, 8.0 / self.precision_scale, reorder=reorder_resample
         )
         self.precision_to_space = LearnedSpatialResampling(
-            precision_dim, space_dim, self.precision_scale / 16.0
+            precision_dim, space_dim, self.precision_scale / 16.0, reorder=reorder_resample
         )
         self.precision_to_time = LearnedSpatialResampling(
-            precision_dim, time_dim, self.precision_scale / 8.0
+            precision_dim, time_dim, self.precision_scale / 8.0, reorder=reorder_resample
         )
 
     def forward(
@@ -519,6 +536,7 @@ class STPEncoder(nn.Module):
         gradient_checkpointing: bool = False,
         time_attention_mode: str = "full",
         precision_scale: int = 2,
+        reorder_resample: bool = False,
     ) -> None:
         """初始化 STPEncoder。
 
@@ -561,6 +579,7 @@ class STPEncoder(nn.Module):
                     num_heads,
                     time_attention_mode=time_attention_mode,
                     precision_scale=self.precision_scale,
+                    reorder_resample=reorder_resample,
                 )
                 for _ in range(num_blocks)
             ]
@@ -568,10 +587,16 @@ class STPEncoder(nn.Module):
 
         # 最终重采样到精度路径分辨率；仅 2× 上采样是可学习的，其余靠插值兜底。
         self.final_space_resample = LearnedSpatialResampling(
-            space_dim, precision_dim, float(self.SPACE_SCALE / self.precision_scale)
+            space_dim,
+            precision_dim,
+            float(self.SPACE_SCALE / self.precision_scale),
+            reorder=reorder_resample,
         )
         self.final_time_resample = LearnedSpatialResampling(
-            time_dim, precision_dim, float(self.TIME_SCALE / self.precision_scale)
+            time_dim,
+            precision_dim,
+            float(self.TIME_SCALE / self.precision_scale),
+            reorder=reorder_resample,
         )
         self.norm = nn.LayerNorm(precision_dim)
 

@@ -186,6 +186,7 @@ class Annual5mModel(nn.Module):
                 precision_scale=1,
                 gradient_checkpointing=gradient_checkpointing,
                 time_attention_mode=stp["time_attention_mode"],
+                reorder_resample=stp.get("reorder_resample", False),
             )
             if backbone == "stp"
             else NativeEncoder(stem_dim, feature_dim)

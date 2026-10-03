@@ -239,3 +239,30 @@ def test_visible_highres_targets_cover_unmasked_pixels():
         assert (full["mask"] >= held["mask"] - 1e-6).all()
         assert full["mask"].sum() > held["mask"].sum()
         assert torch.allclose(full["mask"], torch.ones_like(full["mask"]))
+
+
+def test_reordered_resampling_matches_interpolate_first():
+    from xuannv_embedding.models.blocks import LearnedSpatialResampling
+
+    torch.manual_seed(0)
+    reference = LearnedSpatialResampling(48, 16, 8.0).double()
+    reordered = LearnedSpatialResampling(48, 16, 8.0, reorder=True).double()
+    reordered.load_state_dict(reference.state_dict())
+    assert reference.state_dict().keys() == reordered.state_dict().keys()
+    values = torch.randn(3, 48, 4, 4, dtype=torch.float64)
+    expected = reference(values, target_size=(32, 32))
+    assert torch.allclose(reordered(values, target_size=(32, 32)), expected, atol=1e-10)
+    pooled = reference(values, target_size=(2, 2))
+    assert torch.equal(reordered(values, target_size=(2, 2)), pooled)
+
+
+def test_acceleration_switches_parse_and_keep_parameter_keys():
+    config = annual_config()
+    fast = replace(
+        config,
+        model=replace(config.model, stp=replace(config.model.stp, reorder_resample=True)),
+        training=replace(config.training, compile=True),
+    )
+    base_keys = build_training_system(config).state_dict().keys()
+    assert build_training_system(fast).state_dict().keys() == base_keys
+    assert not config.training.compile and not config.model.stp.reorder_resample

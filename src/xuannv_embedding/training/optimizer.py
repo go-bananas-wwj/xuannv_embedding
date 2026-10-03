@@ -11,10 +11,16 @@ from torch.optim.lr_scheduler import LambdaLR
 
 
 def build_optimizer(
-    model: nn.Module | Iterable[nn.Parameter], lr: float, weight_decay: float
+    model: nn.Module | Iterable[nn.Parameter],
+    lr: float,
+    weight_decay: float,
+    *,
+    fused: bool = False,
 ) -> Optimizer:
-    """构造生产训练使用的 AdamW。"""
+    """构造生产训练使用的 AdamW；``fused`` 仅用于 CUDA，把逐参数更新合并为少量 kernel。"""
     parameters = model.parameters() if isinstance(model, nn.Module) else model
+    if fused:
+        return AdamW(parameters, lr=lr, weight_decay=weight_decay, fused=True)
     return AdamW(parameters, lr=lr, weight_decay=weight_decay)
 
 

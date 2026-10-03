@@ -164,6 +164,7 @@ class STPConfig:
     temporal_fusion: Literal["concat", "gated_sum"] = "concat"
     time_attention_mode: Literal["full", "none"] = "full"
     highres_fusion_to_embedding: bool = True
+    reorder_resample: bool = False
 
 
 @dataclass(frozen=True)
@@ -244,6 +245,7 @@ class TrainingConfig:
     latent_prediction_weight: float = 0.0
     highres_loss_weight: float = 1.0
     highres_visible_targets: bool = False
+    compile: bool = False
     input_masking: InputMaskingConfig = field(default_factory=InputMaskingConfig)
 
 
@@ -413,6 +415,7 @@ def _parse_stp(value: Any) -> STPConfig:
             "temporal_fusion",
             "time_attention_mode",
             "highres_fusion_to_embedding",
+            "reorder_resample",
         },
     )
     temporal_fusion = _string(raw.get("temporal_fusion", "concat"), "model.stp.temporal_fusion")
@@ -436,6 +439,7 @@ def _parse_stp(value: Any) -> STPConfig:
             raw.get("highres_fusion_to_embedding", True),
             "model.stp.highres_fusion_to_embedding",
         ),
+        reorder_resample=_boolean(raw.get("reorder_resample", False), "model.stp.reorder_resample"),
     )
 
 
@@ -597,6 +601,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "latent_prediction_weight",
         "highres_loss_weight",
         "highres_visible_targets",
+        "compile",
         "input_masking",
     }
     required = {
@@ -697,6 +702,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         highres_visible_targets=_boolean(
             raw.get("highres_visible_targets", False), "training.highres_visible_targets"
         ),
+        compile=_boolean(raw.get("compile", False), "training.compile"),
         input_masking=_parse_masking(raw.get("input_masking", {}), model),
     )
 

@@ -482,6 +482,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     device, distributed, local_rank = _setup_device(args.device)
     torch.manual_seed(config.experiment.seed + (dist.get_rank() if distributed else 0))
     system = build_training_system(config).to(device)
+    accelerate = config.training.compile and device.type == "cuda"
+    if config.training.compile and config.model.architecture != "annual5m":
+        parser.error("training.compile 仅支持 annual5m 架构")
+    if accelerate:
+        # bf16 autocast 之外残留的 fp32 矩阵乘走 TF32；只编译时序编码器，形状在 batch 间固定，
+        # 不随变长高分观测重编译。Module.compile 原地编译，checkpoint 键名保持不变。
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        system.model.temporal_encoder.compile()
     config_sha256 = hashlib.sha256(args.config.read_bytes()).hexdigest()
     source_schema = {name: asdict(value) for name, value in config.model.input_sources.items()}
     regions = [dataset.region for dataset in config.data.datasets]
@@ -513,7 +522,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif config.training.latent_prediction_weight > 0.0:
         parser.error("启用 latent_prediction_weight 时必须提供 --teacher-checkpoint")
     optimizer = build_optimizer(
-        system, lr=config.training.lr, weight_decay=config.training.weight_decay
+        system,
+        lr=config.training.lr,
+        weight_decay=config.training.weight_decay,
+        fused=accelerate,
     )
     scheduler = build_scheduler(
         optimizer,
