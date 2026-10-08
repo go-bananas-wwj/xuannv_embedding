@@ -227,6 +227,7 @@ def main(argv: list[str] | None = None) -> int:
     if device.type == "npu":
         import torch_npu  # noqa: F401
 
+        torch.npu.config.allow_internal_format = False
         torch.npu.set_device(device)
     if args.phase == "forward":
         system.to(device).eval()
