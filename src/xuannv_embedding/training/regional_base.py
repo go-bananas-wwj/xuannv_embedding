@@ -27,7 +27,7 @@ from xuannv_embedding.training.checkpoint import save_training_checkpoint
 from xuannv_embedding.training.cli import build_training_system
 from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.regional_refinement import StaticObjective, rename_targets
-from xuannv_embedding.training.runtime import _autocast, _grad_scaler, _move
+from xuannv_embedding.training.runtime import TrainingSystem, _autocast, _grad_scaler, _move
 
 
 def require_training_approval(spec_path: Path, approval_path: Path | None) -> None:
