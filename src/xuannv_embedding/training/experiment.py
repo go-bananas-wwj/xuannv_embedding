@@ -531,8 +531,16 @@ def run(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "regional-base":
+        from xuannv_embedding.training.regional_base import main as regional_main
+
+        return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("regional-base", help="严格初始化并准备区域底座实验", add_help=False)
     p = sub.add_parser("prepare")
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)

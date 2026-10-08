@@ -238,7 +238,16 @@ class SemanticProbeLoss(nn.Module):
                 sample_mask = label_masks[task].to(device=emb.device, dtype=emb.dtype)
             if sample_mask is None:
                 sample_mask = torch.ones((emb.shape[0],), device=emb.device, dtype=emb.dtype)
-            valid = sample_mask[:, None, None, None].expand_as(label)
+            if sample_mask.dim() == 1 and sample_mask.shape[0] == label.shape[0]:
+                valid = sample_mask[:, None, None, None].expand_as(label)
+            else:
+                if sample_mask.dim() == 3:
+                    sample_mask = sample_mask[:, None]
+                if sample_mask.dim() != 4 or sample_mask.shape[:2] != label.shape[:2]:
+                    raise ValueError("semantic mask must be [B], [B,H,W], or [B,1,H,W]")
+                valid = F.interpolate(sample_mask, size=label.shape[-2:], mode="nearest")
+                if not bool(torch.isfinite(valid).all()) or bool(((valid < 0) | (valid > 1)).any()):
+                    raise ValueError("semantic pixel masks must be finite and in [0,1]")
             if bool((valid.sum() <= 0).item()):
                 stats[f"semantic_probe_{task}_loss"] = zero.detach()
                 stats[f"semantic_probe_{task}_positive_pixels"] = zero.detach()
