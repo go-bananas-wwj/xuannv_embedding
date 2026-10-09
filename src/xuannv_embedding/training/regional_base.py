@@ -149,6 +149,55 @@ def build_regional_system(
     return system, receipt
 
 
+def validate_domains(cache: dict[str, Any]) -> None:
+    """Require disjoint complete sample membership and explicit consecutive windows."""
+    if "domains" not in cache:
+        return
+    domains = cache["domains"]
+    if not isinstance(domains, list) or not domains:
+        raise ValueError("Invalid training domains")
+    indices, regions = [], []
+    for domain in domains:
+        if not isinstance(domain, dict) or set(domain) != {"region", "months", "indices"}:
+            raise ValueError("Invalid domain fields")
+        region, months, members = domain["region"], domain["months"], domain["indices"]
+        if not isinstance(region, str) or not region or region in regions:
+            raise ValueError("Invalid or duplicate domain region")
+        if not isinstance(members, list) or not members or any(type(i) is not int for i in members):
+            raise ValueError("Invalid domain membership")
+        try:
+            year, month = map(int, months[0].split("-"))
+            origin = year * 12 + month - 1
+            expected = [
+                f"{(origin + i) // 12:04d}-{(origin + i) % 12 + 1:02d}"
+                for i in range(len(cache["months"]))
+            ]
+            if months != expected:
+                raise ValueError("Invalid domain month window")
+        except (TypeError, ValueError, IndexError, KeyError, AttributeError) as exc:
+            raise ValueError("Invalid domain month window") from exc
+        regions.append(region)
+        indices.extend(members)
+    if sorted(indices) != list(range(len(cache["records"]))):
+        raise ValueError("Domain membership must be disjoint and complete")
+    for domain in domains:
+        if any(cache["records"][i].get("region") != domain["region"] for i in domain["indices"]):
+            raise ValueError("Domain region differs from sample registration")
+
+
+def training_domain(cache: dict[str, Any], step: int) -> dict[str, Any]:
+    """Alternate equally weighted regions; every rank uses the same step/window."""
+    if type(step) is not int or step < 1:
+        raise ValueError("Invalid domain training step")
+    if "domains" not in cache:
+        return {
+            "region": "",
+            "months": cache["months"],
+            "indices": list(range(len(cache["records"]))),
+        }
+    return cache["domains"][(step - 1) % len(cache["domains"])]
+
+
 def read_spec(path: Path) -> tuple[dict[str, Any], Config, dict[str, Any]]:
     spec = json.loads(path.read_text())
     required = {"schema", "mode", "config", "cache", "checkpoint", "training", "output"}
@@ -173,6 +222,11 @@ def read_spec(path: Path) -> tuple[dict[str, Any], Config, dict[str, Any]]:
         raise ValueError("Cache is incomplete or its month window differs")
     if not cache["records"]:
         raise ValueError("No prepared samples")
+    validate_domains(cache)
+    if "domains" in cache and {d["region"] for d in cache["domains"]} != {
+        d.region for d in config.data.datasets
+    }:
+        raise ValueError("Training domain regions differ from registered datasets")
     training = spec["training"]
     expected = {
         "steps",
@@ -231,7 +285,11 @@ def main(argv: list[str] | None = None) -> int:
         torch.npu.set_device(device)
     if args.phase == "forward":
         system.to(device).eval()
-        sample = torch.load(cache["records"][0]["path"], weights_only=True, mmap=True)
+        domain = training_domain(cache, 1)
+        set_reference_window(system.model, domain["months"])
+        sample = torch.load(
+            cache["records"][domain["indices"][0]]["path"], weights_only=True, mmap=True
+        )
         batch = _move(collate_region_batch([sample]), device)
         with torch.inference_mode(), _autocast(device, device.type == "npu"):
             embedding = system.model(
@@ -326,8 +384,11 @@ def run_training(
                 else base_rate * scale
             )
         optimizer.zero_grad(set_to_none=True)
+        domain = training_domain(cache, step)
+        set_reference_window(system.model, domain["months"])
         for _ in range(accumulation):
-            ids = torch.randperm(len(cache["records"]), generator=generator).tolist()
+            order = torch.randperm(len(domain["indices"]), generator=generator).tolist()
+            ids = [domain["indices"][i] for i in order]
             selected = [
                 ids[(rank * args.micro_batch + i) % len(ids)] for i in range(args.micro_batch)
             ]
@@ -361,6 +422,8 @@ def run_training(
                     "optimizer_steps": step,
                     "elapsed_seconds": time.monotonic() - started,
                     "loss": float(losses["total"].detach().cpu()),
+                    "active_domain": domain["region"],
+                    "active_months": domain["months"],
                 },
             )
         if rank == 0 and (step % settings["save_every"] == 0 or step == settings["steps"]):
