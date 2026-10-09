@@ -169,8 +169,13 @@ class STPTimeOperator(nn.Module):
         self.time_encoding = SinusoidalTimeEncoding(dim)
 
     @staticmethod
+    @torch.compiler.disable
     def _continuous_month_index(timestamps: torch.Tensor) -> torch.Tensor:
-        """Convert YYYYMM to months since 2000-01, independently of the batch."""
+        """Convert YYYYMM to months since 2000-01, independently of the batch.
+
+        含依赖数值的分支与校验；torch.compile 在年份切换时重编译这段会触发 Dynamo
+        SpeculationLog 断言，因此始终以 eager 执行。计算量只有 B×T 个标量。
+        """
         values = timestamps.float()
         if values.numel() == 0 or float(values.abs().max()) < 100000.0:
             return values

@@ -266,3 +266,25 @@ def test_acceleration_switches_parse_and_keep_parameter_keys():
     base_keys = build_training_system(config).state_dict().keys()
     assert build_training_system(fast).state_dict().keys() == base_keys
     assert not config.training.compile and not config.model.stp.reorder_resample
+
+
+def test_compiled_temporal_encoder_survives_a_year_change():
+    # 训练流先遍历 2020 清单再遍历 2021 清单；年份切换会让 Dynamo 重新编译月份换算。
+    # 在 inductor 后端、真实数据上，未排除时重编译会触发 SpeculationLog 断言并中止训练；
+    # 小模型 + eager 后端复现不了该断言，所以直接检查换算被排除在编译之外。
+    from xuannv_embedding.models.blocks import STPTimeOperator
+
+    month_index = STPTimeOperator.__dict__["_continuous_month_index"].__func__
+    assert getattr(month_index, "_torchdynamo_disable", False)
+    config = annual_config()
+    model = build_training_system(config).model.train()
+    model.temporal_encoder.compile(backend="eager")
+    for year in (2020, 2021):
+        raw = raw_batch()
+        raw["timestamps"] = torch.arange(year * 100 + 1, year * 100 + 13)[None]
+        for observation in raw["highres_observations"][0]:
+            month = observation["metadata"]["date"][5:]
+            observation["metadata"]["date"] = f"{year}-{month}"
+        batch = prepare_annual_batch(raw, config, training=False)
+        output = model_forward(model, batch)
+        assert torch.isfinite(output.embedding_map).all()
