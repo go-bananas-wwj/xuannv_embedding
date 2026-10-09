@@ -307,3 +307,26 @@ def test_rejects_invalid_highres_month_assignment(tmp_path, mapping):
     )
     with pytest.raises(ConfigError, match="highres_month_assignments"):
         Config.from_yaml(_write(tmp_path, text))
+
+
+@pytest.mark.parametrize("pooling", ["month", "mean"])
+def test_config_accepts_semantic_pooling(tmp_path, pooling):
+    import yaml
+
+    raw = yaml.safe_load(_valid_config())
+    raw["training"]["semantic_probe_pooling"] = pooling
+    path = tmp_path / "pooling.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    assert Config.from_yaml(path).training.semantic_probe_pooling == pooling
+
+
+@pytest.mark.parametrize("pooling", ["median", None, [], 3])
+def test_config_rejects_unknown_semantic_pooling(tmp_path, pooling):
+    import yaml
+
+    raw = yaml.safe_load(_valid_config())
+    raw["training"]["semantic_probe_pooling"] = pooling
+    path = tmp_path / "pooling.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError, match="semantic_probe_pooling"):
+        Config.from_yaml(path)

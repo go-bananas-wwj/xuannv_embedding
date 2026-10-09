@@ -111,7 +111,7 @@ def batch_uniformity_loss(emb: torch.Tensor, temperature: float = 2.0) -> torch.
 class SemanticProbeLoss(nn.Module):
     """Training-only semantic probes that make embedding maps directly decodable.
 
-    Each task is a tiny probe applied to one monthly embedding map. By default
+    Each task probes a selected month or the arithmetic mean across months. By default
     this is a 1x1 MLP. When ``hidden_dim <= 0`` it becomes a pure 1x1 linear
     probe, which is useful when we want to force linearly readable embeddings.
     The probes are optimized during embedding training and discarded after
@@ -127,6 +127,7 @@ class SemanticProbeLoss(nn.Module):
         pos_weight: float = 1.0,
         pos_weights: dict[str, float] | None = None,
         month_index: int = -1,
+        pooling: str = "month",
         hard_negative_ratio: float = 0.0,
         hard_negative_weight: float = 0.0,
         hard_negative_warmup_epochs: int = 0,
@@ -137,6 +138,9 @@ class SemanticProbeLoss(nn.Module):
         self.pos_weight = float(pos_weight)
         self.pos_weights = dict(pos_weights or {})
         self.month_index = int(month_index)
+        if pooling not in {"month", "mean"}:
+            raise ValueError("semantic pooling must be month or mean")
+        self.pooling = pooling
         self.hard_negative_ratio = max(0.0, float(hard_negative_ratio))
         self.hard_negative_weight = max(0.0, float(hard_negative_weight))
         self.hard_negative_warmup_epochs = max(0, int(hard_negative_warmup_epochs))
@@ -212,7 +216,9 @@ class SemanticProbeLoss(nn.Module):
                 "semantic_probe_valid_pixels": zero.detach(),
             }
 
-        emb = embedding_map[:, self.month_index]
+        emb = (
+            embedding_map.mean(1) if self.pooling == "mean" else embedding_map[:, self.month_index]
+        )
         total = zero
         task_weight_sum = zero
         total_positive = zero
@@ -311,6 +317,7 @@ class TotalLoss(nn.Module):
         semantic_probe_pos_weights: dict[str, float] | None = None,
         semantic_probe_hidden_dim: int = 64,
         semantic_probe_month_index: int = -1,
+        semantic_probe_pooling: str = "month",
         semantic_probe_hard_negative_ratio: float = 0.0,
         semantic_probe_hard_negative_weight: float = 0.0,
         semantic_probe_hard_negative_warmup_epochs: int = 0,
@@ -333,6 +340,7 @@ class TotalLoss(nn.Module):
                 tasks=self.semantic_probe_tasks,
                 hidden_dim=int(semantic_probe_hidden_dim),
                 month_index=semantic_probe_month_index,
+                pooling=semantic_probe_pooling,
                 task_weights=semantic_probe_task_weights,
                 pos_weight=semantic_probe_pos_weight,
                 pos_weights=semantic_probe_pos_weights,

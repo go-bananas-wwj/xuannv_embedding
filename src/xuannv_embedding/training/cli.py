@@ -59,6 +59,7 @@ def build_training_system(config: Config) -> TrainingSystem:
         semantic_probe_pos_weights=training.semantic_probe_pos_weights,
         semantic_probe_hidden_dim=training.semantic_probe_hidden_dim,
         semantic_probe_month_index=training.semantic_probe_month_index,
+        semantic_probe_pooling=training.semantic_probe_pooling,
         semantic_probe_hard_negative_ratio=training.semantic_probe_hard_negative_ratio,
         semantic_probe_hard_negative_weight=training.semantic_probe_hard_negative_weight,
         semantic_probe_hard_negative_warmup_epochs=(
