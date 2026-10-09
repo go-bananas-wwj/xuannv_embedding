@@ -63,14 +63,27 @@ def apply_initial_weights(
     return {"mode": mode, "parent_weights_read": True, "checkpoint_sha256": sha(checkpoint)}
 
 
+def validate_static_weight(weight: float) -> float:
+    if type(weight) not in {int, float} or not math.isfinite(weight) or weight < 0:
+        raise ValueError("Regional static objective weight must be finite and nonnegative")
+    return float(weight)
+
+
 class RegionalObjective(StaticObjective):
     def __init__(
-        self, base: nn.Module, embed_dim: int, classes: int, quality_channels: dict[str, int]
+        self,
+        base: nn.Module,
+        embed_dim: int,
+        classes: int,
+        quality_channels: dict[str, int],
+        *,
+        static_weight: float = 0.25,
     ) -> None:
+        static_weight = validate_static_weight(static_weight)
         super().__init__(base, embed_dim, "esa_worldcover", classes)
         self.quality_channels = quality_channels
         self.head_only = False
-        self.weight = 0.25
+        self.weight = static_weight
         self.base.requires_grad_(True)
 
     def set_epoch(self, step: int) -> None:
@@ -93,8 +106,14 @@ class RegionalObjective(StaticObjective):
 
 
 def build_regional_system(
-    config: Config, *, mode: str, checkpoint: Path | None, seed: int
+    config: Config,
+    *,
+    mode: str,
+    checkpoint: Path | None,
+    seed: int,
+    static_weight: float = 0.25,
 ) -> tuple[TrainingSystem, dict[str, Any]]:
+    static_weight = validate_static_weight(static_weight)
     torch.manual_seed(seed)
     public_sources = {
         name: source
@@ -140,10 +159,12 @@ def build_regional_system(
         config.model.embed_dim,
         12,
         {"s2_recon": 11, "landsat_recon": 6},
+        static_weight=static_weight,
     )
     receipt = apply_initial_weights(
         system.model, system.criterion, mode=mode, checkpoint=checkpoint
     )
+    receipt["static_weight"] = system.criterion.weight
     set_reference_window(system.model, config.data.months)
     system.requires_grad_(True)
     return system, receipt
@@ -239,8 +260,13 @@ def read_spec(path: Path) -> tuple[dict[str, Any], Config, dict[str, Any]]:
         "save_every",
         "min_free_gib",
     }
-    if set(training) != expected or training["effective_batch"] != 48:
+    if (
+        not expected.issubset(training)
+        or set(training) - expected - {"static_weight"}
+        or training["effective_batch"] != 48
+    ):
         raise ValueError("Invalid training settings")
+    validate_static_weight(training.get("static_weight", 0.25))
     if training["steps"] < 1 or not 0 <= training["head_steps"] < training["steps"]:
         raise ValueError("Invalid update budget")
     if set(training["rates"]) != {"public", "highres", "heads"}:
@@ -268,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         mode=spec["mode"],
         checkpoint=Path(spec["checkpoint"]["path"]) if spec["checkpoint"] else None,
         seed=spec["training"]["seed"],
+        static_weight=spec["training"].get("static_weight", 0.25),
     )
     output = Path(spec["output"])
     output.mkdir(parents=True, exist_ok=True)
@@ -437,7 +464,7 @@ def run_training(
                 git_sha=os.environ["XUANNV_GIT_SHA"],
                 source_schema={k: asdict(v) for k, v in config.model.input_sources.items()},
                 regions=[d.region for d in config.data.datasets],
-                metrics={"steps": step},
+                metrics={"steps": step, "static_weight": system.criterion.weight},
             )
             save_training_checkpoint(output / "latest.pt", **kwargs)
             if step in [400, settings["steps"]]:
