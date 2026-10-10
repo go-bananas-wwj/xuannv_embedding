@@ -43,7 +43,10 @@ def test_explicit_worldcover_tasks_keep_their_source_and_use_new_binary_labels(t
     result = paired_multitask_report.run(path, sha(test), tmp_path / "report", threads=1, repeats=8)
     assert result["state"] == "complete"
     assert {r["source"] for r in result["observations"]} == {"osm", "worldcover"}
-    paired_multitask_report.run(path, sha(test), tmp_path / "report_parallel", threads=8, repeats=8)
+    parallel_threads = min(8, paired_multitask_report.numba.config.NUMBA_NUM_THREADS)
+    paired_multitask_report.run(
+        path, sha(test), tmp_path / "report_parallel", threads=parallel_threads, repeats=8
+    )
     with (
         np.load(tmp_path / "report/draws.npz") as serial,
         np.load(tmp_path / "report_parallel/draws.npz") as parallel,
