@@ -19,3 +19,13 @@ dist/
 *.pt
 *.pth
 *.ckpt
+
+# External experiment artifacts; source/config/compact metrics remain reviewable.
+*.npy
+*.npz
+*.tif
+*.tiff
+*.safetensors
+*.log
+/runtime/
+/artifacts/
