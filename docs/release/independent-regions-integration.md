@@ -26,3 +26,15 @@ CLI同时保留`experiment`（训练/评测）和`experiments archive`（历史�
 没有创建新发布标签；完整发布、旧权重兼容和多卡NPU复验仍按
 [NPU发布清单](npu-checklist.md)对应要求执行，不能以本次整理代替新的硬件发布门禁。
 仓库只保存源码、配置模板、小型评分CSV和说明，所有大制品与完整日志均留在仓库外。
+
+## 全新安装的依赖兼容修订
+
+GitHub全新环境解析到PyArrow 26，导入时拒绝当前NumPy 1.26，导致数据测试无法收集。
+在独立环境中使用相同组合复现失败后，将数据extra约束为`pyarrow>=14,<26`，保留
+当前NumPy/NPU版本合同。PyArrow 25的官方安装文档列出NumPy最低版本1.21.2，
+见[Apache Arrow安装说明](https://arrow.apache.org/docs/python/install.html)。
+新增NumPy数值列（含NaN）到Parquet往返的回归，验证真实数据接口，未改动模型或评分算法。
+
+修订后独立环境使用PyArrow 25.0.1与NumPy 1.26.4，完整CPU回归750 passed。
+新测试包含真实NumPy列转换、NaN保持及Parquet往返。Black检查213文件、Ruff、
+严格配置/链接/内容门禁和重新构建sdist/wheel均通过。
