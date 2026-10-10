@@ -77,8 +77,11 @@ class FrozenClassifier:
         try:
             ne.set_num_threads(2)
             with threadpool_limits(limits=2):
-                for start in range(0, len(x), 1024):
-                    query = self.scaler.transform(x[start : start + 1024])
+                chunk = self.metadata.get("prediction_chunk", 1024)
+                if type(chunk) is not int or not 1 <= chunk <= 65536:
+                    raise ValueError("invalid registered prediction chunk")
+                for start in range(0, len(x), chunk):
+                    query = self.scaler.transform(x[start : start + chunk])
                     if self.kind == "rf":
                         score = self.estimator.predict_proba(query)[:, 1]
                     elif self.kind == "svm":
@@ -127,7 +130,7 @@ def fit_classifier(kind, train_x, train_y, val_x, val_y, *, seed):
         "validation_observations": len(val_x),
         "test_scored": False,
         "feature_dtype": "float64",
-        "prediction_chunk": 1024,
+        "prediction_chunk": 65536 if kind == "rf" else 1024,
         "k": 5 if kind == "knn" else None,
         "knn_ties": "earlier registered support position" if kind == "knn" else None,
     }
