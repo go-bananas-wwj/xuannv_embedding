@@ -1,0 +1,44 @@
+{
+  "schema": "independent-regions-paper-evidence-v1",
+  "method": "one final local model per region; identical core architecture; independent local data and weights",
+  "reading": "arithmetic six-month mean,64 dimensions",
+  "classification": "task mean then eight equally weighted head/budget settings; F1 differences are percentage points",
+  "scope": "regional map agreement including upstream map labels and downstream support/calibration locations,not unseen spatial generalization",
+  "software": {
+    "regional_training": "d61c4e4095f08f577a7436d0af03e69d5de46ee2",
+    "readouts": "b724612",
+    "haidian_refinement": "2acba6335a4abc5cbd93bc13670364e66a6b1c76"
+  },
+  "models": {
+    "Haidian": {
+      "sha256": "5c30cab412198c9995b9788686b2657c108b31bcd343a5f0ec96150c0ed47b02",
+      "training_tiles": 320,
+      "full_region_F1_delta_pp_vs_AEF": 4.259516534637406,
+      "full_region_F1_delta_pp_vs_Raw180": 8.559928168491245,
+      "historical_selection_used_full_region": true,
+      "F1_percent": {
+        "ours": 58.99729683966641,
+        "AEF": 54.737780305029005,
+        "Raw180": 50.437368671175165
+      }
+    },
+    "Harbin": {
+      "sha256": "655dfa82ac7b74e3fdd294302e3539b1b51752259fc6a0ca1f5c19c0162af365",
+      "training_tiles": 422,
+      "core_scoring_tiles": 348,
+      "full_region_F1_delta_pp_vs_AEF": 1.3121345006940976,
+      "full_region_F1_delta_pp_vs_Raw180": 5.615484297729011,
+      "retrieval_tasks_better_than_AEF": 4,
+      "retrieval_tasks_total": 4,
+      "regression_tasks_better_than_AEF": 4,
+      "regression_tasks_worse_than_AEF": 7,
+      "CNN20_delta_pp_vs_AEF": -0.5092228611400931,
+      "F1_percent": {
+        "ours": 59.084753492298866,
+        "AEF": 57.772618991604766,
+        "Raw180": 53.469269194569854
+      },
+      "selection": "complete calibration aggregate; some full-region results already available before lock"
+    }
+  }
+}

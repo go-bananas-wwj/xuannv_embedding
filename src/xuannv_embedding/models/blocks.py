@@ -539,6 +539,7 @@ class STPEncoder(nn.Module):
         x: torch.Tensor,
         timestamps: torch.Tensor,
         mask: torch.Tensor | None = None,
+        injector=None,
     ) -> tuple[torch.Tensor, tuple[int, int]]:
         """前向传播。
 
@@ -594,7 +595,7 @@ class STPEncoder(nn.Module):
             B, T, self.precision_dim, precision_h, precision_w
         ).permute(0, 1, 3, 4, 2)
 
-        for block in self.blocks:
+        for block_index, block in enumerate(self.blocks, start=1):
             if self.gradient_checkpointing and self.training:
                 try:
                     space_features, time_features, precision_features = checkpoint.checkpoint(
@@ -620,6 +621,8 @@ class STPEncoder(nn.Module):
                 space_features, time_features, precision_features = block(
                     space_features, time_features, precision_features, timestamps, mask=mask
                 )
+            if injector is not None:
+                precision_features = injector(block_index, precision_features)
 
         # 将各路径 reshape 为 (BT, C, H, W) 以便重采样
         space_2d = space_features.permute(0, 1, 4, 2, 3).reshape(

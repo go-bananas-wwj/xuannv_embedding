@@ -50,3 +50,69 @@ JSON 的每项包含互斥 `train / val / test`。
 
 阈值只用 validation 选择，test 报告 F1、AP、AUC。full-label 与 5/10/50-shot 必须分开报告；
 更换标签、fold、shot、seed 或数据文件后，身份摘要不一致会直接拒绝评测。
+
+## 验证集遮挡重建诊断
+
+`xuannv experiment reconstruct` 从已登记的实验 checkpoint 和同一缓存加载模型，
+在编码前清零指定源的目标月输入和掩码；`--aliases` 指定需要同时屏蔽的重复表示。
+`--context prefix` 还会清零所有源的未来月份和无法确定日期的静态输入。
+该模式只检查推理输入依赖，不证明训练权重从未见过未来月份。
+
+```bash
+xuannv experiment reconstruct --config /path/config.yaml --cache /path/cache \
+  --checkpoint /path/run/epoch_0200.pt --output /path/new-reconstruction \
+  --device npu:0 --target s2_recon --months 0 1 2 3 4 5 --context offline
+```
+
+评分只读训练与验证记录，均值基线只拟合训练像元。逐月、逐波段报告归档归一化单位的
+RMSE、MAE、偏差和有效数量；模型全域与时序插值共有域分开，空域记 null。
+输出逐图块预测 NPZ、充分统计量及身份 JSON，放在仓库外。原生解码头结果是模型诊断，
+不能替代所有嵌入使用相同预算解码器的公平比较。开发测试覆盖遮挡、共享张量保护、
+无历史域、无效像元及训练/验证/测试读取边界；真实模型结果须另外运行并登记。
+
+## 多任务结果归档
+
+已完成的跟进计划可生成独立 TeX、JSON、逐条件 CSV，供审阅后放入论文实验文件夹。
+入口要求跟进程序处于 `ready_to_publish`，核对 checkpoint、导出、评价、预测数组和独立
+复算记录；支持样本必须与 B0 一致。输出目录必须为新目录，不覆盖已有实验记录。
+
+```bash
+xuannv experiment report-multitask --plan /path/T0_followup_plan.json \
+  --baseline-verification /path/P0_verification.json --output /path/new-report-staging
+```
+
+后续调参组还必须传入 `--reference-followup /path/T0_followup`，比较同更新预算的 T0。
+表中保留候选相对 B0、T0 的原始指标差值；两组分数都以 B0 误差归一化，随后相减，
+不更换分母。未定义的 R² 保留为空并记录定义条件数。负结果不会被转换成改善结论。
+命令只生成待审阅制品；审阅、编译、提交 Git、同步 Overleaf 并核对远端提交之后，
+才能启动下一训练组。失败或未完成的运行仍需单独记录状态及原因，不能生成完成报告。
+
+## 缺源与逐月诊断导出
+
+`experiment export --drop-source <source...>` 在全部月份同时清零指定源的像元和可用性，
+不修改缓存或共享的重建真值。`--prefix-month <index>` 的月份索引从0开始，保留该月及
+以前的输入，屏蔽所有源的后续月份及无日期静态输入；它不证明训练权重没有见过未来。
+消融导出记录完整输入条件，`input_masks.json` 保存每图块原始/修改后掩码哈希及可用比例。
+若数据源原本不可用，应报告该消融没有移除额外信息，不能将零差值解释为该源没有作用。
+
+```bash
+xuannv experiment export --config /path/config.yaml --cache /path/cache \
+  --checkpoint /path/run/epoch_0200.pt --output /path/no-detail-export \
+  --device npu:0 --batch-size 4 --drop-source highres_optical
+```
+
+多任务评价 spec 的 `models.<name>.month_index` 可选择月度 NPZ 中的指定月份；省略时仍读取
+最后一月。`spec.month`、导出月份和NPZ时间戳必须一致，不允许读取前缀截止时间之后的表征。
+已合并为单月数组的 `array` 输入只支持它登记的最后一月。静态年度参考地图的逐月读出属于
+表示诊断，不能据此报告月度地物变化真值或变化检测F1。当前诊断重新拟合相同预算的读出器，
+因此反映缺源后的可读出信息，并不等同于部署中冻结读出器时的性能变化。
+输入删减也不等同于从头不使用该源训练；训练增益仍需相应同预算训练对照。
+
+`xuannv audit embedding-diagnostics --spec <spec.json> --model <name>` 对原始月度NPZ做
+无标签验证区诊断。spec复用 `cache`、`models.<name>.manifest` 和新的 `output`，
+`sample_stride` 默认8：每8×8网格单元固定取一个中心位置，所有模型、月份共用位置。
+只读取验证图块导出，不读取训练/测试嵌入或参考标签。全网格统计向量范数及零向量数量；
+固定样本计算总体协方差谱、方差和相邻月余弦/L2差异，并保存采样向量供独立复算。
+这里的有效秩明确采用归一化协方差特征值熵的指数，零方差记0；它不是精度排名指标。
+诊断域为全部有限导出向量，未按观测有效域或标签掩码过滤。无观测区域仍可能由模型先验
+生成嵌入，因此“有限向量数量”不能写成“有效观测像元数量”。月份变化不等于地物变化真值。

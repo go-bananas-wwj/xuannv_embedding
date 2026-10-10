@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
@@ -167,6 +168,21 @@ class STPConfig:
 
 
 @dataclass(frozen=True)
+class TransformerAdapterSettings:
+    dim: int = 128
+    heads: int = 4
+    layers: int = 2
+    injection_blocks: tuple[int, ...] = (2, 4)
+    patch_pixels: int = 2
+    window_cells: int = 4
+    reference_gsd_m: float = 10.0
+    window_chunk: int = 128
+    allow_base_only: bool = False
+    coverage_gating: bool = False
+    spatial_readout: Literal["attention", "mean"] = "attention"
+
+
+@dataclass(frozen=True)
 class ModelConfig:
     embed_dim: int
     input_sources: dict[str, InputSourceConfig]
@@ -176,6 +192,7 @@ class ModelConfig:
     ref_year: int = 2025
     ref_month: int = 1
     stp: STPConfig = field(default_factory=STPConfig)
+    highres_transformer: TransformerAdapterSettings | None = None
 
     @property
     def sensor_channels(self) -> dict[str, int]:
@@ -233,6 +250,8 @@ class TrainingConfig:
     semantic_probe_pos_weight: float = 1.0
     semantic_probe_pos_weights: dict[str, float] = field(default_factory=dict)
     semantic_probe_hidden_dim: int = 64
+    semantic_probe_month_index: int = -1
+    semantic_probe_pooling: str = "month"
     semantic_probe_hard_negative_ratio: float = 0.0
     semantic_probe_hard_negative_weight: float = 0.0
     semantic_probe_hard_negative_warmup_epochs: int = 0
@@ -257,6 +276,8 @@ class DataConfig:
     batch_size: int = 4
     num_workers: int = 8
     patch_size: int = 128
+    monthly_highres: bool = False
+    highres_month_assignments: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def dataset_for_region(self, region: str) -> RegionDatasetConfig:
         matches = [dataset for dataset in self.datasets if dataset.region == region]
@@ -428,6 +449,37 @@ def _parse_stp(value: Any) -> STPConfig:
     )
 
 
+def _parse_transformer(value: Any, stp: STPConfig) -> TransformerAdapterSettings | None:
+    if value is None:
+        return None
+    defaults = TransformerAdapterSettings()
+    raw = _strict(value, "model.highres_transformer", allowed=set(asdict(defaults)))
+    values = asdict(defaults)
+    for key, value in raw.items():
+        field_name = f"model.highres_transformer.{key}"
+        if key == "injection_blocks":
+            if not isinstance(value, list) or not value:
+                raise ConfigError(f"{field_name} requires a nonempty list")
+            values[key] = tuple(_positive_int(i, field_name) for i in value)
+        elif key == "reference_gsd_m":
+            values[key] = _positive_float(value, field_name)
+        elif key in {"allow_base_only", "coverage_gating"}:
+            values[key] = _boolean(value, field_name)
+        elif key == "spatial_readout":
+            if value not in ("attention", "mean"):
+                raise ConfigError(f"{field_name} must be attention or mean")
+            values[key] = value
+        else:
+            values[key] = _positive_int(value, field_name)
+    settings = TransformerAdapterSettings(**values)
+    if settings.dim % settings.heads:
+        raise ConfigError("highres_transformer dim must be divisible by heads")
+    blocks = settings.injection_blocks
+    if tuple(sorted(set(blocks))) != blocks or blocks[-1] >= stp.num_blocks:
+        raise ConfigError("highres_transformer injection_blocks must precede later STP blocks")
+    return settings
+
+
 def _parse_model(value: Any) -> ModelConfig:
     raw = _strict(
         value,
@@ -441,6 +493,7 @@ def _parse_model(value: Any) -> ModelConfig:
             "input_sources",
             "target_heads",
             "stp",
+            "highres_transformer",
         },
         required={"embed_dim", "num_months", "input_sources", "target_heads"},
     )
@@ -454,6 +507,7 @@ def _parse_model(value: Any) -> ModelConfig:
     target_heads = {name: _parse_target_head(name, head) for name, head in target_raw.items()}
     if not input_sources or not any(source.role == "temporal" for source in input_sources.values()):
         raise ConfigError("model.input_sources 至少需要一个 temporal source")
+    stp = _parse_stp(raw.get("stp", {}))
     return ModelConfig(
         embed_dim=_positive_int(raw["embed_dim"], "model.embed_dim"),
         input_sources=input_sources,
@@ -462,7 +516,8 @@ def _parse_model(value: Any) -> ModelConfig:
         num_months=_positive_int(raw["num_months"], "model.num_months"),
         ref_year=_positive_int(raw.get("ref_year", 2025), "model.ref_year"),
         ref_month=_positive_int(raw.get("ref_month", 1), "model.ref_month"),
-        stp=_parse_stp(raw.get("stp", {})),
+        stp=stp,
+        highres_transformer=_parse_transformer(raw.get("highres_transformer"), stp),
     )
 
 
@@ -551,6 +606,8 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "semantic_probe_pos_weight",
         "semantic_probe_pos_weights",
         "semantic_probe_hidden_dim",
+        "semantic_probe_month_index",
+        "semantic_probe_pooling",
         "semantic_probe_hard_negative_ratio",
         "semantic_probe_hard_negative_weight",
         "semantic_probe_hard_negative_warmup_epochs",
@@ -565,6 +622,15 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "save_every",
     }
     raw = _strict(value, "training", allowed=fields, required=required)
+    semantic_pooling = raw.get("semantic_probe_pooling", "month")
+    if semantic_pooling not in ("month", "mean"):
+        raise ConfigError("training.semantic_probe_pooling must be month or mean")
+    semantic_month = raw.get("semantic_probe_month_index", -1)
+    if (
+        type(semantic_month) is not int
+        or not -model.num_months <= semantic_month < model.num_months
+    ):
+        raise ConfigError("training.semantic_probe_month_index 必须是观测窗口内的整数索引")
     tasks_raw = raw.get("semantic_probe_tasks", [])
     if not isinstance(tasks_raw, list):
         raise ConfigError("training.semantic_probe_tasks 必须是字符串列表")
@@ -632,6 +698,8 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         semantic_probe_hidden_dim=_non_negative_int(
             raw.get("semantic_probe_hidden_dim", 64), "training.semantic_probe_hidden_dim"
         ),
+        semantic_probe_month_index=semantic_month,
+        semantic_probe_pooling=semantic_pooling,
         semantic_probe_hard_negative_ratio=_finite_float(
             raw.get("semantic_probe_hard_negative_ratio", 0.0),
             "training.semantic_probe_hard_negative_ratio",
@@ -710,7 +778,15 @@ def _parse_data(value: Any, model: ModelConfig) -> DataConfig:
     raw = _strict(
         value,
         "data",
-        allowed={"months", "datasets", "batch_size", "num_workers", "patch_size"},
+        allowed={
+            "months",
+            "datasets",
+            "batch_size",
+            "num_workers",
+            "patch_size",
+            "monthly_highres",
+            "highres_month_assignments",
+        },
         required={"months", "datasets"},
     )
     if not isinstance(raw["months"], list):
@@ -726,12 +802,34 @@ def _parse_data(value: Any, model: ModelConfig) -> DataConfig:
     regions = [dataset.region for dataset in datasets]
     if len(set(regions)) != len(regions):
         raise ConfigError("data.datasets 区域名称重复")
+    assignments = {}
+    for source, mapping in _mapping(
+        raw.get("highres_month_assignments", {}), "data.highres_month_assignments"
+    ).items():
+        if source not in model.input_sources or model.input_sources[source].role != "highres":
+            raise ConfigError("highres_month_assignments requires a configured highres source")
+        assignments[source] = {}
+        for acquired, month in _mapping(mapping, "data.highres_month_assignments source").items():
+            acquired = _string(acquired, "highres acquisition date")
+            try:
+                valid_date = date.fromisoformat(acquired).isoformat() == acquired
+            except ValueError:
+                valid_date = False
+            if not valid_date or month not in months:
+                raise ConfigError(
+                    "highres_month_assignments requires ISO dates and configured months"
+                )
+            assignments[source][acquired] = month
+    if assignments and raw.get("monthly_highres") is not True:
+        raise ConfigError("highres_month_assignments requires monthly_highres=true")
     return DataConfig(
         months=months,
         datasets=datasets,
         batch_size=_positive_int(raw.get("batch_size", 4), "data.batch_size"),
         num_workers=_non_negative_int(raw.get("num_workers", 8), "data.num_workers"),
         patch_size=_positive_int(raw.get("patch_size", 128), "data.patch_size"),
+        monthly_highres=_boolean(raw.get("monthly_highres", False), "data.monthly_highres"),
+        highres_month_assignments=assignments,
     )
 
 

@@ -31,7 +31,7 @@ data-process = [
     "geopandas>=0.14",
     "pandas>=2.0",
     "planetary-computer>=1.0",
-    "pyarrow>=14",
+    "pyarrow>=14,<26",
     "pyogrio>=0.7",
     "pyproj>=3.6",
     "pystac-client>=0.7",
@@ -43,6 +43,8 @@ data-process = [
     "zarr>=2.16,<3",
 ]
 downstream = [
+    "numexpr>=2.14,<3",
+    "numba>=0.61,<1",
     "matplotlib>=3.7",
     "scikit-image>=0.21",
     "scikit-learn>=1.3",

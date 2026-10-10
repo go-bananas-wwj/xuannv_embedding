@@ -64,6 +64,7 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
         "preprocess": "对齐并切分多源栅格",
         "manifest": "生成带摘要的 manifest v1",
         "validate": "审计 manifest 或父网格包",
+        "storage": "管理 raw、processed 和版本化存储布局",
     }
     for command, help_text in descriptions.items():
         action = actions.add_parser(command, help=help_text, add_help=False)
@@ -88,6 +89,38 @@ def _run_export(args: argparse.Namespace) -> int:
     return export_main(args.forwarded_args)
 
 
+def _run_experiment(args: argparse.Namespace) -> int:
+    from xuannv_embedding.training.experiment import main as experiment_main
+
+    return experiment_main(args.forwarded_args)
+
+
+def _run_audit(args: argparse.Namespace) -> int:
+    from xuannv_embedding.downstream.fixed_audit import main as audit_main
+
+    return audit_main(args.forwarded_args)
+
+
+def _add_experiment_commands(subparsers: argparse._SubParsersAction) -> None:
+    experiments = subparsers.add_parser("experiments", help="归档和汇总训练实验")
+    actions = experiments.add_subparsers(dest="experiments_command", required=True)
+    archive = actions.add_parser("archive", help="导入历史训练目录并生成 README 与索引")
+    archive.add_argument("--source-root", type=Path, required=True)
+    archive.add_argument("--archive-root", type=Path, required=True)
+    archive.add_argument("--mode", choices=("symlink", "copy"), default="symlink")
+    archive.set_defaults(handler=_run_experiments)
+
+
+def _run_experiments(args: argparse.Namespace) -> int:
+    from xuannv_embedding.data_process.experiments import archive_runs
+
+    result = archive_runs(args.source_root, args.archive_root, mode=args.mode)
+    import json
+
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建不依赖可选运行组件的顶层命令解析器。"""
     parser = argparse.ArgumentParser(
@@ -98,12 +131,17 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
     _add_data_commands(subparsers)
     _add_downstream_commands(subparsers)
+    _add_experiment_commands(subparsers)
     train = subparsers.add_parser("train", help="运行 P10C 训练或发布 smoke", add_help=False)
     train.set_defaults(handler=_run_train)
     export = subparsers.add_parser(
         "export", help="从严格 checkpoint 导出 embedding", add_help=False
     )
     export.set_defaults(handler=_run_export)
+    experiment = subparsers.add_parser("experiment", help="准备和运行独立区域实验", add_help=False)
+    experiment.set_defaults(handler=_run_experiment)
+    audit = subparsers.add_parser("audit", help="固定权重配对嵌入评价", add_help=False)
+    audit.set_defaults(handler=_run_audit)
     return parser
 
 
@@ -111,7 +149,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
-    if args.command in {"data", "train", "export"}:
+    if args.command in {"data", "train", "export", "experiment", "audit"}:
         args.forwarded_args = unknown
     elif unknown:
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")

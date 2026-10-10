@@ -38,6 +38,7 @@ def export_embedding_batches(
     output_root: str | Path,
     *,
     device: str | torch.device,
+    output_indices: list[int] | None = None,
 ) -> list[Path]:
     """严格检查形状与有限值后，把每个 patch 写为独立 NPZ。"""
     output_root = Path(output_root)
@@ -49,6 +50,14 @@ def export_embedding_batches(
             patch_ids = batch.get("patch_ids")
             if not isinstance(patch_ids, list) or not patch_ids:
                 raise ValueError("导出 batch 必须包含非空 patch_ids")
+            selected = list(range(len(patch_ids))) if output_indices is None else output_indices
+            if (
+                not selected
+                or len(set(selected)) != len(selected)
+                or any(type(i) is not int or not 0 <= i < len(patch_ids) for i in selected)
+                or len({patch_ids[i] for i in selected}) != len(selected)
+            ):
+                raise ValueError("export output positions and selected patch IDs must be unique")
             output = model(
                 _move_mapping(batch["source_frames"], target_device),
                 _move_mapping(batch["source_masks"], target_device),
@@ -62,7 +71,8 @@ def export_embedding_batches(
             if not np.isfinite(embedding).all():
                 raise FloatingPointError("embedding 包含 NaN/Inf")
             timestamps = batch["timestamps"].detach().cpu().numpy()
-            for index, patch_id in enumerate(patch_ids):
+            for index in selected:
+                patch_id = patch_ids[index]
                 path = output_root / f"{patch_id}.npz"
                 if path.exists():
                     raise FileExistsError(f"拒绝覆盖已导出的 embedding: {path}")

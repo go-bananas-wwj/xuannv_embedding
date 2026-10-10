@@ -1,0 +1,237 @@
+import argparse
+import copy
+import json
+from dataclasses import asdict
+from pathlib import Path
+
+import pytest
+import torch
+import yaml
+
+from xuannv_embedding.config import Config
+from xuannv_embedding.training.cli import synthetic_batch
+from xuannv_embedding.training.experiment import _sha, public_base_config, run
+
+
+@pytest.mark.parametrize(
+    "monthly,transformer,train_head",
+    [(False, False, False), (True, False, False), (True, True, False), (True, True, True)],
+)
+def test_adaptation_checkpoint_preserves_frozen_base_through_real_training(
+    tmp_path, monthly, transformer, train_head
+):
+    torch.set_num_threads(1)
+    raw = public_base_config(
+        yaml.safe_load(Path("configs/production/haidian_p10c_v1.yaml").read_text()),
+        seed=41,
+        lr=1e-4,
+    )
+    raw["model"].update(embed_dim=8, stem_dim=8, num_months=2)
+    raw["model"]["stp"].update(
+        space_dim=16,
+        time_dim=16,
+        precision_dim=16,
+        num_blocks=3 if transformer else 1,
+        num_heads=2,
+        time_attention_mode="none",
+    )
+    raw["data"].update(months=["2025-12", "2026-01"], patch_size=16, batch_size=1, num_workers=0)
+    raw["training"].update(amp=False, epochs=4, warmup_epochs=1)
+    raw["training"]["input_masking"]["max_months_per_sample"] = 1
+
+    def setup(name, config_raw):
+        path = tmp_path / f"{name}.yaml"
+        path.write_text(yaml.safe_dump(config_raw))
+        cfg = Config.from_yaml(path)
+        cache = tmp_path / (name + "_cache")
+        cache.mkdir()
+        records = []
+        for i in range(4):
+            batch = synthetic_batch(cfg, batch_size=1, spatial_size=16)
+            sample = {
+                k: ({s: v[0] for s, v in val.items()} if isinstance(val, dict) else val[0])
+                for k, val in batch.items()
+                if k != "patch_ids"
+            }
+            sample.update(patch_id=f"p{i}", region="haidian")
+            f = cache / f"{i}.pt"
+            torch.save(sample, f)
+            records.append(
+                {
+                    "path": str(f),
+                    "sha256": _sha(f),
+                    "patch_id": f"p{i}",
+                    "bounds": [i * 16, 0, (i + 1) * 16, 16],
+                }
+            )
+        (cache / "cache.json").write_text(
+            json.dumps(
+                {
+                    "model_inputs": {k: asdict(v) for k, v in cfg.model.input_sources.items()},
+                    "model_targets": {k: asdict(v) for k, v in cfg.model.target_heads.items()},
+                    "data": asdict(cfg.data),
+                    "records": records,
+                    "split": {"train": [0, 1, 2], "validation": [3]},
+                },
+                default=str,
+            )
+        )
+        return argparse.Namespace(
+            config=path,
+            cache=cache,
+            output=tmp_path / name,
+            device="cpu",
+            epochs=1,
+            pilot=False,
+            resume=None,
+        )
+
+    base_args = setup("base", raw)
+    run(base_args)
+    adapted_raw = copy.deepcopy(raw)
+    adapted_raw["data"]["monthly_highres"] = monthly
+    if transformer:
+        adapted_raw["model"]["highres_transformer"] = {
+            "dim": 16,
+            "heads": 2,
+            "injection_blocks": [1, 2],
+            "window_chunk": 32,
+        }
+    adapted_raw["model"]["input_sources"]["extra"] = {"channels": 3, "role": "highres"}
+    adapted_raw["model"]["target_heads"]["extra_recon"] = {
+        "source": "extra",
+        "channels": 3,
+        "loss_type": "continuous",
+        "weight": 0.9,
+    }
+    adapted_raw["data"]["datasets"][0]["source_map"]["extra"] = "extra"
+    args = setup("adapt", adapted_raw)
+    if transformer:
+        # Objective-weight search reuses materialized targets, without rewriting cache data.
+        adapted_raw["model"]["target_heads"]["extra_recon"]["weight"] = 0.45
+        adapted_raw["training"]["semantic_probe_month_index"] = 0
+        args.config.write_text(yaml.safe_dump(adapted_raw))
+    args.initialize = base_args.output / "best.pt"
+    args.base_config = base_args.config
+    args.freeze_base = True
+    args.train_semantic_head = train_head
+    args.highres_encoding = "transformer" if transformer else "native"
+    if transformer:
+        from xuannv_embedding.training.adaptation import initialize_adaptation
+        from xuannv_embedding.training.cli import build_training_system
+
+        config = Config.from_yaml(args.config)
+        initialized = build_training_system(config)
+        split = json.loads((args.cache / "cache.json").read_text())["split"]
+        initialize_adaptation(initialized, config, args, split)
+        assert initialized.criterion.semantic_probe.month_index == 0
+    run(args)
+    args.resume = args.output / "latest.pt"
+    args.epochs = 2
+    run(args)
+    base = torch.load(args.initialize, weights_only=True)
+    adapted = torch.load(args.resume, weights_only=True)
+    for k, v in base["model"].items():
+        torch.testing.assert_close(v, adapted["model"]["base." + k], rtol=0, atol=0)
+    if train_head:
+        assert any(
+            not torch.equal(v, adapted["criterion"][k])
+            for k, v in base["criterion"].items()
+            if k.startswith("semantic_probe.probes.")
+        )
+        registration = json.loads((args.output / "run.json").read_text())
+        assert registration["adaptation"]["train_semantic_head"] is True
+        # Changing the trainable set on resume must fail, even though shapes match.
+        args.train_semantic_head = False
+        with pytest.raises(ValueError, match="resume provenance mismatch: adaptation"):
+            run(args)
+        args.train_semantic_head = True
+    for k, v in base["criterion"].items():
+        if not (train_head and k.startswith("semantic_probe.probes.")):
+            torch.testing.assert_close(v, adapted["criterion"][k], rtol=0, atol=0)
+    correction = "injectors.1.output.weight" if transformer else "branches.extra.correction.weight"
+    assert adapted["model"][correction].abs().sum() > 0
+    assert json.loads((args.output / "run.json").read_text())["initialization"] == "registered_base"
+    from xuannv_embedding.training.experiment_export import run as export_run
+
+    destination = tmp_path / "export"
+    export_run(
+        argparse.Namespace(
+            config=args.config,
+            cache=args.cache,
+            checkpoint=args.resume,
+            output=destination,
+            device="cpu",
+            batch_size=1,
+        )
+    )
+    assert json.loads((destination / "status.json").read_text())["patches"] == 4
+    assert json.loads((destination / "manifest.json").read_text())["adaptation"]["freeze_base"]
+    if transformer:
+        return  # Multi-generation source extension is not part of this first transformer adapter.
+    second_raw = copy.deepcopy(adapted_raw)
+    second_raw["model"]["input_sources"]["another"] = {"channels": 1, "role": "highres"}
+    second_raw["model"]["target_heads"]["another_recon"] = {
+        "source": "another",
+        "channels": 1,
+        "loss_type": "continuous",
+        "weight": 0.35,
+    }
+    second_raw["data"]["datasets"][0]["source_map"]["another"] = "another"
+    second = setup("second", second_raw)
+    second.initialize = args.output / "latest.pt"
+    second.base_config = args.config
+    second.freeze_base = True
+    second.highres_encoding = "native"
+    run(second)
+    state = torch.load(second.output / "best.pt", weights_only=True)
+    for k, v in adapted["model"].items():
+        torch.testing.assert_close(v, state["model"][k], rtol=0, atol=0)
+    output = tmp_path / "second_export"
+    export_run(
+        argparse.Namespace(
+            config=second.config,
+            cache=second.cache,
+            checkpoint=second.output / "best.pt",
+            output=output,
+            device="cpu",
+            batch_size=1,
+        )
+    )
+    assert json.loads((output / "status.json").read_text())["state"] == "complete"
+    # Continuation controls retain exactly the existing source set, including an
+    # already adapted parent, but reset optimization for the same update budget.
+    for parent, raw_config, suffix in (
+        (base_args, raw, "public"),
+        (args, adapted_raw, "adapted"),
+    ):
+        continued = setup("continue_" + suffix, raw_config)
+        continued.initialize = parent.output / "latest.pt"
+        continued.base_config = parent.config
+        continued.freeze_base = False
+        continued.continue_base = True
+        continued.highres_encoding = "native"
+        run(continued)
+        registration = json.loads((continued.output / "run.json").read_text())
+        assert registration["adaptation"]["mode"] == "continue_existing_sources"
+        old = torch.load(continued.initialize, weights_only=True)["model"]
+        new = torch.load(continued.output / "best.pt", weights_only=True)["model"]
+        assert set(old) == set(new)
+        assert any(not torch.equal(old[k], new[k]) for k in old)
+        destination = tmp_path / ("continued_export_" + suffix)
+        export_run(
+            argparse.Namespace(
+                config=continued.config,
+                cache=continued.cache,
+                checkpoint=continued.output / "best.pt",
+                output=destination,
+                device="cpu",
+                batch_size=1,
+            )
+        )
+        assert json.loads((destination / "status.json").read_text())["state"] == "complete"
+
+
+def test_semantic_head_training_requires_registered_base():
+    with pytest.raises(ValueError, match="registered adaptation initialization"):
+        run(argparse.Namespace(train_semantic_head=True, initialize=None))

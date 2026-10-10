@@ -8,6 +8,27 @@ from xuannv_embedding.config import Config, ConfigError
 from xuannv_embedding.models import build_model
 
 
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"dim": 15, "heads": 4},
+        {"injection_blocks": [4, 2]},
+        {"injection_blocks": [2, 6]},
+        {"window_cells": 0},
+        {"unknown": 1},
+    ],
+)
+def test_transformer_adapter_rejects_invalid_settings(tmp_path, settings):
+    import yaml
+
+    raw = yaml.safe_load(_valid_config())
+    raw["model"]["highres_transformer"] = settings
+    path = tmp_path / "invalid.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError):
+        Config.from_yaml(path)
+
+
 def _valid_config() -> str:
     return """
 schema_version: "1"
@@ -97,6 +118,30 @@ def _write(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "config.yaml"
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def test_semantic_supervision_month_reaches_training_system(tmp_path):
+    from xuannv_embedding.training.cli import build_training_system
+
+    text = _valid_config().replace(
+        "  semantic_probe_hidden_dim: 0",
+        "  semantic_probe_hidden_dim: 0\n  semantic_probe_month_index: 0",
+    )
+    config = Config.from_yaml(_write(tmp_path, text))
+    assert config.training.semantic_probe_month_index == 0
+    assert build_training_system(config).criterion.semantic_probe.month_index == 0
+
+
+@pytest.mark.parametrize("value", [-3, 2, True, 0.5, "0"])
+def test_rejects_invalid_semantic_month_index(tmp_path, value):
+    import yaml
+
+    raw = yaml.safe_load(_valid_config())
+    raw["training"]["semantic_probe_month_index"] = value
+    path = tmp_path / "invalid_month.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError, match="semantic_probe_month_index"):
+        Config.from_yaml(path)
 
 
 def test_loads_strict_region_agnostic_config(tmp_path: Path) -> None:
@@ -245,3 +290,43 @@ def test_shipped_configs_are_self_contained_and_share_canonical_sources() -> Non
         for config in configs
         for task in config.training.semantic_probe_tasks
     )
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        '{unknown: {"2026-01-30": "2026-01"}}',
+        '{s2: {"2026-01-30": "2026-01"}}',
+        '{highres_optical: {"2026-02-30": "2026-01"}}',
+        '{highres_optical: {"2026-01-30": "2026-03"}}',
+    ],
+)
+def test_rejects_invalid_highres_month_assignment(tmp_path, mapping):
+    text = _valid_config().replace(
+        "data:\n", "data:\n  monthly_highres: true\n  highres_month_assignments: " + mapping + "\n"
+    )
+    with pytest.raises(ConfigError, match="highres_month_assignments"):
+        Config.from_yaml(_write(tmp_path, text))
+
+
+@pytest.mark.parametrize("pooling", ["month", "mean"])
+def test_config_accepts_semantic_pooling(tmp_path, pooling):
+    import yaml
+
+    raw = yaml.safe_load(_valid_config())
+    raw["training"]["semantic_probe_pooling"] = pooling
+    path = tmp_path / "pooling.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    assert Config.from_yaml(path).training.semantic_probe_pooling == pooling
+
+
+@pytest.mark.parametrize("pooling", ["median", None, [], 3])
+def test_config_rejects_unknown_semantic_pooling(tmp_path, pooling):
+    import yaml
+
+    raw = yaml.safe_load(_valid_config())
+    raw["training"]["semantic_probe_pooling"] = pooling
+    path = tmp_path / "pooling.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError, match="semantic_probe_pooling"):
+        Config.from_yaml(path)

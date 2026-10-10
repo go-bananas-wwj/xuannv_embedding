@@ -163,10 +163,20 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
     def _observations(
         self, record: ManifestRecord, source: str, channels: int, *, categorical: bool = False
     ) -> list[_Observation]:
-        return [
-            self._read(path, source=source, channels=channels, categorical=categorical)
-            for path in _paths(self._record_value(record, source))
-        ]
+        assignments = self.config.data.highres_month_assignments.get(source, {})
+        observations = []
+        for path in _paths(self._record_value(record, source)):
+            item = self._read(path, source=source, channels=channels, categorical=categorical)
+            match = _DATE_PATTERN.search(Path(path).name)
+            if match is not None:
+                stamp = match.group(1)
+                acquired = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:]}"
+                if acquired in assignments:
+                    item = _Observation(
+                        int(assignments[acquired].replace("-", "")), item.values, item.mask
+                    )
+            observations.append(item)
+        return observations
 
     def _infer_highres_sizes(self) -> dict[str, tuple[int, int]]:
         sizes: dict[str, tuple[int, int]] = {}
@@ -184,21 +194,30 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
         return sizes
 
     def _monthly_continuous(
-        self, observations: list[_Observation], channels: int
+        self,
+        observations: list[_Observation],
+        channels: int,
+        *,
+        size: tuple[int, int] | None = None,
+        normalized: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        frames = torch.zeros(len(self.months), channels, *self.output_size)
+        size = self.output_size if size is None else size
+        frames = torch.zeros(len(self.months), channels, *size)
         masks = torch.zeros(len(self.months))
-        pixel_masks = torch.zeros(len(self.months), *self.output_size)
+        pixel_masks = torch.zeros(len(self.months), *size)
         for index, month in enumerate(self.months):
             selected = [item for item in observations if item.month == month]
             if not selected:
                 continue
-            values = torch.stack(
-                [_resize(item.values, self.output_size, nearest=False) for item in selected]
-            )
+            values = torch.stack([_resize(item.values, size, nearest=False) for item in selected])
             valid = torch.stack(
-                [_resize(item.mask[None], self.output_size, nearest=True)[0] for item in selected]
+                [_resize(item.mask[None], size, nearest=True)[0] for item in selected]
             )
+            if normalized:
+                weight = torch.stack(
+                    [_resize(item.mask[None], size, nearest=False) for item in selected]
+                )
+                values = values / weight.clamp_min(1e-6)
             count = valid.sum(dim=0)
             frames[index] = (values * valid[:, None]).sum(dim=0) / count.clamp(min=1)[None]
             pixel_masks[index] = (count > 0).float()
@@ -209,6 +228,11 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
         self, source: str, observations: list[_Observation], channels: int
     ) -> tuple[torch.Tensor, torch.Tensor]:
         size = self.highres_sizes[source]
+        if self.config.data.monthly_highres:
+            frames, _, masks = self._monthly_continuous(
+                observations, channels, size=size, normalized=True
+            )
+            return frames, masks[:, None]
         if not observations:
             return torch.zeros(channels, *size), torch.zeros(1, *size)
         values = torch.stack([_resize(item.values, size, nearest=False) for item in observations])
@@ -297,11 +321,11 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
             else:
                 observations = observations_by_source.get(head.source, [])
                 targets[name], _, target_masks[name] = self._monthly_continuous(
-                    observations, head.channels
+                    observations, head.channels, normalized=self.config.data.monthly_highres
                 )
 
         supervised_labels, supervised_label_masks = self._supervised_labels(record)
-        return {
+        sample = {
             "patch_id": record.patch_id,
             "region": record.region,
             "source_frames": source_frames,
@@ -314,6 +338,9 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
             "supervised_labels": supervised_labels,
             "supervised_label_masks": supervised_label_masks,
         }
+        if self.config.data.monthly_highres:
+            sample["highres_quality_masks"] = {k: v.clone() for k, v in highres_masks.items()}
+        return sample
 
 
 def collate_region_batch(samples: list[dict[str, Any]]) -> dict[str, Any]:
@@ -327,7 +354,7 @@ def collate_region_batch(samples: list[dict[str, Any]]) -> dict[str, Any]:
         keys = samples[0][name]
         return {key: torch.stack([sample[name][key] for sample in samples]) for key in keys}
 
-    return {
+    batch = {
         "patch_ids": [sample["patch_id"] for sample in samples],
         "regions": [sample["region"] for sample in samples],
         "source_frames": stack_mapping("source_frames"),
@@ -340,3 +367,6 @@ def collate_region_batch(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "supervised_labels": stack_mapping("supervised_labels"),
         "supervised_label_masks": stack_mapping("supervised_label_masks"),
     }
+    if "highres_quality_masks" in samples[0]:
+        batch["highres_quality_masks"] = stack_mapping("highres_quality_masks")
+    return batch

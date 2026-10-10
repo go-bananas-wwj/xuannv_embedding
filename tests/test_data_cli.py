@@ -14,7 +14,16 @@ from xuannv_embedding.utils.manifest import load_manifest
 
 @pytest.mark.parametrize(
     "command",
-    ["grid", "registry", "partition", "materialize", "preprocess", "manifest", "validate"],
+    [
+        "grid",
+        "registry",
+        "partition",
+        "materialize",
+        "preprocess",
+        "manifest",
+        "validate",
+        "storage",
+    ],
 )
 def test_data_commands_expose_their_real_help(command: str) -> None:
     with pytest.raises(SystemExit) as raised:
@@ -60,6 +69,108 @@ def test_manifest_and_validate_commands_round_trip(tmp_path: Path, capsys) -> No
     report = json.loads(capsys.readouterr().out)
     assert report["passed"] is True
     assert report["record_count"] == 1
+
+
+def test_storage_init_inventory_and_plan_are_non_destructive(tmp_path: Path, capsys) -> None:
+    root = tmp_path / "storage"
+    assert main(["data", "storage", "init", "--root", str(root)]) == 0
+    assert (root / "raw/china_1pct/s2").is_dir()
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "a.txt").write_text("a", encoding="utf-8")
+    inventory = tmp_path / "inventory.json"
+    assert (
+        main(
+            [
+                "data",
+                "storage",
+                "inventory",
+                "--root",
+                str(source),
+                "--output",
+                str(inventory),
+                "--hash-files",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(inventory.read_text())["files"][0]["sha256"]
+    plan = tmp_path / "plan.json"
+    assert main(["data", "storage", "plan", "--root", str(root), "--output", str(plan)]) == 0
+    assert json.loads(plan.read_text())["schema"] == "xuannv.storage-migration-plan.v1"
+    assert (source / "a.txt").exists()
+    capsys.readouterr()
+
+
+def test_storage_migration_verify_and_rollback(tmp_path: Path, capsys) -> None:
+    from xuannv_embedding.data_process.storage import execute_plan
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "payload.txt").write_text("payload", encoding="utf-8")
+    target = tmp_path / "storage/raw/china_1pct/s2"
+    target.parent.mkdir(parents=True)
+    plan = tmp_path / "plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "schema": "xuannv.storage-migration-plan.v1",
+                "entries": [
+                    {
+                        "source": str(source),
+                        "target": str(target),
+                        "source_exists": True,
+                        "source_is_active_candidate": False,
+                        "target_empty": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert execute_plan(plan)["entries"][0]["status"] == "migrated"
+    journal = tmp_path / "migration.json"
+    assert main(["data", "storage", "verify", "--journal", str(journal)]) == 0
+    assert json.loads(capsys.readouterr().out)["passed"] is True
+    assert main(["data", "storage", "rollback", "--journal", str(journal)]) == 0
+    assert source.is_dir() and not source.is_symlink()
+    assert not target.exists()
+    capsys.readouterr()
+
+
+def test_storage_backup_dry_run_writes_capacity_receipt(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "payload.bin").write_bytes(b"payload")
+    password = tmp_path / "password"
+    password.write_text("secret", encoding="utf-8")
+    output = tmp_path / "backup.json"
+    assert (
+        main(
+            [
+                "data",
+                "storage",
+                "backup",
+                "--source",
+                str(source),
+                "--repository",
+                str(tmp_path / "repo"),
+                "--password-file",
+                str(password),
+                "--output",
+                str(output),
+                "--min-free-gib",
+                "0",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    receipt = json.loads(output.read_text())
+    assert receipt["status"] == "planned"
+    assert receipt["source_bytes"] == len(b"payload")
+    assert "secret" not in output.read_text()
+    capsys.readouterr()
 
 
 def test_grid_validate_applies_explicit_utm_seam_policy(

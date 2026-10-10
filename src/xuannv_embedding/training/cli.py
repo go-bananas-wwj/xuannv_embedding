@@ -58,6 +58,8 @@ def build_training_system(config: Config) -> TrainingSystem:
         semantic_probe_pos_weight=training.semantic_probe_pos_weight,
         semantic_probe_pos_weights=training.semantic_probe_pos_weights,
         semantic_probe_hidden_dim=training.semantic_probe_hidden_dim,
+        semantic_probe_month_index=training.semantic_probe_month_index,
+        semantic_probe_pooling=training.semantic_probe_pooling,
         semantic_probe_hard_negative_ratio=training.semantic_probe_hard_negative_ratio,
         semantic_probe_hard_negative_weight=training.semantic_probe_hard_negative_weight,
         semantic_probe_hard_negative_warmup_epochs=(
@@ -112,15 +114,16 @@ def synthetic_batch(
                 else torch.ones(batch_size, month_count)
             )
         else:
+            leading = (batch_size, month_count) if config.data.monthly_highres else (batch_size,)
             highres_frames[source] = (
-                torch.zeros(batch_size, source_config.channels, spatial_size, spatial_size)
+                torch.zeros(*leading, source_config.channels, spatial_size, spatial_size)
                 if missing
-                else torch.randn(batch_size, source_config.channels, spatial_size, spatial_size)
+                else torch.randn(*leading, source_config.channels, spatial_size, spatial_size)
             )
             highres_masks[source] = (
-                torch.zeros(batch_size, 1, spatial_size, spatial_size)
+                torch.zeros(*leading, 1, spatial_size, spatial_size)
                 if missing
-                else torch.ones(batch_size, 1, spatial_size, spatial_size)
+                else torch.ones(*leading, 1, spatial_size, spatial_size)
             )
 
     targets: dict[str, torch.Tensor] = {}
@@ -255,12 +258,18 @@ def _setup_device(requested: str | None) -> tuple[torch.device, bool, int]:
     distributed = "RANK" in os.environ
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     if distributed:
+        if requested == "cpu":
+            dist.init_process_group(backend="gloo")
+            return torch.device("cpu"), True, local_rank
         import torch_npu  # noqa: F401
 
         torch.npu.set_device(local_rank)
         dist.init_process_group(backend="hccl")
         return torch.device(f"npu:{local_rank}"), True, local_rank
     if requested is not None:
+        if requested.split(":", 1)[0] == "npu":
+            import torch_npu  # noqa: F401
+
         device = torch.device(requested)
     else:
         try:
