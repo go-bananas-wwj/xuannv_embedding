@@ -126,7 +126,10 @@ def read_spec(path):
         "training",
         "evaluation_scope",
     }
-    if set(spec) != expected or spec["protocol"] != "regional-static-refinement-v1":
+    if set(spec) != expected or spec["protocol"] not in {
+        "regional-static-refinement-v1",
+        "public-static-refinement-v1",
+    }:
         raise ValueError("invalid regional refinement specification")
     for key in [
         "parent_config",
@@ -197,6 +200,10 @@ def read_spec(path):
 
 
 def initialize(spec, cache, labels):
+    if spec["protocol"] == "public-static-refinement-v1":
+        from xuannv_embedding.training.public_refinement import initialize as initialize_public
+
+        return initialize_public(spec, cache, labels)
     config = Config.from_yaml(spec["parent_config"]["path"])
     parent = json.loads(Path(spec["parent_registration"]["path"]).read_text())
     if (
