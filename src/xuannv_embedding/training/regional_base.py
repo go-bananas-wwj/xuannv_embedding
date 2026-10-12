@@ -112,6 +112,7 @@ def build_regional_system(
     checkpoint: Path | None,
     seed: int,
     static_weight: float = 0.25,
+    initialization_config: Config | None = None,
 ) -> tuple[TrainingSystem, dict[str, Any]]:
     static_weight = validate_static_weight(static_weight)
     torch.manual_seed(seed)
@@ -133,6 +134,75 @@ def build_regional_system(
         for name, head in config.model.target_heads.items()
         if head.source in highres
     }
+    if not highres:
+        from xuannv_embedding.training.public_refinement import (
+            PublicRefinementModel,
+            validate_public_model,
+        )
+
+        validate_public_model(config.model)
+        if initialization_config is not None:
+            initial_sources = {
+                k: v
+                for k, v in initialization_config.model.input_sources.items()
+                if v.role == "temporal"
+            }
+            initial_targets = {
+                k: v
+                for k, v in initialization_config.model.target_heads.items()
+                if v.source in initial_sources or v.loss_type == "categorical"
+            }
+            projected = replace(
+                initialization_config.model,
+                input_sources=initial_sources,
+                target_heads=initial_targets,
+                highres_transformer=None,
+            )
+            if asdict(projected) != asdict(config.model):
+                raise ValueError("shared initialization changed the common model architecture")
+            if initialization_config.data.months != config.data.months or [
+                d.region for d in initialization_config.data.datasets
+            ] != [d.region for d in config.data.datasets]:
+                raise ValueError("shared initialization changed the regional observation window")
+            reference, _ = build_regional_system(
+                initialization_config,
+                mode="scratch",
+                checkpoint=None,
+                seed=seed,
+                static_weight=static_weight,
+            )
+            system = TrainingSystem(
+                PublicRefinementModel(reference.model.base), reference.criterion
+            )
+            system.criterion.base.target_cfg = {
+                k: v
+                for k, v in system.criterion.base.target_cfg.items()
+                if k in initial_targets or k == "osm_landcover"
+            }
+        else:
+            system = build_training_system(config)
+            system.model = PublicRefinementModel(system.model)
+            rename_targets(system.model, system.criterion, {"worldcover": "osm_landcover"})
+            system.criterion = RegionalObjective(
+                system.criterion,
+                config.model.embed_dim,
+                12,
+                {"s2_recon": 11, "landsat_recon": 6},
+                static_weight=static_weight,
+            )
+        receipt = apply_initial_weights(
+            system.model, system.criterion, mode=mode, checkpoint=checkpoint
+        )
+        receipt.update(
+            static_weight=system.criterion.weight,
+            public_only=True,
+            shared_untrained_initialization=initialization_config is not None,
+        )
+        set_reference_window(system.model, config.data.months)
+        system.requires_grad_(True)
+        return system, receipt
+    if initialization_config is not None:
+        raise ValueError("shared initialization is reserved for a public-observation control")
     if config.model.highres_transformer is None:
         raise ValueError("Regional base requires the registered highres transformer architecture")
     public_config = replace(
@@ -222,7 +292,11 @@ def training_domain(cache: dict[str, Any], step: int) -> dict[str, Any]:
 def read_spec(path: Path) -> tuple[dict[str, Any], Config, dict[str, Any]]:
     spec = json.loads(path.read_text())
     required = {"schema", "mode", "config", "cache", "checkpoint", "training", "output"}
-    if set(spec) != required or spec["schema"] != "regional-base-v1":
+    if (
+        not required.issubset(spec)
+        or set(spec) - required - {"initialization_config"}
+        or spec["schema"] != "regional-base-v1"
+    ):
         raise ValueError("Unknown or missing regional specification fields")
     if spec["mode"] not in {"transfer", "scratch"}:
         raise ValueError("Unknown initialization mode")
@@ -238,6 +312,12 @@ def read_spec(path: Path) -> tuple[dict[str, Any], Config, dict[str, Any]]:
     elif spec["checkpoint"] is not None:
         raise ValueError("Scratch must not inherit a checkpoint")
     config = Config.from_yaml(spec["config"]["path"])
+    if "initialization_config" in spec:
+        initial = spec["initialization_config"]
+        if set(initial) != {"path", "sha256"} or sha(Path(initial["path"])) != initial["sha256"]:
+            raise ValueError("shared initialization configuration changed")
+        if any(v.role != "temporal" for v in config.model.input_sources.values()):
+            raise ValueError("shared initialization is reserved for a public-observation control")
     cache = json.loads(Path(spec["cache"]["path"]).read_text())
     if cache["state"] != "complete" or cache["months"] != config.data.months:
         raise ValueError("Cache is incomplete or its month window differs")
@@ -295,6 +375,11 @@ def main(argv: list[str] | None = None) -> int:
         checkpoint=Path(spec["checkpoint"]["path"]) if spec["checkpoint"] else None,
         seed=spec["training"]["seed"],
         static_weight=spec["training"].get("static_weight", 0.25),
+        **(
+            {"initialization_config": Config.from_yaml(spec["initialization_config"]["path"])}
+            if "initialization_config" in spec
+            else {}
+        ),
     )
     output = Path(spec["output"])
     output.mkdir(parents=True, exist_ok=True)
