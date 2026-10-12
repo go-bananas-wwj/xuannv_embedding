@@ -112,6 +112,27 @@ def registered(ref):
     return Path(ref["path"])
 
 
+def validate_reconstruction_weights(weights, targets):
+    if not isinstance(weights, dict):
+        raise ValueError("reconstruction weights must be an explicit target mapping")
+    for name, weight in weights.items():
+        if (
+            name not in targets
+            or targets[name]["loss_type"] != "l1"
+            or type(weight) not in {int, float}
+            or not math.isfinite(weight)
+            or weight < 0
+        ):
+            raise ValueError("invalid or unregistered continuous reconstruction weight")
+
+
+def apply_reconstruction_weights(system, weights):
+    targets = system.criterion.base.target_cfg
+    validate_reconstruction_weights(weights, targets)
+    for name, weight in weights.items():
+        targets[name] = {**targets[name], "weight": float(weight)}
+
+
 def read_spec(path):
     spec = json.loads(Path(path).read_text())
     expected = {
@@ -155,7 +176,7 @@ def read_spec(path):
         if a["patch_id"] != b["patch_id"] or a["bounds"] != b["bounds"]:
             raise ValueError("static target geography differs")
     settings = spec["training"]
-    if set(settings) != {
+    expected_training = {
         "seed",
         "head_steps",
         "joint_steps",
@@ -169,8 +190,17 @@ def read_spec(path):
         "amp",
         "save_every",
         "min_free_gib",
+    }
+    if not expected_training.issubset(settings) or set(settings) - expected_training - {
+        "reconstruction_weights"
     }:
         raise ValueError("unknown or missing refinement training setting")
+    config = Config.from_yaml(spec["parent_config"]["path"])
+    targets = {
+        spec["target_aliases"].get(name, name): value
+        for name, value in config.model.loss_specs.items()
+    }
+    validate_reconstruction_weights(settings.get("reconstruction_weights", {}), targets)
     for key in [
         "head_steps",
         "joint_steps",
@@ -203,7 +233,9 @@ def initialize(spec, cache, labels):
     if spec["protocol"] == "public-static-refinement-v1":
         from xuannv_embedding.training.public_refinement import initialize as initialize_public
 
-        return initialize_public(spec, cache, labels)
+        system, config = initialize_public(spec, cache, labels)
+        apply_reconstruction_weights(system, spec["training"].get("reconstruction_weights", {}))
+        return system, config
     config = Config.from_yaml(spec["parent_config"]["path"])
     parent = json.loads(Path(spec["parent_registration"]["path"]).read_text())
     if (
@@ -254,6 +286,7 @@ def initialize(spec, cache, labels):
             system.criterion, config.model.embed_dim, labels["target"], labels["classes"]
         ),
     )
+    apply_reconstruction_weights(result, spec["training"].get("reconstruction_weights", {}))
     return result, config
 
 
