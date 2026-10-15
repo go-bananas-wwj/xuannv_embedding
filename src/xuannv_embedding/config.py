@@ -246,6 +246,7 @@ class TrainingConfig:
     latent_prediction_weight: float = 0.0
     highres_loss_weight: float = 1.0
     highres_visible_targets: bool = False
+    highres_visible_weight: float | None = None
     compile: bool = False
     input_masking: InputMaskingConfig = field(default_factory=InputMaskingConfig)
 
@@ -606,6 +607,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "latent_prediction_weight",
         "highres_loss_weight",
         "highres_visible_targets",
+        "highres_visible_weight",
         "compile",
         "input_masking",
     }
@@ -706,6 +708,11 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         ),
         highres_visible_targets=_boolean(
             raw.get("highres_visible_targets", False), "training.highres_visible_targets"
+        ),
+        highres_visible_weight=(
+            _non_negative_float(raw["highres_visible_weight"], "training.highres_visible_weight")
+            if raw.get("highres_visible_weight") is not None
+            else None
         ),
         compile=_boolean(raw.get("compile", False), "training.compile"),
         input_masking=_parse_masking(raw.get("input_masking", {}), model),

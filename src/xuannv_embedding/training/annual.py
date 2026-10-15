@@ -125,14 +125,27 @@ def prepare_annual_batch(batch: dict, config, *, training: bool, generator=None)
             values5, support5 = masked_resample(
                 item["values"][None], target_mask[None, None].float(), output_size
             )
-            sample_targets.append(
-                {
-                    "source": source,
-                    "values": values5[0],
-                    "mask": support5[0, 0],
-                    "quality_weight": quality,
-                }
-            )
+            target = {
+                "source": source,
+                "values": values5[0],
+                "mask": support5[0, 0],
+                "quality_weight": quality,
+            }
+            if training and config.training.highres_visible_weight is not None:
+                target["partitions"] = {}
+                # Partition actual encoder visibility, including any partially
+                # covered native pixels conservatively removed from the input.
+                for name, partition in (("heldout", ~keep), ("visible", keep)):
+                    values_part, support_part = masked_resample(
+                        item["values"][None],
+                        (original_mask & partition)[None, None].float(),
+                        output_size,
+                    )
+                    target["partitions"][name] = {
+                        "values": values_part[0],
+                        "mask": support_part[0, 0],
+                    }
+            sample_targets.append(target)
             sample_requests.append({"source": source, "date_features": date_features})
         observations.append(inputs)
         highres_targets.append(sample_targets)
@@ -166,6 +179,7 @@ class AnnualLoss(nn.Module):
         self.warmup = config.training.uniformity_warmup_epochs
         self.latent_prediction_weight = config.training.latent_prediction_weight
         self.highres_loss_weight = config.training.highres_loss_weight
+        self.highres_visible_weight = config.training.highres_visible_weight
         self.latent_predictor = (
             nn.Conv2d(config.model.embed_dim, config.model.embed_dim, 1)
             if self.latent_prediction_weight
@@ -197,11 +211,35 @@ class AnnualLoss(nn.Module):
             reconstruction = reconstruction + specification["weight"] * loss
             result[f"recon_{name}"] = loss
         source_losses = defaultdict(list)
+        partition_losses = {name: defaultdict(list) for name in ("heldout", "visible")}
         for predictions, sample_targets in zip(
             output.highres_reconstructions, highres_targets or [], strict=True
         ):
             for prediction, target in zip(predictions, sample_targets, strict=True):
-                if bool((target["mask"] > 0).any()):
+                if "partitions" in target:
+                    if self.highres_visible_weight is None:
+                        raise ValueError("Partitioned highres targets require an explicit weight")
+                    numerator, denominator = zero, zero
+                    for name, weight in (
+                        ("heldout", 1.0),
+                        ("visible", self.highres_visible_weight),
+                    ):
+                        part = target["partitions"][name]
+                        count = part["mask"].sum()
+                        loss = reconstruction_loss(
+                            prediction[None], part["values"][None], part["mask"][None], "l1"
+                        )
+                        numerator = numerator + loss * count * weight
+                        denominator = denominator + count * weight
+                        if bool(count > 0):
+                            partition_losses[name][target["source"]].append(
+                                loss * target["quality_weight"]
+                            )
+                    if bool(denominator > 0):
+                        source_losses[target["source"]].append(
+                            numerator / denominator.clamp(min=1e-8) * target["quality_weight"]
+                        )
+                elif bool((target["mask"] > 0).any()):
                     loss = reconstruction_loss(
                         prediction[None], target["values"][None], target["mask"][None], "l1"
                     )
@@ -211,6 +249,12 @@ class AnnualLoss(nn.Module):
             highres_loss = torch.stack(
                 [torch.stack(losses).mean() for losses in source_losses.values()]
             ).mean()
+        for name, sources in partition_losses.items():
+            result[f"highres_{name}_recon"] = (
+                torch.stack([torch.stack(values).mean() for values in sources.values()]).mean()
+                if sources
+                else zero
+            )
         valid = output.validity_mask.flatten(2).any(dim=2)
         uniformity = batch_uniformity_loss(output.embedding, self.uniformity_temperature, valid)
         weight = self.uniformity_weight * (

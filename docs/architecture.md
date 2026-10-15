@@ -57,6 +57,13 @@ physical sources --source_map--> canonical slots
 版本的数值路径；完整输入下两条路径的推理结果一致。回归测试隔离块内部，验证主干与瓶颈梯度、
 目标值不可见及真实缺测回退。
 
+`training.highres_visible_weight` 为显式的可见区域像素权重；留出区域的像素权重固定为 1。
+高分损失按两类区域的加权有效支持度归一化，再按观测与 source 聚合，最后乘既有的
+`highres_loss_weight`。训练同时报告 `highres_heldout_recon` 与 `highres_visible_recon`。
+原生 PAN 聚合单元可同时覆盖两类区域，因此分别聚合目标与支持，再计算各部分损失。
+该字段缺省为 `null`，保留旧 `highres_visible_targets` 行为；显式设置后，以实际编码器可见性
+划分两类区域。固定留出评测须统一使用相同遮挡、目标划分和权重，不能沿用各模型训练目标比较。
+
 ## 状态与制品
 
 新 checkpoint 包含格式版本、配置 SHA、Git SHA、source schema、区域清单、epoch、模型、
