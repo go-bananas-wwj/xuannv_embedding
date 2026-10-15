@@ -649,7 +649,8 @@ def export(args) -> None:
             "found": len(found),
             "requested": len(want),
             "missing": sorted(want - found),
-            "development_only": True,
+            "development_only": not plan.get("confirmation_only", False),
+            "confirmation_only": plan.get("confirmation_only", False),
         },
     )
     if want - found:
