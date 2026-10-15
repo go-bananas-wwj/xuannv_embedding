@@ -41,6 +41,88 @@ def test_five_meter_counts_measure_regions_and_one_pixel_boundary_tolerance():
     assert shifted["F1"] < 1 and shifted["boundaryF1"] == 1
 
 
+def test_confirmation_probe_scores_only_annual_spatial_holdout(tmp_path, monkeypatch):
+    import json
+
+    import numpy as np
+    import torch
+
+    from xuannv_embedding.downstream.annual_ablation import semantic_probe
+    from xuannv_embedding.training.annual_experiments import digest
+
+    labels = tmp_path / "labels"
+    features = tmp_path / "original" / "semantic"
+    labels.mkdir()
+    features.mkdir(parents=True)
+    records = []
+    for index in range(10):
+        patch_id = f"parent_32650:{index * 16}:0"
+        path = labels / f"{index}.npz"
+        target = np.array([[0, 1], [0, 1]], dtype=np.int64)
+        np.savez(path, water=target, landcover=target)
+        records.append({"patch_id": patch_id, "file": path.name, "sha256": digest(path)})
+        np.savez(
+            features / f"{patch_id}.npz",
+            emb=np.ones((64, 2, 2), np.float32),
+            valid=np.ones((2, 2)),
+            split="train" if index < 8 else "test",
+        )
+    (labels / "labels.json").write_text(json.dumps({"records": records}))
+    monkeypatch.setattr(torch.optim.LBFGS, "step", lambda self, closure: closure())
+    semantic_probe(
+        {"labels": str(labels), "confirmation_only": True},
+        tmp_path,
+        "original",
+        torch.device("cpu"),
+    )
+    result = json.loads((tmp_path / "original" / "semantic_probe" / "metrics.json").read_text())
+    assert result["confirmation_only"] and not result["development_only"]
+    confusion = np.load(tmp_path / "original" / "semantic_probe" / "water.npy")
+    train = np.asarray(result["annual_splits"]) == "train"
+    assert confusion[train].sum() == 0
+    assert confusion[~train].sum() == 8
+    assert "pretraining_seen" not in result["tasks"]["water"]
+
+
+def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path):
+    import json
+
+    from xuannv_embedding.downstream.annual_ablation import SELECTION_PROTOCOL, select_candidate
+
+    (tmp_path / "selection_protocol.json").write_text(json.dumps({"protocol": SELECTION_PROTOCOL}))
+    root = tmp_path / "evaluation"
+    arms = {
+        "control": {},
+        "A_context": {"context": True},
+        "AB_visible01": {"context": True, "visible": 0.1},
+    }
+    for tag, water, landcover, gain in [
+        ("control", 0.85, 0.43, 0),
+        ("A_context", 0.80, 0.45, 0.1),
+        ("AB_visible01", 0.86, 0.44, 0.01),
+    ]:
+        semantic = {
+            "tasks": {"water": {"all": {"F1": water}}, "landcover": {"all": {"mIoU": landcover}}}
+        }
+        city = {
+            "tasks": {
+                "road:conv3x3": {"all": {"F1": 0.23 + gain, "boundaryF1": 0.4 + gain}},
+                "building:conv3x3": {"all": {"F1": 0.25 + gain}},
+                "water:conv3x3": {"all": {"F1": 0.7 + gain}},
+            }
+        }
+        for suite, value in [("semantic_probe", semantic), ("city_probe", city)]:
+            destination = root / tag / suite
+            destination.mkdir(parents=True)
+            (destination / "metrics.json").write_text(json.dumps(value))
+    plan = {"arms": {tag: {"changes": changes} for tag, changes in arms.items()}}
+    selected = select_candidate(plan, root)
+    assert not selected["scores"]["A_context"]["eligible"]
+    assert selected["selected"] == "AB_visible01"
+    with pytest.raises(ValueError, match="already selected"):
+        select_candidate(plan, root)
+
+
 def records():
     return [
         SimpleNamespace(

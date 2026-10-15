@@ -132,6 +132,50 @@ def test_annual_teacher_can_have_a_different_backbone_capacity():
     )
 
 
+@pytest.mark.parametrize("objective", ["teacher", "view"])
+def test_semantic_objectives_alone_train_the_annual_backbone(objective):
+    torch.manual_seed(8)
+    base = annual_config()
+    config = replace(
+        base,
+        model=replace(base.model, annual_context_pooling=True),
+        training=replace(
+            base.training,
+            latent_prediction_weight=0.1 if objective == "teacher" else 0.0,
+            latent_prediction_pool_factors=[2, 4, 8],
+            view_consistency_weight=0.1 if objective == "view" else 0.0,
+        ),
+    )
+    system = build_training_system(config)
+    raw = raw_batch(32)
+    batch = prepare_annual_batch(
+        raw, config, training=True, generator=torch.Generator().manual_seed(1)
+    )
+    if objective == "teacher":
+        system.set_teacher(build_training_system(base).model)
+        batch["teacher_view"] = prepare_annual_batch(raw, base, training=False)
+        key = "latent_prediction"
+    else:
+        system.set_ema(0.99)
+        batch["consistency_view"] = prepare_annual_batch(
+            raw, config, training=True, generator=torch.Generator().manual_seed(2)
+        )
+        key = "view_consistency"
+    system(batch)[key].backward()
+    assert (
+        sum(
+            parameter.grad.abs().sum()
+            for parameter in system.model.temporal_encoder.parameters()
+            if parameter.grad is not None
+        )
+        > 0
+    )
+    assert system.model.bottleneck.proj.weight.grad.abs().sum() > 0
+    for target in [system.teacher_model, system.ema_model]:
+        if target is not None:
+            assert all(parameter.grad is None for parameter in target.parameters())
+
+
 def test_ema_updates_only_on_optimizer_steps_and_roundtrips_auxiliary_state():
     torch.manual_seed(8)
     base = annual_config()

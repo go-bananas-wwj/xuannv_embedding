@@ -577,6 +577,93 @@ def probe(args) -> None:
         city_probe(plan, root, args.arm, device)
 
 
+def freeze_confirmation(args) -> None:
+    """Freeze additional existing weak labels before inspecting candidate results."""
+    from xuannv_embedding.utils.manifest import IndexedManifest
+
+    plan = json.loads(args.plan.read_text())
+    candidate_labels = json.loads((args.labels / "labels.json").read_text())
+    old_labels = json.loads((Path(plan["labels"]) / "labels.json").read_text())
+    excluded = {row["patch_id"] for row in old_labels["records"]} | {
+        row[2] for row in json.loads(Path(plan["cities"]).read_text())
+    }
+    wanted = {row["patch_id"] for row in candidate_labels["records"]} - excluded
+    root = args.plan.parent / "confirmation"
+    if (root / "plan.json").exists():
+        raise ValueError("Confirmation set is already frozen")
+    year = candidate_labels["year"]
+    source_root = Path(next(row["original"] for row in plan["datasets"] if row["year"] == year))
+    actual_split = {}
+    counts = {}
+    for split in ["train", "validation", "test"]:
+        source = source_root / f"{year}.{split}.manifest.jsonl"
+        target = evaluation_manifest(source, root / "development_data" / source.name, wanted)
+        records = IndexedManifest(target)
+        counts[split] = len(records)
+        for record in records:
+            if record.patch_id in actual_split:
+                raise ValueError("Confirmation patch appears in multiple source splits")
+            actual_split[record.patch_id] = split
+    selected = []
+    labels_root = root / "labels"
+    labels_root.mkdir(exist_ok=True)
+    for row in candidate_labels["records"]:
+        if row["patch_id"] not in actual_split:
+            continue
+        path = args.labels / row["file"]
+        if digest(path) != row["sha256"]:
+            raise ValueError("Confirmation label digest differs")
+        destination = labels_root / row["file"]
+        if not destination.exists():
+            destination.symlink_to(path.resolve())
+        selected.append({**row, "annual_split": actual_split[row["patch_id"]]})
+    labels = {
+        **candidate_labels,
+        "records": selected,
+        "independent_evaluation": False,
+        "policy": {
+            **candidate_labels["policy"],
+            "current_experiment": (
+                "Existing weak labels; exclude development IDs. Fit heads only on current annual "
+                "train positions; evaluate once on current annual validation/test positions "
+                "after choosing one candidate on development evidence. Not independent truth."
+            ),
+        },
+    }
+    write_json(labels_root / "labels.json", labels)
+    write_json(root / "empty_cities.json", [])
+    # Source positions absent from the annual release cannot be exported. The
+    # cached records already contain exactly the remaining IDs; align its request identity.
+    actual_digest = hashlib.sha256("\n".join(sorted(actual_split)).encode()).hexdigest()
+    for path in (root / "development_data").glob("*.origin.json"):
+        identity = json.loads(path.read_text())
+        identity["wanted_sha256"] = actual_digest
+        write_json(path, identity)
+    frozen = {
+        **plan,
+        "schema": "xuannv.annual-abc.confirmation.v1",
+        "confirmation_only": True,
+        "development_only": False,
+        "labels": str(labels_root.resolve()),
+        "cities": str((root / "empty_cities.json").resolve()),
+        "counts": counts,
+        "absent_from_current_annual": sorted(wanted - set(actual_split)),
+        "parent_plan_sha256": digest(args.plan),
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    write_json(root / "plan.json", frozen)
+    print(
+        json.dumps(
+            {
+                "confirmation": counts,
+                "excluded_development": len(excluded),
+                "missing": len(wanted - set(actual_split)),
+            }
+        ),
+        flush=True,
+    )
+
+
 def compare(args) -> None:
     from xuannv_embedding.downstream.annual_ablation import compare as compare_probes
 
@@ -587,6 +674,28 @@ def compare(args) -> None:
         args.arms or list(plan["arms"]),
         reference=args.reference,
     )
+
+
+def selection(args) -> None:
+    from xuannv_embedding.downstream.annual_ablation import SELECTION_PROTOCOL, select_candidate
+
+    if args.command == "lock-selection":
+        destination = args.plan.parent / "selection_protocol.json"
+        if destination.exists():
+            raise ValueError("Selection protocol is already locked")
+        write_json(
+            destination,
+            {
+                "protocol": SELECTION_PROTOCOL,
+                "locked_utc": datetime.now(timezone.utc).isoformat(),
+                "source_code_sha256": _source_code_sha256(),
+            },
+        )
+    else:
+        result = select_candidate(
+            json.loads(args.plan.read_text()), args.plan.parent / "evaluation"
+        )
+        print(json.dumps(result, ensure_ascii=False), flush=True)
 
 
 def main(argv=None) -> int:
@@ -621,6 +730,12 @@ def main(argv=None) -> int:
     command.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
     command.add_argument("--arms", nargs="+")
     command.set_defaults(handler=run)
+    command = commands.add_parser(
+        "freeze-confirmation", help="Lock additional weak-label spatial holdout"
+    )
+    command.add_argument("--plan", required=True, type=Path)
+    command.add_argument("--labels", required=True, type=Path)
+    command.set_defaults(handler=freeze_confirmation)
     for name, handler in [("reconstruction", reconstruction), ("export", export), ("probe", probe)]:
         command = commands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path)
@@ -635,6 +750,10 @@ def main(argv=None) -> int:
     command.add_argument("--reference", default="original")
     command.add_argument("--arms", nargs="+")
     command.set_defaults(handler=compare)
+    for name in ["lock-selection", "select"]:
+        command = commands.add_parser(name)
+        command.add_argument("--plan", required=True, type=Path)
+        command.set_defaults(handler=selection)
     args = parser.parse_args(argv)
     torch.set_num_threads(2)
     args.handler(args)

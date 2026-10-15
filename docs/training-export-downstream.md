@@ -93,6 +93,10 @@ xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
 `probe` 使用训练 fold 的统计量拟合标准化；语义线性头按 20.48km 空间块分五折，5m 的
 线性头与卷积头按城市分五折。城市协议继续使用已有 OSM 映射范围筛选，边界容差固定 5m。
 `compare` 在相同 patch、fold 上比较，用整座城市或空间块配对重采样 2,000 次计算置信区间。
+`lock-selection` 在候选评测前登记语义与细节各占一半的选择规则，并设置分项回退边界；
+`select` 只允许执行一次。`freeze-confirmation` 可以从既有标签包冻结额外位置，排除开发集，
+按当前年度 manifest 的真实 split 分配下游训练与确认样本。确认模式只用年度 train 位置拟合
+下游头，年度 validation/test 位置只评分；标签仍是同源弱标签，不构成独立真值认证。
 这些已有弱标签与历史测试结果均属于开发证据，不能宣称新的独立盲测结果。
 
 ```bash

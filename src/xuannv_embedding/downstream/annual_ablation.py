@@ -48,6 +48,117 @@ ROAD_HALF_WIDTH = {
     "steps": 1,
 }
 
+SELECTION_PROTOCOL = {
+    "reference": "control",
+    "semantic_terms": ["water:F1", "landcover:mIoU"],
+    "fine_terms": [
+        "road:conv3x3:F1",
+        "road:conv3x3:boundaryF1",
+        "building:conv3x3:F1",
+        "water:conv3x3:F1",
+    ],
+    "semantic_weight": 0.5,
+    "fine_weight": 0.5,
+    "maximum_semantic_average_drop": 0.002,
+    "maximum_fine_average_drop": 0.002,
+    "maximum_water_drop": 0.01,
+    "maximum_landcover_drop": 0.005,
+    "maximum_road_drop": 0.005,
+    "score_tie_tolerance": 0.001,
+    "confirmation": (
+        "Select once on development evidence, then compare original/control/small/selected "
+        "on additional spatial holdout weak labels. Never select again on confirmation."
+    ),
+}
+
+
+def select_candidate(plan, root: Path):
+    from datetime import datetime, timezone
+
+    from xuannv_embedding.training.annual_experiments import digest, write_json
+
+    protocol_file = root.parent / "selection_protocol.json"
+    locked = json.loads(protocol_file.read_text())
+    if locked["protocol"] != SELECTION_PROTOCOL:
+        raise ValueError("Selection rule differs from the preregistered protocol")
+    evidence, scores = {}, {}
+    for tag in plan["arms"]:
+        semantic_path = root / tag / "semantic_probe" / "metrics.json"
+        city_path = root / tag / "city_probe" / "metrics.json"
+        semantic = json.loads(semantic_path.read_text())["tasks"]
+        city = json.loads(city_path.read_text())["tasks"]
+        evidence[str(semantic_path.resolve())] = digest(semantic_path)
+        evidence[str(city_path.resolve())] = digest(city_path)
+        metrics = {
+            "water": semantic["water"]["all"]["F1"],
+            "landcover": semantic["landcover"]["all"]["mIoU"],
+            "road": city["road:conv3x3"]["all"]["F1"],
+        }
+        semantic_score = (metrics["water"] + metrics["landcover"]) / 2
+        fine_score = np.mean(
+            [
+                city[key]["all"][metric]
+                for key, metric in [
+                    ("road:conv3x3", "F1"),
+                    ("road:conv3x3", "boundaryF1"),
+                    ("building:conv3x3", "F1"),
+                    ("water:conv3x3", "F1"),
+                ]
+            ]
+        )
+        scores[tag] = {
+            **metrics,
+            "semantic_score": float(semantic_score),
+            "fine_score": float(fine_score),
+            "joint_score": float((semantic_score + fine_score) / 2),
+        }
+    baseline = scores["control"]
+    for tag, score in scores.items():
+        score["eligible"] = all(
+            score[key] >= baseline[key] - margin
+            for key, margin in [
+                ("semantic_score", 0.002),
+                ("fine_score", 0.002),
+                ("water", 0.01),
+                ("landcover", 0.005),
+                ("road", 0.005),
+            ]
+        )
+    eligible = [
+        tag
+        for tag in scores
+        if tag != "control"
+        and scores[tag]["eligible"]
+        and scores[tag]["joint_score"] >= baseline["joint_score"]
+    ]
+    best = max(eligible, key=lambda tag: scores[tag]["joint_score"]) if eligible else None
+    if best is not None:
+        tied = [
+            tag
+            for tag in eligible
+            if scores[tag]["joint_score"] >= scores[best]["joint_score"] - 0.001
+        ]
+        best = min(
+            tied, key=lambda tag: (len(plan["arms"][tag]["changes"]), -scores[tag]["joint_score"])
+        )
+    diagnostic = max(
+        (tag for tag in scores if tag != "control"), key=lambda tag: scores[tag]["joint_score"]
+    )
+    result = {
+        "selected": best,
+        "diagnostic_best": diagnostic,
+        "scores": scores,
+        "protocol_sha256": digest(protocol_file),
+        "evidence_sha256": evidence,
+        "selected_utc": datetime.now(timezone.utc).isoformat(),
+        "interpretation": "Exploratory continued-training result; confirmation still required.",
+    }
+    destination = root.parent / "selection.json"
+    if destination.exists():
+        raise ValueError("Candidate was already selected; do not reselect after confirmation")
+    write_json(destination, result)
+    return result
+
 
 def spatial_group(patch_id: str) -> str:
     """Keep patches within a 20.48 km parent-grid block in the same fold."""
@@ -108,6 +219,7 @@ def semantic_metrics(confusion, task):
 def semantic_probe(plan, root: Path, tag: str, device):
     """Fixed linear probes; fit normalization and class weights on training folds only."""
     from xuannv_embedding.training.annual_experiments import digest, write_json
+    from xuannv_embedding.training.cli import _git_sha, _source_code_sha256
 
     labels_root = Path(plan["labels"])
     records = {
@@ -146,10 +258,19 @@ def semantic_probe(plan, root: Path, tag: str, device):
         task: torch.from_numpy(np.concatenate(values)).long() for task, values in labels.items()
     }
     patches = torch.from_numpy(np.concatenate(patches))
+    confirmation = plan.get("confirmation_only", False)
+    if confirmation:
+        folds = np.where(np.asarray(annual_splits) == "train", 1, 0)
     fold_pixels = torch.from_numpy(folds)[patches]
     result = {
-        "development_only": True,
-        "fold_unit": "20.48 km spatial block",
+        "development_only": not confirmation,
+        "confirmation_only": confirmation,
+        "evaluation_git_sha": _git_sha(),
+        "evaluation_source_code_sha256": _source_code_sha256(),
+        "label_manifest_sha256": digest(labels_root / "labels.json"),
+        "fold_unit": (
+            "current annual train / spatial holdout" if confirmation else "20.48 km spatial block"
+        ),
         "groups": len(set(groups)),
         "ids": ids,
         "folds": folds.tolist(),
@@ -162,7 +283,7 @@ def semantic_probe(plan, root: Path, tag: str, device):
         y = labels[task]
         keep = y >= 0
         confusion = np.zeros((len(ids), classes, classes), dtype=np.int64)
-        for fold in range(5):
+        for fold in ([0] if confirmation else range(5)):
             torch.manual_seed(100 + fold)
             train = (keep & (fold_pixels != fold)).nonzero().flatten()
             test = (keep & (fold_pixels == fold)).nonzero().flatten()
@@ -205,7 +326,7 @@ def semantic_probe(plan, root: Path, tag: str, device):
             ("pretraining_seen", np.asarray(annual_splits) == "train"),
             ("pretraining_unseen", np.asarray(annual_splits) != "train"),
         ]:
-            if select.any():
+            if select.any() and (not confirmation or split_name == "pretraining_unseen"):
                 result["tasks"][task][split_name] = {
                     **semantic_metrics(confusion[select].sum(0), task),
                     "patches": int(select.sum()),
@@ -315,6 +436,7 @@ def train_city_head(features, labels, train, kind, fold, steps):
 
 def city_probe(plan, root: Path, tag: str, device):
     from xuannv_embedding.training.annual_experiments import digest, write_json
+    from xuannv_embedding.training.cli import _git_sha, _source_code_sha256
 
     rows = json.loads(Path(plan["cities"]).read_text())
     city = {row[2]: row[0] for row in rows}
@@ -362,6 +484,8 @@ def city_probe(plan, root: Path, tag: str, device):
     destination.mkdir(exist_ok=True)
     result = {
         "development_only": True,
+        "evaluation_git_sha": _git_sha(),
+        "evaluation_source_code_sha256": _source_code_sha256(),
         "fold_unit": "city",
         "ids": ids,
         "cities": [city[patch_id] for patch_id in ids],
@@ -370,6 +494,7 @@ def city_probe(plan, root: Path, tag: str, device):
         "annual_splits": splits,
         "probe_steps": plan["probe_steps"],
         "label_sha256": label_digests,
+        "scope": {task: select.tolist() for task, select in scope.items()},
         "tasks": {},
     }
     for task, target in labels.items():
@@ -425,20 +550,31 @@ def compare(plan, root: Path, arms: list[str], reference="original"):
             if metadata["ids"] != other["ids"] or metadata["folds"] != other["folds"]:
                 raise ValueError("Compared development sets or folds differ")
             if suite == "semantic_probe":
+                if metadata["label_manifest_sha256"] != other["label_manifest_sha256"]:
+                    raise ValueError("Semantic labels differ across compared arms")
                 groups = [spatial_group(patch_id) for patch_id in metadata["ids"]]
                 tasks = [("water", "F1"), ("landcover", "mIoU")]
                 for task, metric in tasks:
                     a, b = np.load(candidate / f"{task}.npy"), np.load(base / f"{task}.npy")
+                    scored = (a.sum((1, 2)) > 0) & (b.sum((1, 2)) > 0)
                     result["comparisons"][tag][f"semantic:{task}:{metric}"] = (
                         paired_group_bootstrap(
-                            a, b, groups, lambda cm: semantic_metrics(cm, task)[metric]
+                            a[scored],
+                            b[scored],
+                            np.asarray(groups)[scored],
+                            lambda cm: semantic_metrics(cm, task)[metric],
                         )
                     )
             else:
+                if (
+                    metadata["label_sha256"] != other["label_sha256"]
+                    or metadata["scope"] != other["scope"]
+                ):
+                    raise ValueError("City labels or evaluation scope differ")
                 for task in metadata["tasks"]:
                     a = np.load(candidate / f"{task.replace(':', '_')}.npy")
                     b = np.load(base / f"{task.replace(':', '_')}.npy")
-                    supported = (b[:, :3].sum(1) > 0) | (a[:, :3].sum(1) > 0)
+                    supported = np.asarray(metadata["scope"][task.split(":")[0]], dtype=bool)
                     for name, select in [
                         ("all", supported),
                         ("with_highres", supported & (np.asarray(metadata["highres"]) > 0)),
