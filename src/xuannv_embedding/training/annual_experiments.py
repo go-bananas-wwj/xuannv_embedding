@@ -665,6 +665,7 @@ def probe(args) -> None:
         raise ValueError("Nonzero probe seed offsets require --suite city and a nonnegative seed")
     plan["probe_seed_offset"] = seed_offset
     plan["save_probe_heads"] = getattr(args, "save_heads", False)
+    plan["probe_threshold_free"] = getattr(args, "threshold_free", False)
     root = args.plan.parent / "evaluation"
     device = torch.device(args.device)
     if args.suite in {"semantic", "all"}:
@@ -989,6 +990,7 @@ def main(argv=None) -> int:
             command.add_argument("--suite", choices=["semantic", "city", "all"], default="all")
             command.add_argument("--seed-offset", type=int, default=0)
             command.add_argument("--save-heads", action="store_true")
+            command.add_argument("--threshold-free", action="store_true")
         command.set_defaults(handler=handler)
     command = commands.add_parser("compare", help="Paired city/spatial-block bootstrap differences")
     command.add_argument("--plan", required=True, type=Path)

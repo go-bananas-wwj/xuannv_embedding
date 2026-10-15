@@ -174,7 +174,10 @@ def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path
         select_candidate(plan, root)
 
 
-def test_fine_confirmation_never_trains_heads_on_holdout_labels(tmp_path, monkeypatch):
+@pytest.mark.parametrize("threshold_free", [False, True])
+def test_fine_confirmation_never_trains_heads_on_holdout_labels(
+    tmp_path, monkeypatch, threshold_free
+):
     import json
 
     import numpy as np
@@ -228,7 +231,13 @@ def test_fine_confirmation_never_trains_heads_on_holdout_labels(tmp_path, monkey
 
     monkeypatch.setattr(evaluation, "train_city_head", fake_train)
     evaluation.city_probe(
-        {"cities": str(cities), "osm": str(osm), "probe_steps": 1, "confirmation_only": True},
+        {
+            "cities": str(cities),
+            "osm": str(osm),
+            "probe_steps": 1,
+            "confirmation_only": True,
+            "probe_threshold_free": threshold_free,
+        },
         tmp_path,
         "original",
         torch.device("cpu"),
@@ -238,6 +247,10 @@ def test_fine_confirmation_never_trains_heads_on_holdout_labels(tmp_path, monkey
     assert len(seen) == 6
     assert all(np.all(train_rows[index]) for index in seen)
     assert metadata["tasks"]["road:conv3x3"]["all"]["patches"] == 2
+    if threshold_free:
+        metrics = metadata["tasks"]["road:conv3x3"]["all"]
+        assert metrics["AP"] == pytest.approx(256 / 65536)
+        assert metrics["ROC_AUC"] == pytest.approx(0.5)
     stats = np.load(features.parent / "city_probe" / "road_conv3x3.npy")
     assert stats[train_rows].sum() == 0 and stats[~train_rows].sum() > 0
 

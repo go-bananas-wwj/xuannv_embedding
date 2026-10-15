@@ -100,6 +100,8 @@ xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
 空间组少于 5 时只报告点差，不给出可能误导的退化 bootstrap 区间。下游头的随机性可用
 `experiment probe --suite city --seed-offset 100 --save-heads` 单独复核；结果写入独立种子目录，
 保留主实验结果，保存的头可用于同一固定样本的预测可视化。
+附加 `--threshold-free` 可记录 AP 与 ROC-AUC，辅助判断固定阈值下的变化是否来自分类分数
+的排序或校准；这些诊断不参与已锁定的候选选择，也不在测试集上调阈值。
 `lock-selection` 在候选评测前登记语义与细节各占一半的选择规则，并设置分项回退边界；
 `select` 只允许执行一次。`freeze-confirmation` 可以从既有标签包冻结额外位置，排除开发集，
 按当前年度 manifest 的真实 split 分配下游训练与确认样本。确认模式只用年度 train 位置拟合

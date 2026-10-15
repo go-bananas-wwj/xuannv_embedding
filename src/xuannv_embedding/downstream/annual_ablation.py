@@ -562,6 +562,7 @@ def city_probe(plan, root: Path, tag: str, device):
         "annual_splits": splits,
         "probe_steps": plan["probe_steps"],
         "probe_seed_offset": seed_offset,
+        "threshold_free_metrics": plan.get("probe_threshold_free", False),
         "label_sha256": label_digests,
         "checkpoint_sha256": json.loads((root / tag / "export.json").read_text())[
             "checkpoint_sha256"
@@ -572,6 +573,11 @@ def city_probe(plan, root: Path, tag: str, device):
     for task, target in labels.items():
         for kind in ["linear", "conv3x3"]:
             stats = np.zeros((len(ids), 7), dtype=np.int64)
+            scores = (
+                np.full((len(ids), *target.shape[-2:]), np.nan, dtype=np.float32)
+                if plan.get("probe_threshold_free")
+                else None
+            )
             for fold in ([0] if confirmation else range(5)):
                 train = torch.from_numpy(np.flatnonzero(scope[task] & (folds != fold))).to(device)
                 test = torch.from_numpy(np.flatnonzero(scope[task] & (folds == fold))).to(device)
@@ -584,8 +590,11 @@ def city_probe(plan, root: Path, tag: str, device):
                 )
                 with torch.no_grad():
                     for chunk in torch.split(test, 8):
-                        prediction = head((features[chunk].float() - mean) / std)[:, 0] > 0
+                        logits = head((features[chunk].float() - mean) / std)[:, 0]
+                        prediction = logits > 0
                         stats[chunk.cpu().numpy()] = city_counts(prediction, target[chunk])
+                        if scores is not None:
+                            scores[chunk.cpu().numpy()] = logits.cpu().numpy()
                 if save_heads:
                     from xuannv_embedding.training.checkpoint import _atomic_torch_save
 
@@ -619,6 +628,26 @@ def city_probe(plan, root: Path, tag: str, device):
                 for group, select in groups.items()
                 if select.any()
             }
+            if scores is not None:
+                from sklearn.metrics import average_precision_score, roc_auc_score
+
+                for group, select in groups.items():
+                    if not select.any():
+                        continue
+                    index = torch.from_numpy(np.flatnonzero(select)).to(device)
+                    truth = target[index].cpu().numpy().reshape(-1)
+                    confidence = scores[select].reshape(-1)
+                    if not np.isfinite(confidence).all():
+                        raise ValueError("Missing scored probabilities in probe evaluation")
+                    metrics = result["tasks"][key][group]
+                    metrics["AP"] = (
+                        float(average_precision_score(truth, confidence)) if truth.any() else None
+                    )
+                    metrics["ROC_AUC"] = (
+                        float(roc_auc_score(truth, confidence))
+                        if 0 < truth.sum() < len(truth)
+                        else None
+                    )
             print(json.dumps({"city": tag, "task": key, **result["tasks"][key]}), flush=True)
     write_json(destination / "metrics.json", result)
 
