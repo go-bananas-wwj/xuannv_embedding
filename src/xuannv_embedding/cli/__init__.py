@@ -105,6 +105,12 @@ def _run_diagnostics(args: argparse.Namespace) -> int:
     return main(args.forwarded_args)
 
 
+def _run_experiment(args: argparse.Namespace) -> int:
+    from xuannv_embedding.training.annual_experiments import main
+
+    return main(args.forwarded_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建不依赖可选运行组件的顶层命令解析器。"""
     parser = argparse.ArgumentParser(
@@ -117,6 +123,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_downstream_commands(subparsers)
     train = subparsers.add_parser("train", help="运行 P10C 训练或发布 smoke", add_help=False)
     train.set_defaults(handler=_run_train)
+    experiment = subparsers.add_parser(
+        "experiment", help="冻结并运行年度模型消融实验", add_help=False
+    )
+    experiment.set_defaults(handler=_run_experiment)
     diagnostics = subparsers.add_parser(
         "diagnose", help="真实 P0 观测与训练合同诊断", add_help=False
     )
@@ -132,7 +142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """运行统一命令行入口。"""
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
-    if args.command in {"data", "train", "export", "diagnose"}:
+    if args.command in {"data", "train", "export", "diagnose", "experiment"}:
         args.forwarded_args = unknown
     elif unknown:
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")

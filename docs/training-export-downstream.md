@@ -82,6 +82,23 @@ xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
   --teacher-checkpoint /path/small/model.pt --teacher-config /path/small/config.yaml
 ```
 
+## 年度消融实验
+
+年度 ABC 实验使用 `xuannv experiment prepare/run/reconstruction/export`。`prepare` 冻结
+按 UTM 区域与 MS/PAN 覆盖率分层的训练/验证样本，排除已有下游开发集，记录源 manifest、
+训练统计量、标签、初始化权重及教师的摘要；生成相同学习率、数据、epoch 的八个对照配置。
+`run` 在指定 GPU 上依次执行，按严格 checkpoint 自动恢复；日志与状态保存在输出目录。
+`reconstruction` 对各模型使用同一逐 patch 遮挡种子和纯留出高分目标。
+`export` 导出同一组语义与 5m 城市开发样本，保留真实 split 和像素有效性。
+这些已有弱标签与历史测试结果均属于开发证据，不能宣称新的独立盲测结果。
+
+```bash
+xuannv experiment --help
+xuannv experiment run --plan /path/experiment/plan.json --gpus 0,1,2,3,4,5,6,7
+xuannv experiment reconstruction --plan /path/experiment/plan.json --arm A_context
+xuannv experiment export --plan /path/experiment/plan.json --arm A_context
+```
+
 ## P0 诊断
 
 `xuannv diagnose` 在真实观测上核验月份绑定的高分融合合同，是启动正式长训前的门禁，不是精度

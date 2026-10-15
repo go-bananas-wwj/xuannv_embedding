@@ -105,7 +105,7 @@ def test_every_data_subcommand_help_runs(command: str) -> None:
     assert "usage:" in result.stdout
 
 
-@pytest.mark.parametrize("command", ["train", "export", "diagnose", "downstream"])
+@pytest.mark.parametrize("command", ["train", "export", "diagnose", "downstream", "experiment"])
 def test_top_level_subcommand_help_runs(command: str) -> None:
     pytest.importorskip("rasterio")
     env = os.environ.copy()
