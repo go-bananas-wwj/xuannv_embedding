@@ -26,6 +26,8 @@ def test_cluster_bootstrap_preserves_pairing_and_groups_adjacent_patches():
     )
     assert result["difference"] == 0 and result["CI95"] == [0, 0]
     assert result["groups"] == 5
+    sparse = paired_group_bootstrap(a[:1], a[:1], ["one-city"], lambda x: x[0] / x.sum(), draws=100)
+    assert sparse["CI95"] is None and sparse["groups"] == 1
 
 
 def test_five_meter_counts_measure_regions_and_one_pixel_boundary_tolerance():

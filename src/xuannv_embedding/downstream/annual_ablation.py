@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -178,6 +180,15 @@ def paired_group_bootstrap(a, b, groups, statistic, *, draws=2000, seed=42):
     """Resample whole cities/spatial groups, preserving pairing and cluster sizes."""
     a, b, groups = np.asarray(a), np.asarray(b), np.asarray(groups)
     unique = np.unique(groups)
+    if len(unique) < 5:
+        return {
+            "difference": float(statistic(a.sum(0)) - statistic(b.sum(0))),
+            "CI95": None,
+            "groups": len(unique),
+            "patches": len(a),
+            "draws": 0,
+            "status": "insufficient_spatial_groups_for_interval",
+        }
     blocks = [np.flatnonzero(groups == group) for group in unique]
     generator = np.random.default_rng(seed)
     differences = []
@@ -378,6 +389,23 @@ def rasterize_osm(path: Path):
     return output
 
 
+def cache_osm_labels(path: Path, values: dict) -> None:
+    """Parallel probes may share this cache; expose only a complete NPZ archive."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.stem}.", suffix=".npz", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            np.savez_compressed(handle, **values)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def boundary(mask):
     values = mask.float()[:, None]
     return ((F.max_pool2d(values, 3, 1, 1) + F.max_pool2d(-values, 3, 1, 1)) > 0)[:, 0]
@@ -460,8 +488,8 @@ def city_probe(plan, root: Path, tag: str, device):
         label_digests[patch_id] = digest(source)
         path = cache / f"{patch_id}.npz"
         if not path.exists():
-            np.savez_compressed(
-                path, **rasterize_osm(source), source_sha256=label_digests[patch_id]
+            cache_osm_labels(
+                path, {**rasterize_osm(source), "source_sha256": label_digests[patch_id]}
             )
         with np.load(path) as target:
             if str(target["source_sha256"]) != label_digests[patch_id]:
