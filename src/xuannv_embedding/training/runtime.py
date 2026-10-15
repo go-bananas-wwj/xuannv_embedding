@@ -111,6 +111,7 @@ class TrainingSystem(nn.Module):
                 "output_months",
                 "highres_observations",
                 "reconstruction_requests",
+                "source_validity_masks",
             )
             if key in batch
         }
@@ -143,6 +144,7 @@ class TrainingSystem(nn.Module):
                             "output_months",
                             "highres_observations",
                             "reconstruction_requests",
+                            "source_validity_masks",
                         )
                         if key in teacher_view
                     },

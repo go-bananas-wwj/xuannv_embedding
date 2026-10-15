@@ -76,7 +76,9 @@ def model_forward(model, batch):
                 "source_pixel_masks",
                 "highres_observations",
                 "reconstruction_requests",
+                "source_validity_masks",
             )
+            if key in batch
         }
     )
 
@@ -172,6 +174,76 @@ def test_annual_rejects_unmeasured_registration():
     raw["highres_observations"][0][0]["metadata"]["relative_registration"]["status"] = "unresolved"
     with pytest.raises(ValueError, match="Unmeasured"):
         prepare_annual_batch(raw, annual_config(), training=False)
+
+
+@pytest.mark.parametrize("context_pooling", [False, True])
+def test_spatially_heldout_interior_trains_context_without_observing_targets(context_pooling):
+    torch.manual_seed(42)
+    config = annual_config()
+    config = replace(config, model=replace(config.model, annual_context_pooling=context_pooling))
+    raw = raw_batch(32)
+    raw["highres_observations"] = [[]]
+    batch = prepare_annual_batch(
+        raw, config, training=True, generator=torch.Generator().manual_seed(7)
+    )
+    model = build_training_system(config).model.eval()
+    output = model_forward(model, batch)
+    hidden = ~batch["source_pixel_masks"]["s2"].any(dim=1, keepdim=True)
+    # Erode by two native pixels to exclude interpolation/decoder boundary support.
+    interior = torch.nn.functional.max_pool2d((~hidden).float(), 5, 1, 2) == 0
+    assert interior.sum() > 0
+    prediction = output.reconstructions["s2_recon"][:, 0]
+    error = (prediction - raw["source_frames"]["s2"][:, 0]).abs()
+    error.masked_select(interior).mean().backward()
+    gradient = sum(
+        parameter.grad.abs().sum()
+        for parameter in model.temporal_encoder.parameters()
+        if parameter.grad is not None
+    )
+    assert bool(gradient > 0) is context_pooling
+    projection_gradient = model.bottleneck.proj.weight.grad.abs().sum()
+    assert bool(projection_gradient > 0) is context_pooling
+    assert bool(output.validity_mask.all()) is context_pooling
+
+
+def test_context_pooling_retains_inference_and_never_reveals_heldout_values():
+    torch.manual_seed(3)
+    legacy = annual_config()
+    config = replace(legacy, model=replace(legacy.model, annual_context_pooling=True))
+    original = build_training_system(legacy).model.eval()
+    contextual = build_training_system(config).model.eval()
+    contextual.load_state_dict(original.state_dict(), strict=True)
+    raw = raw_batch(32)
+    raw["highres_observations"] = [[]]
+    full = prepare_annual_batch(raw, config, training=False)
+    with torch.no_grad():
+        assert torch.equal(
+            model_forward(original, full).embedding_map,
+            model_forward(contextual, full).embedding_map,
+        )
+        first = prepare_annual_batch(
+            raw, config, training=True, generator=torch.Generator().manual_seed(8)
+        )
+        before = model_forward(contextual, first).embedding_map
+        for name, values in raw["source_frames"].items():
+            hidden = ~first["source_pixel_masks"][name][:, :, None].expand_as(values)
+            values[hidden] = 9999
+        second = prepare_annual_batch(
+            raw, config, training=True, generator=torch.Generator().manual_seed(8)
+        )
+        assert torch.equal(before, model_forward(contextual, second).embedding_map)
+
+
+def test_context_pooling_does_not_mark_genuine_nodata_valid():
+    config = annual_config()
+    config = replace(config, model=replace(config.model, annual_context_pooling=True))
+    raw = raw_batch()
+    for mask in raw["source_pixel_masks"].values():
+        mask.zero_()
+    batch = prepare_annual_batch(raw, config, training=True)
+    output = model_forward(build_training_system(config).model.eval(), batch)
+    assert not output.validity_mask.any()
+    assert torch.isfinite(output.embedding_map).all()
 
 
 def concat_config(highres_loss_weight=1.0):

@@ -182,6 +182,7 @@ class ModelConfig:
     annual_pan_sources: list[str] = field(default_factory=list)
     annual_backbone: Literal["stp", "conv"] = "stp"
     annual_fusion: Literal["residual", "concat"] = "residual"
+    annual_context_pooling: bool = False
 
     @property
     def sensor_channels(self) -> dict[str, int]:
@@ -461,6 +462,7 @@ def _parse_model(value: Any) -> ModelConfig:
             "annual_pan_sources",
             "annual_backbone",
             "annual_fusion",
+            "annual_context_pooling",
         },
         required={"embed_dim", "num_months", "input_sources", "target_heads"},
     )
@@ -507,6 +509,9 @@ def _parse_model(value: Any) -> ModelConfig:
         annual_pan_sources=list(pan_sources),
         annual_backbone=backbone,
         annual_fusion=fusion,
+        annual_context_pooling=_boolean(
+            raw.get("annual_context_pooling", False), "model.annual_context_pooling"
+        ),
     )
 
 

@@ -51,6 +51,12 @@ physical sources --source_map--> canonical slots
 年度模型的 PAN 和 5m 分支均先编码后对齐；面积算子只负责地理网格转换，不是可学习的
 语义层。无高分观测时联合解码退化为低分特征；无效像元在编码前被置零并携带支持比例。
 
+年度训练可启用 `model.annual_context_pooling: true`。输入掩膜继续在全部编码器前隐藏目标值，
+独立的 `source_validity_masks` 只保存原始有效性，供 STP 之后的年度池化使用。这使人工遮挡块
+内部的上下文预测保留重建梯度，同时不把真实 nodata 标为有效。该开关默认关闭，以保留已训练
+版本的数值路径；完整输入下两条路径的推理结果一致。回归测试隔离块内部，验证主干与瓶颈梯度、
+目标值不可见及真实缺测回退。
+
 ## 状态与制品
 
 新 checkpoint 包含格式版本、配置 SHA、Git SHA、source schema、区域清单、epoch、模型、

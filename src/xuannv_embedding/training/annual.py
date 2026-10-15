@@ -55,10 +55,12 @@ def prepare_annual_batch(batch: dict, config, *, training: bool, generator=None)
                 )
                 visible[sample, 0] = expanded[: base_size[0], : base_size[1]]
     frames, pixel_masks, temporal_masks, targets, target_masks = {}, {}, {}, {}, {}
+    validity_masks = {}
     for source, values in batch["source_frames"].items():
         if source not in config.model.input_sources:
             continue
         original_mask = batch["source_pixel_masks"][source].bool()
+        validity_masks[source] = original_mask
         _, coverage = masked_resample(visible, visible, tuple(values.shape[-2:]))
         keep = (coverage[:, 0] >= 1 - 1e-6)[:, None] & ~hidden_months[:, :, None, None]
         mask = original_mask & keep
@@ -139,6 +141,9 @@ def prepare_annual_batch(batch: dict, config, *, training: bool, generator=None)
         "source_frames": frames,
         "source_masks": temporal_masks,
         "source_pixel_masks": pixel_masks,
+        **(
+            {"source_validity_masks": validity_masks} if config.model.annual_context_pooling else {}
+        ),
         "timestamps": timestamps,
         "highres_observations": observations,
         "reconstruction_requests": requests,

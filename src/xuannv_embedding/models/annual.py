@@ -153,6 +153,7 @@ class Annual5mModel(nn.Module):
         gradient_checkpointing: bool = False,
         backbone: str = "stp",
         fusion: str = "residual",
+        context_pooling: bool = False,
     ) -> None:
         super().__init__()
         self.sensor_channels = dict(sensor_channels)
@@ -165,6 +166,7 @@ class Annual5mModel(nn.Module):
         if fusion not in {"residual", "concat"}:
             raise ValueError("Annual fusion must be residual or concat")
         self.fusion = fusion
+        self.context_pooling = context_pooling
         self.temporal_sources = tuple(
             name for name in sensor_channels if source_roles[name] == "temporal"
         )
@@ -244,6 +246,7 @@ class Annual5mModel(nn.Module):
         highres_masks=None,
         *,
         source_pixel_masks: dict[str, torch.Tensor],
+        source_validity_masks: dict[str, torch.Tensor] | None = None,
         highres_observations: list[list[dict]] | None = None,
         reconstruction_requests: list[list[dict]] | None = None,
         decode: bool = True,
@@ -265,6 +268,7 @@ class Annual5mModel(nn.Module):
         numerator = None
         denominator = first.new_zeros(batch_size * time_count, 1, *native_size)
         supports = []
+        pooling_supports = []
         for index, source in enumerate(self.temporal_sources):
             values = source_frames[source]
             mask = (
@@ -278,6 +282,20 @@ class Annual5mModel(nn.Module):
             numerator = contribution if numerator is None else numerator + contribution
             denominator = denominator + weight
             supports.append(support.view(batch_size, time_count, 1, *native_size))
+            if self.context_pooling and source_validity_masks is not None:
+                validity = source_validity_masks[source]
+                if validity.shape != source_pixel_masks[source].shape:
+                    raise ValueError("Annual original validity shape mismatch")
+                if bool((source_pixel_masks[source].bool() & ~validity.bool()).any()):
+                    raise ValueError("Visible annual pixels must have original validity")
+                original_support = area_resample(
+                    validity[:, :, None].flatten(0, 1).float(), native_size
+                )
+                pooling_supports.append(
+                    original_support.view(batch_size, time_count, 1, *native_size)
+                )
+            else:
+                pooling_supports.append(supports[-1])
         fused = numerator / denominator.clamp(min=1e-6)
         support = torch.stack(supports).amax(dim=0)
         dates = seasonal_features(timestamps)
@@ -291,7 +309,11 @@ class Annual5mModel(nn.Module):
         else:
             features = self.temporal_encoder(fused, support.flatten(0, 1))
             features = features.view(batch_size, time_count, self.feature_dim, *native_size)
-        annual, low_support = self.lowres_pool(features, support, dates)
+        # Input support hides values before every encoder. Pooling support describes
+        # genuine observations, separately from artificial training corruption, so
+        # STP's contextual predictions at held-out pixels retain their gradients.
+        pooling_support = torch.stack(pooling_supports).amax(dim=0)
+        annual, low_support = self.lowres_pool(features, pooling_support, dates)
         low5 = functional.interpolate(
             annual, size=output_size, mode="bilinear", align_corners=False
         )

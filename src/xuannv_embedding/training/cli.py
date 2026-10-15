@@ -49,6 +49,7 @@ def build_training_system(config: Config) -> TrainingSystem:
             gradient_checkpointing=config.training.gradient_checkpointing,
             backbone=config.model.annual_backbone,
             fusion=config.model.annual_fusion,
+            context_pooling=config.model.annual_context_pooling,
         )
         return TrainingSystem(model, AnnualLoss(config))
     model = AEFModel(
