@@ -89,7 +89,8 @@ xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
 训练统计量、标签、初始化权重及教师的摘要；生成相同学习率、数据、epoch 的八个对照配置。
 `run` 在指定 GPU 上依次执行，按严格 checkpoint 自动恢复；日志与状态保存在输出目录。
 `reconstruction` 对各模型使用同一逐 patch 遮挡种子和纯留出高分目标。
-修正 PAN 可见性后的实验在计划中显式设置 `exact_mask_coverage_targets: true`，所有模型均用
+新 `prepare` 自动显式启用原生 PAN 精确可见性，并在计划中设置
+`exact_mask_coverage_targets: true`；所有模型均用
 修正后的共同目标评分，模型输入继续遵守各自配置。`experiment adapt-inputs` 可以登记只修改
 输入预处理的对照：严格加载原权重、保留来源与 epoch，验证全部模型张量摘要不变，并记录
 本次优化器更新数为 0；它不能冒充重新训练的模型。

@@ -6,6 +6,87 @@ import pytest
 from xuannv_embedding.training.annual_experiments import coverage_stratum, stratified_indices
 
 
+def test_prepare_from_legacy_config_preserves_native_pan_and_resets_control_targets(tmp_path):
+    import json
+    from pathlib import Path
+
+    import torch
+    import yaml
+    from test_annual_model import raw_batch
+
+    from xuannv_embedding.config import Config
+    from xuannv_embedding.training.annual import prepare_annual_batch
+    from xuannv_embedding.training.annual_experiments import prepare
+    from xuannv_embedding.utils.manifest import ManifestRecord, write_manifest
+
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "statistics").mkdir()
+    for name in ["summary.json", "sources.json"]:
+        (data / name).write_text("{}")
+    for split in ["train", "validation"]:
+        write_manifest(
+            data / f"2020.{split}.manifest.jsonl",
+            [
+                ManifestRecord(
+                    patch_id=f"parent_32650:{i}:0",
+                    region="national2020",
+                    sources={"s2": []},
+                    grid={"parent_key": f"32650:{i}:0"},
+                    provenance={"year": 2020, "observations": {"s2": []}},
+                )
+                for i in range(2)
+            ],
+            months=[f"2020-{i:02d}" for i in range(1, 13)],
+        )
+    raw = yaml.safe_load(Path("configs/production/annual5m_100m_v1.yaml").read_text())
+    raw["training"]["highres_visible_weight"] = 0.9
+    raw["data"]["datasets"] = raw["data"]["datasets"][:1]
+    raw["data"]["datasets"][0].update(
+        manifest_path=str(data / "2020.train.manifest.jsonl"),
+        patch_grid_path=str(data / "2020.train.manifest.jsonl"),
+        statistics_dir=str(data / "statistics"),
+    )
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(raw))
+    checkpoint = tmp_path / "checkpoint.pt"
+    checkpoint.write_bytes(b"identity-only fixture; prepare never loads weights")
+    labels = tmp_path / "labels"
+    labels.mkdir()
+    (labels / "labels.json").write_text('{"records": []}')
+    cities = tmp_path / "cities.json"
+    cities.write_text("[]")
+    output = tmp_path / "experiment"
+    prepare(
+        SimpleNamespace(
+            config=config_path,
+            initialize_from=checkpoint,
+            teacher_config=config_path,
+            teacher_checkpoint=checkpoint,
+            labels=labels,
+            cities=cities,
+            osm=tmp_path / "osm",
+            output=output,
+            seed=42,
+            epochs=8,
+            samples_per_year=1,
+            validation_samples=1,
+            probe_steps=1,
+            lr=3e-5,
+            workers=0,
+        )
+    )
+    plan = json.loads((output / "plan.json").read_text())
+    assert plan["exact_mask_coverage_targets"]
+    config = Config.from_yaml(Path(plan["arms"]["control"]["config"]))
+    assert config.training.highres_visible_weight is None
+    batch = prepare_annual_batch(raw_batch(128), config, training=False)
+    for observation in batch["highres_observations"][0]:
+        assert torch.all(observation["mask"] > 0)
+    for arm in plan["arms"].values():
+        assert Config.from_yaml(Path(arm["config"])).model.annual_exact_mask_coverage
+
+
 def test_common_corrected_targets_do_not_change_the_legacy_model_input_policy():
     from dataclasses import replace
 

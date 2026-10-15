@@ -93,6 +93,7 @@ def prepare(args) -> None:
         "git_sha": _git_sha(),
         "source_code_sha256": _source_code_sha256(),
         "development_only": True,
+        "exact_mask_coverage_targets": True,
         "limitations": [
             "Historical weak labels have been evaluated previously.",
             "Pretraining-seen development patches do not establish generalization.",
@@ -185,6 +186,7 @@ def prepare(args) -> None:
         raw = json.loads(json.dumps(original))
         raw["experiment"] = {"name": f"annual_abc_{tag}", "seed": args.seed}
         raw["model"]["annual_context_pooling"] = changes.get("context", False)
+        raw["model"]["annual_exact_mask_coverage"] = True
         raw["training"].update(
             {
                 "epochs": args.epochs,
@@ -194,10 +196,10 @@ def prepare(args) -> None:
                 "uniformity_warmup_epochs": 0,
                 "latent_prediction_weight": changes.get("teacher", 0.0),
                 "view_consistency_weight": changes.get("views", 0.0),
+                "highres_visible_targets": True,
+                "highres_visible_weight": changes.get("visible"),
             }
         )
-        if "visible" in changes:
-            raw["training"]["highres_visible_weight"] = changes["visible"]
         if changes.get("teacher"):
             raw["training"]["latent_prediction_pool_factors"] = [2, 4, 8]
         raw["data"]["num_workers"] = args.workers
