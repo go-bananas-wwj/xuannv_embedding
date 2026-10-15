@@ -370,6 +370,24 @@ def reconstruction(args) -> None:
                         batch["target_masks"],
                         highres_targets=batch["highres_targets"],
                     )
+                for name, head in config.model.target_heads.items():
+                    source = head.source
+                    spatial = ~batch["source_pixel_masks"][source].any(dim=1, keepdim=True)
+                    # Erode two 10m pixels to isolate block interiors from decoder borders.
+                    interior = torch.nn.functional.max_pool2d((~spatial).float(), 5, 1, 2) == 0
+                    original_mask = raw["source_pixel_masks"][source].to(device)
+                    difference = (
+                        (output.reconstructions[name].float() - batch["targets"][name])
+                        .abs()
+                        .mean(2)
+                    )
+                    for part, select in [
+                        ("spatial_interior", interior & original_mask),
+                        ("other_heldout", batch["target_masks"][name] & ~interior),
+                    ]:
+                        losses[f"{part}_{source}"] = (
+                            difference * select
+                        ).sum() / select.sum().clamp(min=1)
                 rows.append(
                     {
                         "patch_id": patch_id,
@@ -422,6 +440,37 @@ def artifact_paths(plan, tag):
     return Path(plan["arms"][tag]["config"]), Path(plan["arms"][tag]["checkpoint"])
 
 
+def evaluation_manifest(source: Path, destination: Path, wanted: set[str]) -> Path:
+    """Freeze the small labelled subset once instead of re-reading GBs per model."""
+    from xuannv_embedding.utils.manifest import IndexedManifest, write_manifest
+
+    origin = json.loads(Path(str(source) + ".meta.json").read_text())
+    identity = {
+        "manifest_sha256": origin["sha256"],
+        "wanted_sha256": hashlib.sha256("\n".join(sorted(wanted)).encode()).hexdigest(),
+    }
+    metadata = destination.with_suffix(".origin.json")
+    if metadata.exists():
+        if json.loads(metadata.read_text()) != identity:
+            raise ValueError("Frozen evaluation manifest identity differs")
+        return destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    for name in ["summary.json", "sources.json", "statistics"]:
+        link = destination.parent / name
+        if not link.exists():
+            link.symlink_to(source.parent / name, target_is_directory=name == "statistics")
+    records = IndexedManifest(source)
+    selected = [record for record in records if record.patch_id in wanted]
+    write_manifest(
+        destination,
+        selected,
+        months=records.meta.months,
+        generator_version="annual-abc-development-v1",
+    )
+    write_json(metadata, identity)
+    return destination
+
+
 def export(args) -> None:
     from torch.utils.data import DataLoader, Subset
 
@@ -450,6 +499,11 @@ def export(args) -> None:
                 if row["year"] == labels["year"]
             )
             manifest = Path(frozen["original"]) / f"{labels['year']}.{split}.manifest.jsonl"
+            manifest = evaluation_manifest(
+                manifest, args.plan.parent / "development_data" / manifest.name, want
+            )
+            if json.loads(Path(str(manifest) + ".meta.json").read_text())["record_count"] == 0:
+                continue
             dataset = annual_dataset(config, replace(dc, manifest_path=manifest))
             indices = [
                 index for index, record in enumerate(dataset.records) if record.patch_id in want
@@ -511,6 +565,30 @@ def export(args) -> None:
         raise ValueError(f"Missing {len(want - found)} requested evaluation patches")
 
 
+def probe(args) -> None:
+    from xuannv_embedding.downstream.annual_ablation import city_probe, semantic_probe
+
+    plan = json.loads(args.plan.read_text())
+    root = args.plan.parent / "evaluation"
+    device = torch.device(args.device)
+    if args.suite in {"semantic", "all"}:
+        semantic_probe(plan, root, args.arm, device)
+    if args.suite in {"city", "all"}:
+        city_probe(plan, root, args.arm, device)
+
+
+def compare(args) -> None:
+    from xuannv_embedding.downstream.annual_ablation import compare as compare_probes
+
+    plan = json.loads(args.plan.read_text())
+    compare_probes(
+        plan,
+        args.plan.parent / "evaluation",
+        args.arms or list(plan["arms"]),
+        reference=args.reference,
+    )
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv experiment", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -543,13 +621,20 @@ def main(argv=None) -> int:
     command.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
     command.add_argument("--arms", nargs="+")
     command.set_defaults(handler=run)
-    for name, handler in [("reconstruction", reconstruction), ("export", export)]:
+    for name, handler in [("reconstruction", reconstruction), ("export", export), ("probe", probe)]:
         command = commands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path)
         command.add_argument("--arm", required=True)
         command.add_argument("--device", default="cuda:0")
         command.add_argument("--workers", type=int, default=6)
+        if name == "probe":
+            command.add_argument("--suite", choices=["semantic", "city", "all"], default="all")
         command.set_defaults(handler=handler)
+    command = commands.add_parser("compare", help="Paired city/spatial-block bootstrap differences")
+    command.add_argument("--plan", required=True, type=Path)
+    command.add_argument("--reference", default="original")
+    command.add_argument("--arms", nargs="+")
+    command.set_defaults(handler=compare)
     args = parser.parse_args(argv)
     torch.set_num_threads(2)
     args.handler(args)

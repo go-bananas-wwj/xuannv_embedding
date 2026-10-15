@@ -31,7 +31,11 @@ def test_module_help_is_available_without_optional_dependencies() -> None:
 
 @pytest.mark.parametrize(
     "module",
-    ["xuannv_embedding.training.cli", "xuannv_embedding.export.cli"],
+    [
+        "xuannv_embedding.training.cli",
+        "xuannv_embedding.export.cli",
+        "xuannv_embedding.training.annual_experiments",
+    ],
 )
 def test_runtime_help_does_not_import_optional_raster_stack(module: str) -> None:
     env = os.environ.copy()

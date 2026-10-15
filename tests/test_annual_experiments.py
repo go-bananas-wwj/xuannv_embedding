@@ -6,6 +6,41 @@ import pytest
 from xuannv_embedding.training.annual_experiments import coverage_stratum, stratified_indices
 
 
+def test_cluster_bootstrap_preserves_pairing_and_groups_adjacent_patches():
+    import numpy as np
+
+    from xuannv_embedding.downstream.annual_ablation import (
+        folds_for,
+        paired_group_bootstrap,
+        spatial_group,
+    )
+
+    assert spatial_group("parent_32650:32:64") == spatial_group("parent_32650:33:65")
+    assert spatial_group("parent_32650:32:64") != spatial_group("parent_32650:48:64")
+    assert (
+        folds_for(["a", "b", "a", "c", "d", "e"])[0] == folds_for(["a", "b", "a", "c", "d", "e"])[2]
+    )
+    a = np.arange(10, dtype=float).reshape(5, 2) + 1
+    result = paired_group_bootstrap(
+        a, a, ["a", "b", "c", "d", "e"], lambda x: x[0] / x.sum(), draws=100
+    )
+    assert result["difference"] == 0 and result["CI95"] == [0, 0]
+    assert result["groups"] == 5
+
+
+def test_five_meter_counts_measure_regions_and_one_pixel_boundary_tolerance():
+    import torch
+
+    from xuannv_embedding.downstream.annual_ablation import city_counts, city_metrics
+
+    truth = torch.zeros(1, 16, 16, dtype=torch.uint8)
+    truth[:, 4:12, 7:9] = 1
+    exact = city_metrics(city_counts(truth.bool(), truth).sum(0))
+    assert exact == {"F1": 1, "IoU": 1, "boundaryF1": 1}
+    shifted = city_metrics(city_counts(truth.roll(1, -1).bool(), truth).sum(0))
+    assert shifted["F1"] < 1 and shifted["boundaryF1"] == 1
+
+
 def records():
     return [
         SimpleNamespace(

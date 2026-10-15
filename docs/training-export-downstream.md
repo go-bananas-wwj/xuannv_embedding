@@ -84,12 +84,15 @@ xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
 
 ## 年度消融实验
 
-年度 ABC 实验使用 `xuannv experiment prepare/run/reconstruction/export`。`prepare` 冻结
+年度 ABC 实验使用 `xuannv experiment prepare/run/reconstruction/export/probe/compare`。`prepare` 冻结
 按 UTM 区域与 MS/PAN 覆盖率分层的训练/验证样本，排除已有下游开发集，记录源 manifest、
 训练统计量、标签、初始化权重及教师的摘要；生成相同学习率、数据、epoch 的八个对照配置。
 `run` 在指定 GPU 上依次执行，按严格 checkpoint 自动恢复；日志与状态保存在输出目录。
 `reconstruction` 对各模型使用同一逐 patch 遮挡种子和纯留出高分目标。
 `export` 导出同一组语义与 5m 城市开发样本，保留真实 split 和像素有效性。
+`probe` 使用训练 fold 的统计量拟合标准化；语义线性头按 20.48km 空间块分五折，5m 的
+线性头与卷积头按城市分五折。城市协议继续使用已有 OSM 映射范围筛选，边界容差固定 5m。
+`compare` 在相同 patch、fold 上比较，用整座城市或空间块配对重采样 2,000 次计算置信区间。
 这些已有弱标签与历史测试结果均属于开发证据，不能宣称新的独立盲测结果。
 
 ```bash
