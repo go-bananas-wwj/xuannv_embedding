@@ -5,8 +5,13 @@ import pytest
 import torch
 from test_annual_model import annual_config, model_forward, raw_batch
 
-from xuannv_embedding.training.annual import AnnualLoss, prepare_annual_batch
-from xuannv_embedding.training.cli import build_training_system
+from xuannv_embedding.training.annual import (
+    AnnualLoss,
+    multiscale_latent_loss,
+    prepare_annual_batch,
+)
+from xuannv_embedding.training.cli import build_training_system, teacher_contract_matches
+from xuannv_embedding.training.runtime import train_steps
 
 
 @pytest.mark.parametrize("weight", [0.0, 0.25, 1.0])
@@ -98,3 +103,92 @@ def test_native_pan_supervision_partitions_conserve_support():
             torch.ones_like(parts["heldout"]["mask"]),
             atol=1e-6,
         )
+
+
+def test_coarse_distillation_ignores_unsupported_pixels_and_stops_target_gradients():
+    torch.manual_seed(3)
+    student = torch.randn(1, 4, 8, 8, requires_grad=True)
+    teacher = torch.randn_like(student, requires_grad=True)
+    support = torch.ones(1, 1, 8, 8)
+    support[:, :, :4] = 0
+    loss = multiscale_latent_loss(student, teacher, support, [2, 4, 8])
+    loss.backward()
+    assert teacher.grad is None
+    assert student.grad[:, :, :4].count_nonzero() == 0
+    assert student.grad[:, :, 4:].abs().sum() > 0
+    assert multiscale_latent_loss(student, student, support, [2, 4, 8]).abs() < 1e-6
+    assert multiscale_latent_loss(student, teacher, support * 0, [2, 4, 8]) == 0
+
+
+def test_annual_teacher_can_have_a_different_backbone_capacity():
+    student = annual_config()
+    teacher = replace(
+        student,
+        model=replace(student.model, stp=replace(student.model.stp, space_dim=16, time_dim=16)),
+    )
+    assert teacher_contract_matches(student, teacher)
+    assert not teacher_contract_matches(
+        student, replace(teacher, model=replace(teacher.model, embed_dim=32))
+    )
+
+
+def test_ema_updates_only_on_optimizer_steps_and_roundtrips_auxiliary_state():
+    torch.manual_seed(8)
+    base = annual_config()
+    config = replace(
+        base,
+        model=replace(base.model, annual_context_pooling=True),
+        training=replace(
+            base.training,
+            view_consistency_weight=0.1,
+            latent_prediction_weight=0.1,
+            latent_prediction_pool_factors=[2, 4, 8],
+        ),
+    )
+    system = build_training_system(config)
+    teacher = build_training_system(base).model
+    system.set_teacher(teacher)
+    system.set_ema(0.5)
+    raw = raw_batch()
+    batch = prepare_annual_batch(
+        raw, config, training=True, generator=torch.Generator().manual_seed(1)
+    )
+    batch["teacher_view"] = prepare_annual_batch(raw, config, training=False)
+    batch["consistency_view"] = prepare_annual_batch(
+        raw, config, training=True, generator=torch.Generator().manual_seed(2)
+    )
+    assert not torch.equal(
+        batch["source_pixel_masks"]["s2"], batch["consistency_view"]["source_pixel_masks"]["s2"]
+    )
+    original = system.model.bottleneck.proj.weight.detach().clone()
+    teacher_before = {key: value.clone() for key, value in teacher.state_dict().items()}
+    optimizer = torch.optim.AdamW(system.parameters(), lr=1e-3)
+    summary = train_steps(
+        system,
+        [batch],
+        optimizer,
+        device=torch.device("cpu"),
+        epochs=1,
+        gradient_accumulation_steps=2,
+        amp=False,
+    )
+    assert summary["optimizer_steps"] == system.ema_updates == 1
+    expected = (original + system.model.bottleneck.proj.weight.detach()) / 2
+    assert torch.allclose(system.ema_model.bottleneck.proj.weight, expected)
+    assert not system.ema_model.training and not system.teacher_model.training
+    assert all(parameter.grad is None for parameter in system.ema_model.parameters())
+    assert all(
+        torch.equal(value, teacher_before[key]) for key, value in teacher.state_dict().items()
+    )
+    restored = build_training_system(config)
+    restored.set_ema(0.5)
+    restored.restore_auxiliary_state(system.auxiliary_state())
+    assert restored.ema_updates == 1
+    assert all(
+        torch.equal(left, right)
+        for left, right in zip(
+            system.ema_model.parameters(), restored.ema_model.parameters(), strict=True
+        )
+    )
+    with pytest.raises(ValueError, match="missing"):
+        restored.restore_auxiliary_state({})

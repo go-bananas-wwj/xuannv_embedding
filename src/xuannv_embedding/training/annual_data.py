@@ -26,6 +26,9 @@ class AnnualBatchStream:
         generator = torch.Generator().manual_seed(
             self.config.experiment.seed + self.epoch * 1009 + rank
         )
+        view_generator = torch.Generator().manual_seed(
+            self.config.experiment.seed + self.epoch * 1009 + rank + 1_000_003
+        )
         steps = 0
         for loader in self.loaders:
             if hasattr(loader.sampler, "set_epoch"):
@@ -34,6 +37,10 @@ class AnnualBatchStream:
                 batch = prepare_annual_batch(raw, self.config, training=True, generator=generator)
                 if self.teacher_enabled:
                     batch["teacher_view"] = prepare_annual_batch(raw, self.config, training=False)
+                if self.config.training.view_consistency_weight > 0:
+                    batch["consistency_view"] = prepare_annual_batch(
+                        raw, self.config, training=True, generator=view_generator
+                    )
                 yield batch
                 steps += 1
                 if self.max_steps is not None and steps >= self.max_steps:

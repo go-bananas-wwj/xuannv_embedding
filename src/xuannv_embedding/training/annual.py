@@ -178,6 +178,14 @@ class AnnualLoss(nn.Module):
         self.uniformity_temperature = config.training.uniformity_temperature
         self.warmup = config.training.uniformity_warmup_epochs
         self.latent_prediction_weight = config.training.latent_prediction_weight
+        self.latent_pool_factors = config.training.latent_prediction_pool_factors
+        self.view_consistency_weight = config.training.view_consistency_weight
+        self.view_pool_factors = config.training.view_consistency_pool_factors
+        self.view_predictor = (
+            nn.Conv2d(config.model.embed_dim, config.model.embed_dim, 1)
+            if self.view_consistency_weight
+            else None
+        )
         self.highres_loss_weight = config.training.highres_loss_weight
         self.highres_visible_weight = config.training.highres_visible_weight
         self.latent_predictor = (
@@ -199,6 +207,7 @@ class AnnualLoss(nn.Module):
         supervised_label_masks=None,
         *,
         teacher_output=None,
+        consistency_output=None,
         highres_targets=None,
     ) -> dict[str, torch.Tensor]:
         zero = output.embedding_map.sum() * 0
@@ -266,24 +275,57 @@ class AnnualLoss(nn.Module):
                 raise ValueError("Annual latent prediction requires a teacher")
             student = self.latent_predictor(output.embedding_map[:, 0])
             teacher = teacher_output.embedding_map[:, 0].detach()
-            support = teacher_output.validity_mask[:, 0].float()
-            student, pooled_support = masked_resample(student, support, (8, 8))
-            teacher, _ = masked_resample(teacher, support, (8, 8))
-            student = torch.nn.functional.normalize(student.float(), dim=1)
-            teacher = torch.nn.functional.normalize(teacher.float(), dim=1)
-            errors = 1 - (student * teacher).sum(dim=1, keepdim=True)
-            latent = (errors * pooled_support).sum() / pooled_support.sum().clamp(min=1)
+            support = (teacher_output.validity_mask[:, 0] & output.validity_mask[:, 0]).float()
+            latent = multiscale_latent_loss(student, teacher, support, self.latent_pool_factors)
+        consistency = zero
+        if self.view_predictor is not None:
+            if consistency_output is None:
+                raise ValueError("Annual multi-view consistency requires an EMA target")
+            support = (consistency_output.validity_mask[:, 0] & output.validity_mask[:, 0]).float()
+            consistency = multiscale_latent_loss(
+                self.view_predictor(output.embedding_map[:, 0]),
+                consistency_output.embedding_map[:, 0],
+                support,
+                self.view_pool_factors,
+            )
         result.update(
             {
                 "total": reconstruction
                 + self.highres_loss_weight * highres_loss
                 + weight * uniformity
-                + self.latent_prediction_weight * latent,
+                + self.latent_prediction_weight * latent
+                + self.view_consistency_weight * consistency,
                 "recon": reconstruction,
                 "highres_recon": highres_loss,
                 "uniformity": uniformity,
                 "uniformity_weighted": weight * uniformity,
                 "latent_prediction": latent,
+                "view_consistency": consistency,
             }
         )
         return result
+
+
+def multiscale_latent_loss(student, teacher, support, pool_factors=None):
+    """Compare coarse supported features; stop gradients at the target only.
+
+    Pool factors 2/4/8 correspond to 10/20/40 m on the public 5 m grid.
+    Omitting the factors retains the historical 8 x 8 target grid.
+    """
+    if student.shape != teacher.shape:
+        raise ValueError("Annual teacher and student map shapes must agree")
+    height, width = student.shape[-2:]
+    sizes = (
+        [(8, 8)]
+        if pool_factors is None
+        else [(max(1, height // factor), max(1, width // factor)) for factor in pool_factors]
+    )
+    losses = []
+    for size in dict.fromkeys(sizes):
+        pooled_student, pooled_support = masked_resample(student, support, size)
+        pooled_teacher, _ = masked_resample(teacher.detach(), support, size)
+        pooled_student = torch.nn.functional.normalize(pooled_student.float(), dim=1)
+        pooled_teacher = torch.nn.functional.normalize(pooled_teacher.float(), dim=1)
+        errors = 1 - (pooled_student * pooled_teacher).sum(dim=1, keepdim=True)
+        losses.append((errors * pooled_support).sum() / pooled_support.sum().clamp(min=1))
+    return torch.stack(losses).mean()

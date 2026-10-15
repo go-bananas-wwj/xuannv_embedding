@@ -71,6 +71,17 @@ loss scaling），仅在硬件不支持 bf16 时回退到 fp16 + GradScaler。
 恢复或导出新格式 checkpoint 时，还会逐项核对当前配置文件 SHA-256、source schema 和 region
 清单；任一身份不一致都会在加载权重前失败，不能把别的运行状态静默套到当前数据合同。
 
+修改训练目标后继续优化既有模型，使用成对的 `--initialize-from`、`--initialize-config`。
+它们先按原配置严格核验 checkpoint，只加载模型参数，重新创建 optimizer、scheduler 和损失
+predictor；原 checkpoint 的摘要、epoch、Git SHA 会记入新制品。该操作与 `--resume` 互斥，
+输出不得覆盖初始化权重或教师权重。年度教师可以比学生小，接口合同仍严格匹配。
+
+```bash
+xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
+  --initialize-from /path/original/model.pt --initialize-config /path/original/config.yaml \
+  --teacher-checkpoint /path/small/model.pt --teacher-config /path/small/config.yaml
+```
+
 ## P0 诊断
 
 `xuannv diagnose` 在真实观测上核验月份绑定的高分融合合同，是启动正式长训前的门禁，不是精度

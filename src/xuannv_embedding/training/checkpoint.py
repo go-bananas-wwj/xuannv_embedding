@@ -83,6 +83,7 @@ def save_training_checkpoint(
     source_schema: dict[str, Any],
     regions: list[str],
     metrics: dict[str, Any] | None = None,
+    auxiliary_state: dict[str, Any] | None = None,
 ) -> None:
     """按版本化生产合同原子保存训练状态。"""
     _validate_metadata(
@@ -104,6 +105,7 @@ def save_training_checkpoint(
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict() if scheduler is not None else None,
         "metrics": dict(metrics or {}),
+        "auxiliary_state": dict(auxiliary_state or {}),
     }
     _atomic_torch_save(state, Path(path))
 

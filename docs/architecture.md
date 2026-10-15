@@ -64,10 +64,23 @@ physical sources --source_map--> canonical slots
 该字段缺省为 `null`，保留旧 `highres_visible_targets` 行为；显式设置后，以实际编码器可见性
 划分两类区域。固定留出评测须统一使用相同遮挡、目标划分和权重，不能沿用各模型训练目标比较。
 
+年度语义蒸馏允许教师使用不同的 STP 宽度和深度，但输入 source、PAN 分支、64 维输出和
+月份合同必须一致。`training.latent_prediction_pool_factors: [2, 4, 8]` 在 5m 输出上生成
+10/20/40m 的有效支持加权目标，通过学生专用 1×1 predictor 比较余弦距离；教师固定且不运行
+重建 decoder。损失内的特征归一化不改变模型瓶颈合同。未指定尺度时保留旧的 8×8 目标。
+
+`training.view_consistency_weight` 默认为 0；开启后，同一年度观测生成第二个独立遮挡视图，
+以学生模型的 EMA 提供停止梯度的多尺度目标。两视图使用独立随机数流，增加第二视图不会改变
+主视图的遮挡序列。EMA 只在成功的优化器更新后推进，累计步尾部也遵守这一规则；目标模型始终
+处于 eval 模式。`view_consistency_pool_factors` 默认 `[2, 4, 8]`，
+`view_consistency_ema_decay` 默认 `0.999`；不对不同年份施加不变性。
+
 ## 状态与制品
 
 新 checkpoint 包含格式版本、配置 SHA、Git SHA、source schema、区域清单、epoch、模型、
 semantic probe、优化器、调度器和指标。写入采用临时文件 + `fsync` + 原子替换。
+开启 EMA 时，额外的 `auxiliary_state` 保存 EMA 权重、更新次数和 decay；恢复时严格核验。
+旧 checkpoint 不要求该可选字段。冻结外部教师不写入学生权重，身份摘要写入指标。
 
 旧海淀权重不转换、不覆盖。兼容 profile 先核验登记 SHA，再一对一映射旧高分 encoder/decoder
 键，并要求全部 431 个键恰好消费。

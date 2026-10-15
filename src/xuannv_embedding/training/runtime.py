@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from contextlib import nullcontext
+from copy import deepcopy
 from math import isfinite
 from time import perf_counter
 from typing import Any, Callable
@@ -14,6 +15,32 @@ from torch.optim import Optimizer
 
 from xuannv_embedding.training.distillation import freeze_teacher
 from xuannv_embedding.training.losses import TotalLoss
+
+
+def _model_view(model: nn.Module, view: dict[str, Any], *, decode: bool = True):
+    optional = {
+        key: view[key]
+        for key in (
+            "highres_months",
+            "output_months",
+            "highres_observations",
+            "reconstruction_requests",
+            "source_validity_masks",
+        )
+        if key in view
+    }
+    # Annual teachers only need embeddings; avoid observation-specific decoders.
+    if hasattr(model, "context_pooling"):
+        optional["decode"] = decode
+    return model(
+        view["source_frames"],
+        view["source_masks"],
+        view["timestamps"],
+        view.get("highres_frames"),
+        view.get("highres_masks"),
+        source_pixel_masks=view.get("source_pixel_masks"),
+        **optional,
+    )
 
 
 def _move(value: Any, device: torch.device) -> Any:
@@ -91,12 +118,54 @@ class TrainingSystem(nn.Module):
         self.model = model
         self.criterion = criterion
         self.teacher_model = None if teacher is None else freeze_teacher(teacher)
+        self.ema_model = None
+        self.ema_decay = 0.999
+        self.ema_updates = 0
 
     def train(self, mode: bool = True) -> TrainingSystem:
         super().train(mode)
         if self.teacher_model is not None:
             self.teacher_model.eval()
+        if self.ema_model is not None:
+            self.ema_model.eval()
         return self
+
+    def set_ema(self, decay: float) -> None:
+        if not 0 <= decay < 1:
+            raise ValueError("EMA decay must be in [0, 1)")
+        self.ema_decay = decay
+        self.ema_model = freeze_teacher(deepcopy(self.model))
+
+    @torch.no_grad()
+    def update_ema(self) -> None:
+        if self.ema_model is None:
+            return
+        for target, source in zip(
+            self.ema_model.parameters(), self.model.parameters(), strict=True
+        ):
+            target.lerp_(source.detach(), 1 - self.ema_decay)
+        for target, source in zip(self.ema_model.buffers(), self.model.buffers(), strict=True):
+            target.copy_(source)
+        self.ema_updates += 1
+
+    def auxiliary_state(self) -> dict[str, Any]:
+        if self.ema_model is None:
+            return {}
+        return {
+            "ema": self.ema_model.state_dict(),
+            "ema_updates": self.ema_updates,
+            "ema_decay": self.ema_decay,
+        }
+
+    def restore_auxiliary_state(self, state: dict[str, Any]) -> None:
+        if self.ema_model is None:
+            if state:
+                raise ValueError("Checkpoint contains EMA but configuration disables it")
+            return
+        if "ema" not in state or state.get("ema_decay") != self.ema_decay:
+            raise ValueError("EMA checkpoint missing or decay differs")
+        self.ema_model.load_state_dict(state["ema"], strict=True)
+        self.ema_updates = int(state["ema_updates"])
 
     def set_teacher(self, teacher: nn.Module, device: torch.device | None = None) -> None:
         if device is not None:
@@ -104,54 +173,24 @@ class TrainingSystem(nn.Module):
         self.teacher_model = freeze_teacher(teacher)
 
     def forward(self, batch: dict[str, Any]) -> dict[str, torch.Tensor]:
-        optional = {
-            key: batch[key]
-            for key in (
-                "highres_months",
-                "output_months",
-                "highres_observations",
-                "reconstruction_requests",
-                "source_validity_masks",
-            )
-            if key in batch
-        }
-        output = self.model(
-            batch["source_frames"],
-            batch["source_masks"],
-            batch["timestamps"],
-            batch.get("highres_frames"),
-            batch.get("highres_masks"),
-            source_pixel_masks=batch.get("source_pixel_masks"),
-            **optional,
-        )
+        output = _model_view(self.model, batch)
         teacher_output = None
         teacher_view = batch.get("teacher_view")
         if self.teacher_model is not None:
             if teacher_view is None:
                 raise ValueError("Frozen teacher requires an explicit teacher_view")
             with torch.no_grad():
-                teacher_output = self.teacher_model(
-                    teacher_view["source_frames"],
-                    teacher_view["source_masks"],
-                    teacher_view["timestamps"],
-                    teacher_view.get("highres_frames"),
-                    teacher_view.get("highres_masks"),
-                    source_pixel_masks=teacher_view.get("source_pixel_masks"),
-                    **{
-                        key: teacher_view[key]
-                        for key in (
-                            "highres_months",
-                            "output_months",
-                            "highres_observations",
-                            "reconstruction_requests",
-                            "source_validity_masks",
-                        )
-                        if key in teacher_view
-                    },
-                )
+                teacher_output = _model_view(self.teacher_model, teacher_view, decode=False)
         loss_optional = (
             {"highres_targets": batch["highres_targets"]} if "highres_targets" in batch else {}
         )
+        if self.ema_model is not None:
+            if "consistency_view" not in batch:
+                raise ValueError("EMA consistency requires an independent consistency_view")
+            with torch.no_grad():
+                loss_optional["consistency_output"] = _model_view(
+                    self.ema_model, batch["consistency_view"], decode=False
+                )
         return self.criterion(
             output,
             batch["targets"],
@@ -237,6 +276,8 @@ def train_steps(
                 else:
                     scaler.step(optimizer)
                     scaler.update()
+                if isfinite(gradient_norm):
+                    _unwrap(system).update_ema()
                 optimizer.zero_grad(set_to_none=True)
                 optimizer_steps += 1
                 pending = 0
@@ -257,6 +298,11 @@ def train_steps(
                         "elapsed_seconds": previous_end - started,
                         "data_wait_seconds": data_wait_seconds,
                         "step_seconds": previous_end - batch_started,
+                        "components": {
+                            key: float(value.detach().float().cpu())
+                            for key, value in losses.items()
+                            if value.numel() == 1
+                        },
                     }
                 )
         if pending:
@@ -271,6 +317,8 @@ def train_steps(
             else:
                 scaler.step(optimizer)
                 scaler.update()
+            if isfinite(gradient_norm):
+                _unwrap(system).update_ema()
             optimizer.zero_grad(set_to_none=True)
             optimizer_steps += 1
         if scheduler is not None:

@@ -86,6 +86,15 @@ def _non_negative_int(value: Any, field_name: str) -> int:
     return value
 
 
+def _positive_int_list(value: Any, field_name: str) -> list[int]:
+    if not isinstance(value, list) or not value:
+        raise ConfigError(f"{field_name} 必须是非空正整数列表")
+    result = [_positive_int(item, field_name) for item in value]
+    if len(set(result)) != len(result):
+        raise ConfigError(f"{field_name} 不得重复")
+    return result
+
+
 def _boolean(value: Any, field_name: str) -> bool:
     if not isinstance(value, bool):
         raise ConfigError(f"{field_name} 必须是布尔值")
@@ -244,6 +253,10 @@ class TrainingConfig:
     semantic_probe_hard_negative_weight: float = 0.0
     semantic_probe_hard_negative_warmup_epochs: int = 0
     latent_prediction_weight: float = 0.0
+    latent_prediction_pool_factors: list[int] | None = None
+    view_consistency_weight: float = 0.0
+    view_consistency_pool_factors: list[int] = field(default_factory=lambda: [2, 4, 8])
+    view_consistency_ema_decay: float = 0.999
     highres_loss_weight: float = 1.0
     highres_visible_targets: bool = False
     highres_visible_weight: float | None = None
@@ -605,6 +618,10 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "semantic_probe_hard_negative_weight",
         "semantic_probe_hard_negative_warmup_epochs",
         "latent_prediction_weight",
+        "latent_prediction_pool_factors",
+        "view_consistency_weight",
+        "view_consistency_pool_factors",
+        "view_consistency_ema_decay",
         "highres_loss_weight",
         "highres_visible_targets",
         "highres_visible_weight",
@@ -702,6 +719,23 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         latent_prediction_weight=_non_negative_float(
             raw.get("latent_prediction_weight", 0.0),
             "training.latent_prediction_weight",
+        ),
+        latent_prediction_pool_factors=(
+            _positive_int_list(
+                raw["latent_prediction_pool_factors"], "training.latent_prediction_pool_factors"
+            )
+            if raw.get("latent_prediction_pool_factors") is not None
+            else None
+        ),
+        view_consistency_weight=_non_negative_float(
+            raw.get("view_consistency_weight", 0.0), "training.view_consistency_weight"
+        ),
+        view_consistency_pool_factors=_positive_int_list(
+            raw.get("view_consistency_pool_factors", [2, 4, 8]),
+            "training.view_consistency_pool_factors",
+        ),
+        view_consistency_ema_decay=_non_negative_float(
+            raw.get("view_consistency_ema_decay", 0.999), "training.view_consistency_ema_decay"
         ),
         highres_loss_weight=_non_negative_float(
             raw.get("highres_loss_weight", 1.0), "training.highres_loss_weight"
@@ -835,6 +869,15 @@ def _validate_cross_contracts(
     training: TrainingConfig,
     data: DataConfig,
 ) -> None:
+    if training.view_consistency_ema_decay >= 1:
+        raise ConfigError("training.view_consistency_ema_decay 必须小于 1")
+    if model.architecture != "annual5m" and (
+        model.annual_context_pooling
+        or training.highres_visible_weight is not None
+        or training.latent_prediction_pool_factors is not None
+        or training.view_consistency_weight
+    ):
+        raise ConfigError("Context pooling and multiscale objectives require annual5m")
     if model.architecture == "annual5m":
         if model.num_months != 12 or model.ref_month != 1 or data.target_months:
             raise ConfigError("annual5m requires twelve calendar months and no target_months")

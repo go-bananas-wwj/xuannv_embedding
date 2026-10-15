@@ -455,6 +455,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", type=Path)
+    parser.add_argument("--initialize-from", type=Path)
+    parser.add_argument("--initialize-config", type=Path)
     parser.add_argument("--teacher-checkpoint", type=Path)
     parser.add_argument("--teacher-config", type=Path)
     parser.add_argument("--device")
@@ -471,6 +473,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--steps 不得为负")
     if args.synthetic and args.steps == 0:
         parser.error("--synthetic 需要显式提供正数 --steps")
+    if (args.initialize_from is None) != (args.initialize_config is None):
+        parser.error("--initialize-from 与 --initialize-config 必须一起提供")
+    if args.resume is not None and args.initialize_from is not None:
+        parser.error("--resume 与 --initialize-from 互斥")
+    for source in (args.initialize_from, args.teacher_checkpoint):
+        if source is not None and source.resolve() == args.output.resolve():
+            parser.error("训练输出不得覆盖初始化或教师 checkpoint")
 
     config = Config.from_yaml(args.config)
     if args.synthetic and config.model.architecture == "annual5m":
@@ -486,22 +495,44 @@ def main(argv: Sequence[str] | None = None) -> int:
     accelerate = config.training.compile and device.type == "cuda"
     if config.training.compile and config.model.architecture != "annual5m":
         parser.error("training.compile 仅支持 annual5m 架构")
-    if accelerate:
-        # bf16 autocast 之外残留的 fp32 矩阵乘走 TF32；只编译时序编码器，形状在 batch 间固定，
-        # 不随变长高分观测重编译。Module.compile 原地编译，checkpoint 键名保持不变。
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-        system.model.temporal_encoder.compile()
     config_sha256 = hashlib.sha256(args.config.read_bytes()).hexdigest()
     source_schema = {name: asdict(value) for name, value in config.model.input_sources.items()}
     regions = [dataset.region for dataset in config.data.datasets]
+    initialization_identity = None
+    if args.initialize_from is not None:
+        initial_config = Config.from_yaml(args.initialize_config)
+        initial_schema = {
+            name: asdict(value) for name, value in initial_config.model.input_sources.items()
+        }
+        if (
+            initial_schema != source_schema
+            or initial_config.model.architecture != config.model.architecture
+        ):
+            parser.error("初始化模型架构与 source schema 必须匹配")
+        initial_sha = hashlib.sha256(args.initialize_config.read_bytes()).hexdigest()
+        initial_state = load_training_checkpoint(
+            args.initialize_from,
+            model=system.model,
+            device=device,
+            expected_source_schema=initial_schema,
+            expected_regions=[dataset.region for dataset in initial_config.data.datasets],
+            expected_config_sha256=initial_sha,
+        )
+        with args.initialize_from.open("rb") as handle:
+            initialization_identity = {
+                "checkpoint_sha256": hashlib.file_digest(handle, "sha256").hexdigest(),
+                "config_sha256": initial_sha,
+                "epoch": initial_state["epoch"],
+                "git_sha": initial_state["git_sha"],
+            }
+        del initial_state
     teacher_identity = None
     if (args.teacher_checkpoint is None) != (args.teacher_config is None):
         parser.error("--teacher-checkpoint 与 --teacher-config 必须一起提供")
     if args.teacher_checkpoint is not None:
         teacher_config = Config.from_yaml(args.teacher_config)
-        if teacher_config.model != config.model or teacher_config.data.months != config.data.months:
-            parser.error("教师与学生必须具有相同的模型与月份合同")
+        if not teacher_contract_matches(config, teacher_config):
+            parser.error("教师与学生的模型接口及月份合同必须匹配")
         if teacher_config.data.target_months != config.data.target_months:
             parser.error("教师与学生 target_months 必须一致")
         teacher_system = build_training_system(teacher_config)
@@ -522,6 +553,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         system.set_teacher(freeze_teacher(teacher_system.model), device=device)
     elif config.training.latent_prediction_weight > 0.0:
         parser.error("启用 latent_prediction_weight 时必须提供 --teacher-checkpoint")
+    if config.training.view_consistency_weight > 0:
+        system.set_ema(config.training.view_consistency_ema_decay)
     optimizer = build_optimizer(
         system,
         lr=config.training.lr,
@@ -549,6 +582,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         start_epoch = int(state["epoch"]) + 1
         if state["metrics"].get("teacher_identity") != teacher_identity:
             raise ValueError("恢复训练的 teacher_identity 不一致")
+        initialization_identity = state["metrics"].get("initialization_identity")
+        system.restore_auxiliary_state(state.get("auxiliary_state", {}))
+        del state
+    if accelerate:
+        # Initialize/copy the EMA before compiling; only compile the student encoder.
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        system.model.temporal_encoder.compile()
     wrapped: nn.Module = system
     if distributed:
         # precision_scale=1 时 AEFModel 会跳过 upsample_head（编码器输出已是输入分辨率），
@@ -560,6 +601,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             broadcast_buffers=False,
             find_unused_parameters=True,
         )
+        if system.ema_model is not None and args.resume is None:
+            system.ema_model.load_state_dict(system.model.state_dict(), strict=True)
+    # Teacher construction must not change primary-view randomness across ablations.
+    torch.manual_seed(config.experiment.seed + (dist.get_rank() if distributed else 0))
     if args.synthetic:
         batch = synthetic_batch(
             config,
@@ -605,10 +650,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 git_sha=git_sha,
                 source_schema=source_schema,
                 regions=regions,
+                auxiliary_state=system.auxiliary_state(),
                 metrics={
                     "checkpoint_kind": "periodic",
                     "completed_epoch": completed_epoch,
                     "teacher_identity": teacher_identity,
+                    "initialization_identity": initialization_identity,
                     "source_code_sha256": source_code_sha256,
                 },
             )
@@ -646,6 +693,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "device_type": device.type,
             "source_code_sha256": source_code_sha256,
             "teacher_identity": teacher_identity,
+            "initialization_identity": initialization_identity,
+            "ema_updates": system.ema_updates,
             "global_samples": global_samples,
             "wall_seconds": wall_seconds,
             "global_samples_per_second": global_samples / wall_seconds,
@@ -667,6 +716,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             git_sha=git_sha,
             source_schema=source_schema,
             regions=regions,
+            auxiliary_state=system.auxiliary_state(),
             metrics=summary,
         )
         print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
@@ -674,3 +724,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         dist.barrier()
         dist.destroy_process_group()
     return 0
+
+
+def teacher_contract_matches(student: Config, teacher: Config) -> bool:
+    """Permit a smaller annual teacher while retaining the observation interface."""
+    if student.data.months != teacher.data.months:
+        return False
+    if student.model.architecture == teacher.model.architecture == "annual5m":
+        return (
+            student.model.input_sources == teacher.model.input_sources
+            and student.model.embed_dim == teacher.model.embed_dim
+            and student.model.annual_pan_sources == teacher.model.annual_pan_sources
+            and student.model.num_months == teacher.model.num_months
+        )
+    return student.model == teacher.model
