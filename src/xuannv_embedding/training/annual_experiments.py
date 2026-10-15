@@ -704,6 +704,12 @@ def selection(args) -> None:
         print(json.dumps(result, ensure_ascii=False), flush=True)
 
 
+def confirmation_osm(args) -> None:
+    from xuannv_embedding.data_process.confirmation_osm import prepare_confirmation_osm
+
+    prepare_confirmation_osm(args.plan, args.snapshot, args.snapshot_date)
+
+
 def evaluate_arm(args) -> None:
     """Run one complete paired evaluation; reuse only matching evaluation code."""
     plan = json.loads(args.plan.read_text())
@@ -732,7 +738,11 @@ def evaluate_arm(args) -> None:
             handler(args)
         gc.collect()
         torch.cuda.empty_cache()
-    for suite in (["semantic"] if plan.get("confirmation_only") else ["semantic", "city"]):
+    for suite in (
+        ["semantic"]
+        if plan.get("confirmation_only") and not plan.get("fine_confirmation")
+        else ["semantic", "city"]
+    ):
         path = destination / f"{suite}_probe" / "metrics.json"
         if not fresh(path):
             args.suite = suite
@@ -865,6 +875,13 @@ def main(argv=None) -> int:
     command.add_argument("--plan", required=True, type=Path)
     command.add_argument("--labels", required=True, type=Path)
     command.set_defaults(handler=freeze_confirmation)
+    command = commands.add_parser(
+        "freeze-confirmation-osm", help="Extract local dated OSM for fine confirmation"
+    )
+    command.add_argument("--plan", required=True, type=Path)
+    command.add_argument("--snapshot", required=True, type=Path)
+    command.add_argument("--snapshot-date", required=True)
+    command.set_defaults(handler=confirmation_osm)
     for name, handler in [("reconstruction", reconstruction), ("export", export), ("probe", probe)]:
         command = commands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path)

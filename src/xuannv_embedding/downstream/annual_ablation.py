@@ -483,13 +483,21 @@ def city_probe(plan, root: Path, tag: str, device):
         "building": np.asarray(counts) >= 20,
         **{task: labels[task].flatten(1).sum(1).cpu().numpy() >= 200 for task in ["road", "water"]},
     }
+    confirmation = plan.get("confirmation_only", False)
+    if confirmation:
+        folds = np.where(np.asarray(splits) == "train", 1, 0)
+    scored_scope = {
+        task: select & (np.asarray(splits) != "train") if confirmation else select
+        for task, select in scope.items()
+    }
     destination = root / tag / "city_probe"
     destination.mkdir(exist_ok=True)
     result = {
         "development_only": True,
         "evaluation_git_sha": _git_sha(),
         "evaluation_source_code_sha256": _source_code_sha256(),
-        "fold_unit": "city",
+        "fold_unit": "2 degree spatial block holdout" if confirmation else "city",
+        "confirmation_only": confirmation,
         "ids": ids,
         "cities": [city[patch_id] for patch_id in ids],
         "folds": folds.tolist(),
@@ -500,13 +508,13 @@ def city_probe(plan, root: Path, tag: str, device):
         "checkpoint_sha256": json.loads((root / tag / "export.json").read_text())[
             "checkpoint_sha256"
         ],
-        "scope": {task: select.tolist() for task, select in scope.items()},
+        "scope": {task: select.tolist() for task, select in scored_scope.items()},
         "tasks": {},
     }
     for task, target in labels.items():
         for kind in ["linear", "conv3x3"]:
             stats = np.zeros((len(ids), 7), dtype=np.int64)
-            for fold in range(5):
+            for fold in ([0] if confirmation else range(5)):
                 train = torch.from_numpy(np.flatnonzero(scope[task] & (folds != fold))).to(device)
                 test = torch.from_numpy(np.flatnonzero(scope[task] & (folds == fold))).to(device)
                 if not len(test):
@@ -523,10 +531,10 @@ def city_probe(plan, root: Path, tag: str, device):
                 del head
             np.save(destination / f"{task}_{kind}.npy", stats)
             groups = {
-                "all": scope[task],
-                "with_highres": scope[task] & (np.asarray(highres) > 0),
-                "no_highres": scope[task] & (np.asarray(highres) == 0),
-                "pretraining_unseen": scope[task] & (np.asarray(splits) != "train"),
+                "all": scored_scope[task],
+                "with_highres": scored_scope[task] & (np.asarray(highres) > 0),
+                "no_highres": scored_scope[task] & (np.asarray(highres) == 0),
+                "pretraining_unseen": scored_scope[task] & (np.asarray(splits) != "train"),
             }
             key = f"{task}:{kind}"
             result["tasks"][key] = {

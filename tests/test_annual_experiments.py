@@ -124,6 +124,74 @@ def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path
         select_candidate(plan, root)
 
 
+def test_fine_confirmation_never_trains_heads_on_holdout_labels(tmp_path, monkeypatch):
+    import json
+
+    import numpy as np
+    import torch
+
+    import xuannv_embedding.downstream.annual_ablation as evaluation
+    from xuannv_embedding.training.annual_experiments import digest
+
+    features = tmp_path / "original" / "city5m"
+    features.mkdir(parents=True)
+    (features.parent / "export.json").write_text(json.dumps({"checkpoint_sha256": "a" * 64}))
+    osm = tmp_path / "osm"
+    osm.mkdir()
+    cache = tmp_path / "osm_labels"
+    cache.mkdir()
+    rows = []
+    for index in range(10):
+        patch_id = f"parent_32650:{index * 16}:0"
+        split = "train" if index < 8 else "test"
+        rows.append([str(index), split, patch_id, 0])
+        source = osm / f"{patch_id}.json"
+        source.write_text("{}")
+        target = np.zeros((256, 256), dtype=np.uint8)
+        target[100:116, 100:116] = 1
+        np.savez(
+            cache / f"{patch_id}.npz",
+            n_building=20,
+            source_sha256=digest(source),
+            building=target,
+            road=target,
+            water=target,
+        )
+        np.savez(
+            features / f"{patch_id}.npz",
+            emb=np.zeros((64, 256, 256), np.float16),
+            valid=np.ones((256, 256), bool),
+            split=split,
+            highres_obs=0,
+        )
+    cities = tmp_path / "cities.json"
+    cities.write_text(json.dumps(rows))
+    seen = []
+
+    def fake_train(features, labels, train, kind, fold, steps):
+        seen.append(train.tolist())
+        head = torch.nn.Conv2d(64, 1, 1)
+        with torch.no_grad():
+            head.weight.zero_()
+            head.bias.fill_(1)
+        return head, torch.zeros(1, 64, 1, 1), torch.ones(1, 64, 1, 1)
+
+    monkeypatch.setattr(evaluation, "train_city_head", fake_train)
+    evaluation.city_probe(
+        {"cities": str(cities), "osm": str(osm), "probe_steps": 1, "confirmation_only": True},
+        tmp_path,
+        "original",
+        torch.device("cpu"),
+    )
+    metadata = json.loads((features.parent / "city_probe" / "metrics.json").read_text())
+    train_rows = np.asarray(metadata["annual_splits"]) == "train"
+    assert len(seen) == 6
+    assert all(np.all(train_rows[index]) for index in seen)
+    assert metadata["tasks"]["road:conv3x3"]["all"]["patches"] == 2
+    stats = np.load(features.parent / "city_probe" / "road_conv3x3.npy")
+    assert stats[train_rows].sum() == 0 and stats[~train_rows].sum() > 0
+
+
 def records():
     return [
         SimpleNamespace(

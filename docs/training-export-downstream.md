@@ -97,6 +97,11 @@ xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
 `select` 只允许执行一次。`freeze-confirmation` 可以从既有标签包冻结额外位置，排除开发集，
 按当前年度 manifest 的真实 split 分配下游训练与确认样本。确认模式只用年度 train 位置拟合
 下游头，年度 validation/test 位置只评分；标签仍是同源弱标签，不构成独立真值认证。
+
+本地有带日期的 OSM PBF 时，安装 `.[data-process,osm,downstream]`，运行
+`experiment freeze-confirmation-osm --plan CONFIRMATION_PLAN --snapshot FILE --snapshot-date YYYY-MM-DD`。
+它生成独立的 `plan_fine.json`，保留原确认方案不变，并登记快照摘要、解析器版本与跳过的几何数。
+细粒度确认只在当前年度 train 位置训练头，validation/test 位置只评分；缺失标注不能解释为已验证负样本。
 这些已有弱标签与历史测试结果均属于开发证据，不能宣称新的独立盲测结果。
 
 ```bash
