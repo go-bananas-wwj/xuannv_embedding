@@ -115,7 +115,7 @@ def test_confirmation_probe_scores_only_annual_spatial_holdout(tmp_path, monkeyp
     assert "pretraining_seen" not in result["tasks"]["water"]
 
 
-@pytest.mark.parametrize("guard_original", [False, True])
+@pytest.mark.parametrize("guard_original", [False, True, "control_best"])
 def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path, guard_original):
     import json
 
@@ -151,9 +151,25 @@ def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path
     plan = {"arms": {tag: {"changes": changes} for tag, changes in arms.items()}}
     if guard_original:
         plan["product_reference"] = "original"
+    if guard_original == "control_best":
+        p = root / "control" / "semantic_probe" / "metrics.json"
+        value = json.loads(p.read_text())
+        value["tasks"]["water"]["all"]["F1"] = 0.95
+        value["tasks"]["landcover"]["all"]["mIoU"] = 0.5
+        p.write_text(json.dumps(value))
+        p = root / "control" / "city_probe" / "metrics.json"
+        value = json.loads(p.read_text())
+        for row in value["tasks"].values():
+            row["all"] = {key: number + 0.05 for key, number in row["all"].items()}
+        p.write_text(json.dumps(value))
     selected = select_candidate(plan, root)
     assert not selected["scores"]["A_context"]["eligible"]
-    assert selected["selected"] == (None if guard_original else "AB_visible01")
+    expected = (
+        "control"
+        if guard_original == "control_best"
+        else None if guard_original else "AB_visible01"
+    )
+    assert selected["selected"] == expected
     with pytest.raises(ValueError, match="already selected"):
         select_candidate(plan, root)
 

@@ -81,6 +81,7 @@ def select_candidate(plan, root: Path):
     from datetime import datetime, timezone
 
     from xuannv_embedding.training.annual_experiments import digest, write_json
+    from xuannv_embedding.training.cli import _git_sha, _source_code_sha256
 
     protocol_file = root.parent / "selection_protocol.json"
     locked = json.loads(protocol_file.read_text())
@@ -136,10 +137,11 @@ def select_candidate(plan, root: Path):
                 ("road", 0.005),
             ]
         )
+    excluded = {plan["product_reference"]} if plan.get("product_reference") else {"control"}
     eligible = [
         tag
         for tag in entries
-        if tag not in reference_tags
+        if tag not in excluded
         and scores[tag]["eligible"]
         and scores[tag]["joint_score"] >= max(scores[ref]["joint_score"] for ref in reference_tags)
     ]
@@ -151,10 +153,15 @@ def select_candidate(plan, root: Path):
             if scores[tag]["joint_score"] >= scores[best]["joint_score"] - 0.001
         ]
         best = min(
-            tied, key=lambda tag: (len(entries[tag]["changes"]), -scores[tag]["joint_score"])
+            tied,
+            key=lambda tag: (
+                entries[tag].get("optimizer_steps", 1) != 0,
+                len(entries[tag]["changes"]),
+                -scores[tag]["joint_score"],
+            ),
         )
     diagnostic = max(
-        (tag for tag in entries if tag not in reference_tags),
+        (tag for tag in entries if tag not in excluded),
         key=lambda tag: scores[tag]["joint_score"],
     )
     result = {
@@ -162,10 +169,17 @@ def select_candidate(plan, root: Path):
         "diagnostic_best": diagnostic,
         "scores": scores,
         "references": reference_tags,
+        "selection_git_sha": _git_sha(),
+        "selection_source_code_sha256": _source_code_sha256(),
         "protocol_sha256": digest(protocol_file),
         "evidence_sha256": evidence,
         "selected_utc": datetime.now(timezone.utc).isoformat(),
-        "interpretation": "Exploratory continued-training result; confirmation still required.",
+        "selected_kind": (
+            "preprocessing_only"
+            if best is not None and entries[best].get("optimizer_steps") == 0
+            else "continued_training" if best is not None else None
+        ),
+        "interpretation": "Exploratory development selection; confirmation still required.",
     }
     destination = root.parent / "selection.json"
     if destination.exists():
@@ -611,8 +625,15 @@ def city_probe(plan, root: Path, tag: str, device):
 
 def compare(plan, root: Path, arms: list[str], reference="original"):
     from xuannv_embedding.training.annual_experiments import write_json
+    from xuannv_embedding.training.cli import _git_sha, _source_code_sha256
 
-    result = {"reference": reference, "development_only": True, "comparisons": {}}
+    result = {
+        "reference": reference,
+        "development_only": True,
+        "comparisons": {},
+        "comparison_git_sha": _git_sha(),
+        "comparison_source_code_sha256": _source_code_sha256(),
+    }
     for tag in arms:
         if tag == reference:
             continue
