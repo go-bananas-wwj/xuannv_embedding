@@ -58,6 +58,21 @@ def test_cluster_bootstrap_preserves_pairing_and_groups_adjacent_patches():
     assert sparse["CI95"] is None and sparse["groups"] == 1
 
 
+def test_confirmation_bootstrap_uses_frozen_two_degree_groups(tmp_path):
+    import json
+
+    from xuannv_embedding.downstream.annual_ablation import semantic_groups
+
+    ids = ["parent_32650:0:0", "parent_32650:32:0"]
+    path = tmp_path / "groups.json"
+    path.write_text(json.dumps([["block_1", "test", patch_id, 0] for patch_id in ids]))
+    assert len(set(semantic_groups({}, ids))) == 2
+    plan = {"confirmation_only": True, "cities": str(path)}
+    assert semantic_groups(plan, ids) == ["block_1", "block_1"]
+    with pytest.raises(ValueError, match="do not cover"):
+        semantic_groups(plan, ids + ["parent_32650:64:0"])
+
+
 def test_five_meter_counts_measure_regions_and_one_pixel_boundary_tolerance():
     import torch
 
@@ -247,6 +262,7 @@ def test_fine_confirmation_never_trains_heads_on_holdout_labels(
     assert len(seen) == 6
     assert all(np.all(train_rows[index]) for index in seen)
     assert metadata["tasks"]["road:conv3x3"]["all"]["patches"] == 2
+    assert metadata["confirmation_only"] and not metadata["development_only"]
     if threshold_free:
         metrics = metadata["tasks"]["road:conv3x3"]["all"]
         assert metrics["AP"] == pytest.approx(256 / 65536)

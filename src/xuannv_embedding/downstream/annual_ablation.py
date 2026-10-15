@@ -194,6 +194,17 @@ def spatial_group(patch_id: str) -> str:
     return f"{zone}:{int(x) // 16}:{int(y) // 16}"
 
 
+def semantic_groups(plan, ids):
+    """Use the frozen coarse holdout units for confirmation uncertainty."""
+    if plan.get("confirmation_only") and plan.get("cities"):
+        mapping = {row[2]: row[0] for row in json.loads(Path(plan["cities"]).read_text())}
+        if mapping:
+            if set(ids) - mapping.keys():
+                raise ValueError("Confirmation spatial groups do not cover all semantic positions")
+            return [mapping[patch_id] for patch_id in ids]
+    return [spatial_group(patch_id) for patch_id in ids]
+
+
 def folds_for(groups: list[str]) -> np.ndarray:
     ordered = sorted(set(groups), key=lambda group: hashlib.sha256(group.encode()).digest())
     if len(ordered) < 5:
@@ -264,7 +275,7 @@ def semantic_probe(plan, root: Path, tag: str, device):
         for row in json.loads((labels_root / "labels.json").read_text())["records"]
     }
     ids = sorted(records)
-    groups = [spatial_group(patch_id) for patch_id in ids]
+    groups = semantic_groups(plan, ids)
     folds = folds_for(groups)
     features, labels, patches, annual_splits = (
         [],
@@ -562,7 +573,7 @@ def city_probe(plan, root: Path, tag: str, device):
     destination = root / tag / f"city_probe{suffix}"
     destination.mkdir(exist_ok=True)
     result = {
-        "development_only": True,
+        "development_only": not confirmation,
         "evaluation_git_sha": _git_sha(),
         "evaluation_source_code_sha256": _source_code_sha256(),
         "fold_unit": "2 degree spatial block holdout" if confirmation else "city",
@@ -671,7 +682,8 @@ def compare(plan, root: Path, arms: list[str], reference="original"):
 
     result = {
         "reference": reference,
-        "development_only": True,
+        "development_only": not plan.get("confirmation_only", False),
+        "confirmation_only": plan.get("confirmation_only", False),
         "comparisons": {},
         "comparison_git_sha": _git_sha(),
         "comparison_source_code_sha256": _source_code_sha256(),
@@ -692,7 +704,7 @@ def compare(plan, root: Path, arms: list[str], reference="original"):
             if suite == "semantic_probe":
                 if metadata["label_manifest_sha256"] != other["label_manifest_sha256"]:
                     raise ValueError("Semantic labels differ across compared arms")
-                groups = [spatial_group(patch_id) for patch_id in metadata["ids"]]
+                groups = semantic_groups(plan, metadata["ids"])
                 tasks = [("water", "F1"), ("landcover", "mIoU")]
                 for task, metric in tasks:
                     a, b = np.load(candidate / f"{task}.npy"), np.load(base / f"{task}.npy")
