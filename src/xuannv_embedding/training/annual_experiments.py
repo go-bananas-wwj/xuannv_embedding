@@ -666,6 +666,9 @@ def probe(args) -> None:
     plan["probe_seed_offset"] = seed_offset
     plan["save_probe_heads"] = getattr(args, "save_heads", False)
     plan["probe_threshold_free"] = getattr(args, "threshold_free", False)
+    plan["probe_feature_mode"] = getattr(args, "feature_mode", "native5m")
+    if plan["probe_feature_mode"] != "native5m" and args.suite != "city":
+        raise ValueError("Coarsened feature diagnostics require --suite city")
     root = args.plan.parent / "evaluation"
     device = torch.device(args.device)
     if args.suite in {"semantic", "all"}:
@@ -991,6 +994,9 @@ def main(argv=None) -> int:
             command.add_argument("--seed-offset", type=int, default=0)
             command.add_argument("--save-heads", action="store_true")
             command.add_argument("--threshold-free", action="store_true")
+            command.add_argument(
+                "--feature-mode", choices=["native5m", "pooled10m"], default="native5m"
+            )
         command.set_defaults(handler=handler)
     command = commands.add_parser("compare", help="Paired city/spatial-block bootstrap differences")
     command.add_argument("--plan", required=True, type=Path)

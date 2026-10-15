@@ -530,6 +530,16 @@ def city_probe(plan, root: Path, tag: str, device):
             highres.append(int(feature["highres_obs"]))
             splits.append(str(feature["split"]))
     features = torch.from_numpy(np.stack(features)).to(device)
+    feature_mode = plan.get("probe_feature_mode", "native5m")
+    if feature_mode == "pooled10m":
+        features = F.interpolate(
+            F.avg_pool2d(features.float(), 2),
+            size=features.shape[-2:],
+            mode="bilinear",
+            align_corners=False,
+        ).to(features.dtype)
+    elif feature_mode != "native5m":
+        raise ValueError("Unknown city probe feature mode")
     labels = {
         task: torch.from_numpy(np.stack(values)).to(device) for task, values in labels.items()
     }
@@ -547,6 +557,8 @@ def city_probe(plan, root: Path, tag: str, device):
     seed_offset = int(plan.get("probe_seed_offset", 0))
     save_heads = plan.get("save_probe_heads", False)
     suffix = f"_seed{seed_offset}" if seed_offset or save_heads else ""
+    if feature_mode != "native5m":
+        suffix = f"_{feature_mode}{suffix}"
     destination = root / tag / f"city_probe{suffix}"
     destination.mkdir(exist_ok=True)
     result = {
@@ -562,6 +574,7 @@ def city_probe(plan, root: Path, tag: str, device):
         "annual_splits": splits,
         "probe_steps": plan["probe_steps"],
         "probe_seed_offset": seed_offset,
+        "feature_mode": feature_mode,
         "threshold_free_metrics": plan.get("probe_threshold_free", False),
         "label_sha256": label_digests,
         "checkpoint_sha256": json.loads((root / tag / "export.json").read_text())[
