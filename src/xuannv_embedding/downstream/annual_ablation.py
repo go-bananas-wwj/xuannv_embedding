@@ -268,6 +268,9 @@ def semantic_probe(plan, root: Path, tag: str, device):
         "evaluation_git_sha": _git_sha(),
         "evaluation_source_code_sha256": _source_code_sha256(),
         "label_manifest_sha256": digest(labels_root / "labels.json"),
+        "checkpoint_sha256": json.loads((root / tag / "export.json").read_text())[
+            "checkpoint_sha256"
+        ],
         "fold_unit": (
             "current annual train / spatial holdout" if confirmation else "20.48 km spatial block"
         ),
@@ -494,6 +497,9 @@ def city_probe(plan, root: Path, tag: str, device):
         "annual_splits": splits,
         "probe_steps": plan["probe_steps"],
         "label_sha256": label_digests,
+        "checkpoint_sha256": json.loads((root / tag / "export.json").read_text())[
+            "checkpoint_sha256"
+        ],
         "scope": {task: select.tolist() for task, select in scope.items()},
         "tasks": {},
     }

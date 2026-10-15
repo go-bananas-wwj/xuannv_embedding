@@ -54,6 +54,7 @@ def test_confirmation_probe_scores_only_annual_spatial_holdout(tmp_path, monkeyp
     features = tmp_path / "original" / "semantic"
     labels.mkdir()
     features.mkdir(parents=True)
+    (tmp_path / "original" / "export.json").write_text(json.dumps({"checkpoint_sha256": "f" * 64}))
     records = []
     for index in range(10):
         patch_id = f"parent_32650:{index * 16}:0"

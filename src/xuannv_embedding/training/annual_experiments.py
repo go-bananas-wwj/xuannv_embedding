@@ -7,15 +7,19 @@ evidence: their reuse never creates an independent, untouched test set.
 from __future__ import annotations
 
 import argparse
+import gc
 import hashlib
 import json
 import os
 import subprocess
 import sys
+import time
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
+from queue import Empty, Queue
 
 import numpy as np
 import torch
@@ -399,6 +403,7 @@ def reconstruction(args) -> None:
     result = {
         "arm": args.arm,
         "checkpoint_sha256": digest(checkpoint),
+        "evaluation_source_code_sha256": _source_code_sha256(),
         "identity": identity,
         "development_only": True,
         "n": len(rows),
@@ -554,6 +559,7 @@ def export(args) -> None:
         root / "export.json",
         {
             "checkpoint_sha256": digest(checkpoint),
+            "evaluation_source_code_sha256": _source_code_sha256(),
             "identity": identity,
             "found": len(found),
             "requested": len(want),
@@ -698,6 +704,129 @@ def selection(args) -> None:
         print(json.dumps(result, ensure_ascii=False), flush=True)
 
 
+def evaluate_arm(args) -> None:
+    """Run one complete paired evaluation; reuse only matching evaluation code."""
+    plan = json.loads(args.plan.read_text())
+    if torch.device(args.device).type == "cuda":
+        torch.cuda.set_device(torch.device(args.device))
+    destination = args.plan.parent / "evaluation" / args.arm
+    source_sha = _source_code_sha256()
+    _, checkpoint = artifact_paths(plan, args.arm)
+    checkpoint_sha = digest(checkpoint)
+
+    def fresh(path):
+        if not path.exists():
+            return False
+        value = json.loads(path.read_text())
+        return (
+            value.get("evaluation_source_code_sha256") == source_sha
+            and value.get("checkpoint_sha256") == checkpoint_sha
+        )
+
+    stages = []
+    if not plan.get("confirmation_only"):
+        stages.append(("reconstruction.json", reconstruction))
+    stages.append(("export.json", export))
+    for name, handler in stages:
+        if not fresh(destination / name):
+            handler(args)
+        gc.collect()
+        torch.cuda.empty_cache()
+    for suite in (["semantic"] if plan.get("confirmation_only") else ["semantic", "city"]):
+        path = destination / f"{suite}_probe" / "metrics.json"
+        if not fresh(path):
+            args.suite = suite
+            probe(args)
+        gc.collect()
+        torch.cuda.empty_cache()
+    print(json.dumps({"evaluation_complete": args.arm}), flush=True)
+
+
+def evaluate_many(args) -> None:
+    """Use one subprocess per GPU; canonical support is exported before parallel work."""
+    plan = json.loads(args.plan.read_text())
+    if args.wait_for_training:
+        while not all(Path(arm["checkpoint"]).exists() for arm in plan["arms"].values()):
+            status_file = args.plan.parent / "status.json"
+            if status_file.exists() and any(
+                arm["state"] == "failed" for arm in json.loads(status_file.read_text()).values()
+            ):
+                raise RuntimeError("Training failed; evaluation queue stopped")
+            time.sleep(10)
+    arms = args.arms or ["original", "small", *plan["arms"]]
+    gpus = args.gpus.split(",")
+    command = [sys.executable, "-m", "xuannv_embedding.cli", "experiment"]
+    env = os.environ.copy()
+    env.update({"OMP_NUM_THREADS": "2", "PYTHONUNBUFFERED": "1"})
+    canonical = args.plan.parent / "evaluation" / "original" / "export.json"
+    if (
+        not canonical.exists()
+        or json.loads(canonical.read_text()).get("evaluation_source_code_sha256")
+        != _source_code_sha256()
+    ):
+        subprocess.run(
+            [
+                *command,
+                "export",
+                "--plan",
+                str(args.plan),
+                "--arm",
+                "original",
+                "--device",
+                f"cuda:{gpus[0]}",
+                "--workers",
+                str(args.workers),
+            ],
+            env=env,
+            check=True,
+        )
+    pending = Queue()
+    for tag in arms:
+        pending.put(tag)
+
+    def worker(gpu):
+        completed = []
+        while True:
+            try:
+                tag = pending.get_nowait()
+            except Empty:
+                return completed
+            output = args.plan.parent / "evaluation" / tag
+            output.mkdir(exist_ok=True, parents=True)
+            with (output / "evaluate.log").open("a") as log:
+                subprocess.run(
+                    [
+                        *command,
+                        "evaluate-arm",
+                        "--plan",
+                        str(args.plan),
+                        "--arm",
+                        tag,
+                        "--device",
+                        f"cuda:{gpu}",
+                        "--workers",
+                        str(args.workers),
+                    ],
+                    env=env,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    check=True,
+                )
+            print(json.dumps({"evaluated": tag, "gpu": gpu}), flush=True)
+            completed.append(tag)
+
+    with ThreadPoolExecutor(max_workers=len(gpus)) as pool:
+        results = list(pool.map(worker, gpus))
+    write_json(
+        args.plan.parent / "evaluation" / "completed.json",
+        {
+            "arms": [tag for group in results for tag in group],
+            "evaluation_source_code_sha256": _source_code_sha256(),
+            "completed_utc": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv experiment", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -754,6 +883,23 @@ def main(argv=None) -> int:
         command = commands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path)
         command.set_defaults(handler=selection)
+    command = commands.add_parser(
+        "evaluate-arm", help="Run all paired diagnostics for one artifact"
+    )
+    command.add_argument("--plan", required=True, type=Path)
+    command.add_argument("--arm", required=True)
+    command.add_argument("--device", default="cuda:0")
+    command.add_argument("--workers", type=int, default=4)
+    command.set_defaults(handler=evaluate_arm)
+    command = commands.add_parser(
+        "evaluate-many", help="Evaluate frozen artifacts across available GPUs"
+    )
+    command.add_argument("--plan", required=True, type=Path)
+    command.add_argument("--arms", nargs="+")
+    command.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
+    command.add_argument("--workers", type=int, default=4)
+    command.add_argument("--wait-for-training", action="store_true")
+    command.set_defaults(handler=evaluate_many)
     args = parser.parse_args(argv)
     torch.set_num_threads(2)
     args.handler(args)
