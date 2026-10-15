@@ -51,7 +51,10 @@ ROAD_HALF_WIDTH = {
 }
 
 SELECTION_PROTOCOL = {
+    "version": 2,
     "reference": "control",
+    "product_reference": "also guard the original when declared by plan.product_reference",
+    "candidate_set": "trained arms plus explicit plan.selection_baselines",
     "semantic_terms": ["water:F1", "landcover:mIoU"],
     "fine_terms": [
         "road:conv3x3:F1",
@@ -83,8 +86,15 @@ def select_candidate(plan, root: Path):
     locked = json.loads(protocol_file.read_text())
     if locked["protocol"] != SELECTION_PROTOCOL:
         raise ValueError("Selection rule differs from the preregistered protocol")
+    entries = {
+        **plan["arms"],
+        **{tag: plan["baselines"][tag] for tag in plan.get("selection_baselines", [])},
+    }
+    reference_tags = ["control"]
+    if plan.get("product_reference"):
+        reference_tags.append(plan["product_reference"])
     evidence, scores = {}, {}
-    for tag in plan["arms"]:
+    for tag in dict.fromkeys([*entries, *reference_tags]):
         semantic_path = root / tag / "semantic_probe" / "metrics.json"
         city_path = root / tag / "city_probe" / "metrics.json"
         semantic = json.loads(semantic_path.read_text())["tasks"]
@@ -114,10 +124,10 @@ def select_candidate(plan, root: Path):
             "fine_score": float(fine_score),
             "joint_score": float((semantic_score + fine_score) / 2),
         }
-    baseline = scores["control"]
     for tag, score in scores.items():
         score["eligible"] = all(
-            score[key] >= baseline[key] - margin
+            score[key] >= scores[reference][key] - margin
+            for reference in reference_tags
             for key, margin in [
                 ("semantic_score", 0.002),
                 ("fine_score", 0.002),
@@ -128,10 +138,10 @@ def select_candidate(plan, root: Path):
         )
     eligible = [
         tag
-        for tag in scores
-        if tag != "control"
+        for tag in entries
+        if tag not in reference_tags
         and scores[tag]["eligible"]
-        and scores[tag]["joint_score"] >= baseline["joint_score"]
+        and scores[tag]["joint_score"] >= max(scores[ref]["joint_score"] for ref in reference_tags)
     ]
     best = max(eligible, key=lambda tag: scores[tag]["joint_score"]) if eligible else None
     if best is not None:
@@ -141,15 +151,17 @@ def select_candidate(plan, root: Path):
             if scores[tag]["joint_score"] >= scores[best]["joint_score"] - 0.001
         ]
         best = min(
-            tied, key=lambda tag: (len(plan["arms"][tag]["changes"]), -scores[tag]["joint_score"])
+            tied, key=lambda tag: (len(entries[tag]["changes"]), -scores[tag]["joint_score"])
         )
     diagnostic = max(
-        (tag for tag in scores if tag != "control"), key=lambda tag: scores[tag]["joint_score"]
+        (tag for tag in entries if tag not in reference_tags),
+        key=lambda tag: scores[tag]["joint_score"],
     )
     result = {
         "selected": best,
         "diagnostic_best": diagnostic,
         "scores": scores,
+        "references": reference_tags,
         "protocol_sha256": digest(protocol_file),
         "evidence_sha256": evidence,
         "selected_utc": datetime.now(timezone.utc).isoformat(),

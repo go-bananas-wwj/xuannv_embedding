@@ -115,7 +115,8 @@ def test_confirmation_probe_scores_only_annual_spatial_holdout(tmp_path, monkeyp
     assert "pretraining_seen" not in result["tasks"]["water"]
 
 
-def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path):
+@pytest.mark.parametrize("guard_original", [False, True])
+def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path, guard_original):
     import json
 
     from xuannv_embedding.downstream.annual_ablation import SELECTION_PROTOCOL, select_candidate
@@ -131,6 +132,7 @@ def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path
         ("control", 0.85, 0.43, 0),
         ("A_context", 0.80, 0.45, 0.1),
         ("AB_visible01", 0.86, 0.44, 0.01),
+        ("original", 0.89, 0.47, 0.02),
     ]:
         semantic = {
             "tasks": {"water": {"all": {"F1": water}}, "landcover": {"all": {"mIoU": landcover}}}
@@ -147,9 +149,11 @@ def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path
             destination.mkdir(parents=True)
             (destination / "metrics.json").write_text(json.dumps(value))
     plan = {"arms": {tag: {"changes": changes} for tag, changes in arms.items()}}
+    if guard_original:
+        plan["product_reference"] = "original"
     selected = select_candidate(plan, root)
     assert not selected["scores"]["A_context"]["eligible"]
-    assert selected["selected"] == "AB_visible01"
+    assert selected["selected"] == (None if guard_original else "AB_visible01")
     with pytest.raises(ValueError, match="already selected"):
         select_candidate(plan, root)
 
