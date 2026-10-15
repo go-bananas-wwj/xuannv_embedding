@@ -660,6 +660,11 @@ def probe(args) -> None:
     from xuannv_embedding.downstream.annual_ablation import city_probe, semantic_probe
 
     plan = json.loads(args.plan.read_text())
+    seed_offset = getattr(args, "seed_offset", 0)
+    if seed_offset < 0 or (seed_offset and args.suite != "city"):
+        raise ValueError("Nonzero probe seed offsets require --suite city and a nonnegative seed")
+    plan["probe_seed_offset"] = seed_offset
+    plan["save_probe_heads"] = getattr(args, "save_heads", False)
     root = args.plan.parent / "evaluation"
     device = torch.device(args.device)
     if args.suite in {"semantic", "all"}:
@@ -982,6 +987,8 @@ def main(argv=None) -> int:
         command.add_argument("--workers", type=int, default=6)
         if name == "probe":
             command.add_argument("--suite", choices=["semantic", "city", "all"], default="all")
+            command.add_argument("--seed-offset", type=int, default=0)
+            command.add_argument("--save-heads", action="store_true")
         command.set_defaults(handler=handler)
     command = commands.add_parser("compare", help="Paired city/spatial-block bootstrap differences")
     command.add_argument("--plan", required=True, type=Path)

@@ -530,7 +530,10 @@ def city_probe(plan, root: Path, tag: str, device):
         task: select & (np.asarray(splits) != "train") if confirmation else select
         for task, select in scope.items()
     }
-    destination = root / tag / "city_probe"
+    seed_offset = int(plan.get("probe_seed_offset", 0))
+    save_heads = plan.get("save_probe_heads", False)
+    suffix = f"_seed{seed_offset}" if seed_offset or save_heads else ""
+    destination = root / tag / f"city_probe{suffix}"
     destination.mkdir(exist_ok=True)
     result = {
         "development_only": True,
@@ -544,6 +547,7 @@ def city_probe(plan, root: Path, tag: str, device):
         "highres": highres,
         "annual_splits": splits,
         "probe_steps": plan["probe_steps"],
+        "probe_seed_offset": seed_offset,
         "label_sha256": label_digests,
         "checkpoint_sha256": json.loads((root / tag / "export.json").read_text())[
             "checkpoint_sha256"
@@ -562,12 +566,31 @@ def city_probe(plan, root: Path, tag: str, device):
                 if not len(train):
                     raise ValueError("City fold has no eligible training patches")
                 head, mean, std = train_city_head(
-                    features, target, train, kind, fold, plan["probe_steps"]
+                    features, target, train, kind, fold + seed_offset, plan["probe_steps"]
                 )
                 with torch.no_grad():
                     for chunk in torch.split(test, 8):
                         prediction = head((features[chunk].float() - mean) / std)[:, 0] > 0
                         stats[chunk.cpu().numpy()] = city_counts(prediction, target[chunk])
+                if save_heads:
+                    from xuannv_embedding.training.checkpoint import _atomic_torch_save
+
+                    _atomic_torch_save(
+                        {
+                            "head": {
+                                key: value.detach().cpu()
+                                for key, value in head.state_dict().items()
+                            },
+                            "mean": mean.cpu(),
+                            "std": std.cpu(),
+                            "task": task,
+                            "kind": kind,
+                            "fold": fold,
+                            "seed": fold + seed_offset,
+                            "checkpoint_sha256": result["checkpoint_sha256"],
+                        },
+                        destination / f"{task}_{kind}_fold{fold}.pt",
+                    )
                 del head
             np.save(destination / f"{task}_{kind}.npy", stats)
             groups = {
