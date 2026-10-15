@@ -1,8 +1,8 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.8",
-  "verified_date": "2026-10-02",
-  "scope": "v6全国年度5m训练数据合同、PAN与高分质量筛选、全量相对配准诊断、跨清单重复审计、600个真实样本读取、年度模型测试、8卡真实数据短跑，以及200轮正式训练的收敛、冻结嵌入探针评测、与外部年度嵌入基线的同协议对照和5m原生协议评测；不构成独立真值下的精度认证，也不代表生产推理条件已闭环。",
+  "report_version": "1.9",
+  "verified_date": "2026-10-15",
+  "scope": "v6年度数据合同、两版200轮模型、11组同预算候选训练、第二个继续训练种子的三份复验制品、一次性选择、30份主/参考下游头结果、五份制品空间确认和真实8卡EMA恢复状态检查；弱标签与单建筑位置不构成独立5m精度认证，未确认通用语义与细节稳定双提升。",
   "evidence": {
     "E1": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
@@ -21,16 +21,16 @@
       "sha256": "7fdbc48bc06ec1d18f1ceed06a3ce9cea4032338e9fc7d242c04284e6c734f6c"
     },
     "E5": {
-      "git_baseline": "79685b9fee3e5159a9f5c88bb2700b2da5d007a7",
-      "working_tree": "dirty; baseline SHA alone does not identify the inspected code",
+      "git_baseline": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
+      "working_tree": "Production source bytes match58f4374; report content is separately identified by report_source_sha256.",
       "files": [
         {
           "path": "src/xuannv_embedding/models/model.py",
-          "sha256": "f6fc6796c8324b7e350a2e24e66ea39da6c47676269b0253a8636f1b3770e192"
+          "sha256": "78a37da499542429673061a386e7914f132bc7c51827a56b69894903dece764a"
         },
         {
           "path": "src/xuannv_embedding/models/blocks.py",
-          "sha256": "1aace6a5533b5312dec0e6718a0889191628ff4e46365a27baaf684ded3d0629"
+          "sha256": "259077d3a8a07f0e34435df4b2caac92dad99b42994c672a040f2a1e97c590d6"
         },
         {
           "path": "src/xuannv_embedding/models/sensor_encoders.py",
@@ -38,7 +38,7 @@
         },
         {
           "path": "src/xuannv_embedding/models/observation_fusion.py",
-          "sha256": "98b4fcb8210ba535872ebf655e861e1eaec4bc77d3061dde11a50efe80b8b301"
+          "sha256": "03241a4f0eb56069194f7eb43a1f36c0d8b75c5516cf79eed353c3722d1173b3"
         },
         {
           "path": "src/xuannv_embedding/models/bottleneck.py",
@@ -46,11 +46,11 @@
         },
         {
           "path": "src/xuannv_embedding/data/annual_dataset.py",
-          "sha256": "7f87132b1d7aea78c70ee1dc44e2bf93755ff702ffefe5c0ee94728b104caf6d"
+          "sha256": "265abfe0256188581baa6959c819ef13a2d30f9e2ff0c7e5a3dde8a6c3a510f0"
         },
         {
           "path": "src/xuannv_embedding/data_process/annual_quality.py",
-          "sha256": "c0a14e0483465f863bba3a5dd80ab9c53a91c5d4e2b974367c235fe9e915e744"
+          "sha256": "c0d1a0e039455dd9dd554097712db5647b6e02b5cd4a1e796fe27fa1fd2e949d"
         },
         {
           "path": "src/xuannv_embedding/data_process/cloud_quality.py",
@@ -58,7 +58,7 @@
         },
         {
           "path": "src/xuannv_embedding/config.py",
-          "sha256": "c0178d8e0ee639fa1493eaab6004c9eac46aca6317057bc1844827ebbb7c135d"
+          "sha256": "833b601ce42b984ecb1425da07f70afb44cedbdaf71228b545e42483448cdd98"
         },
         {
           "path": "src/xuannv_embedding/data_process/pan_annual.py",
@@ -74,7 +74,7 @@
         },
         {
           "path": "src/xuannv_embedding/cli/__init__.py",
-          "sha256": "df8c369e9483e4155054eaa37675565f0e262f4eb03870be3d51b011c589f079"
+          "sha256": "c67dbc764a7c61514a855bf4e86b9a1895dcdb113f44c6c556afcb1b7ad6bc2e"
         },
         {
           "path": "src/xuannv_embedding/models/highres_fusion.py",
@@ -82,25 +82,26 @@
         },
         {
           "path": "src/xuannv_embedding/training/losses.py",
-          "sha256": "82bfaa9299d1bd596fb635d07c5cba429ac92389a0066c396fd3d43196933fb1"
+          "sha256": "aa28b99f23e45d79e8a031dc92231e9a2f6ad20810eaa66e2c434421d74c2b4c"
         },
         {
           "path": "src/xuannv_embedding/training/distillation.py",
-          "sha256": "201db6ed5d032a0014fe17ac314e24a931888dc7deeeb9e3eaa157e97016afd2"
+          "sha256": "0a1ae177df36855867b5fe7fc386c1cea46425ccb85d96c8465676b282d0fa9c"
         },
         {
           "path": "src/xuannv_embedding/training/runtime.py",
-          "sha256": "923fbf69cdef32d0bc03b6521047d1828c204446696afcbb9f777ad56bdd2399"
+          "sha256": "0d571ccb05852220308a80431b6dd05074d02e046844fb964dffd8685cd97541"
         },
         {
           "path": "src/xuannv_embedding/training/cli.py",
-          "sha256": "63f53d85f7adc72a39484908427577f0b463687e3c3481a4d9345d9c6353ced5"
+          "sha256": "be221af44642e0848e68aaad10fade6ee0597747b3a0f044e60551823b018740"
         },
         {
           "path": "src/xuannv_embedding/export/embedding.py",
-          "sha256": "1db4f08eda8bea526e75e9254e98fb24e6e5636a11e4c6fe7cf4a2f3cb7c8602"
+          "sha256": "eedd332943a456306808f497b7b7725d203696a8dccb4317139c6a84d0fefaa3"
         }
-      ]
+      ],
+      "source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50"
     },
     "E6": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/pan-screening-summary.json",
@@ -192,11 +193,604 @@
         {
           "path": "outputs/eval/quick_rapid124/figures/landcover.png",
           "sha256": "daefa9bd9e4cb0b3db68230ecabcbe8bf61e82bb7a4ac43b69d95e2aa1faeb10"
+        },
+        {
+          "path": "outputs/eval/quick_rapid124/aef_compare.py",
+          "sha256": "e3a72e69953261ccd068745807c44fa4041828158592b4ec2ee5c9a123db7a11"
         }
       ],
       "labels": "WorldCover 2021（与输入同源）、OSM Geofabrik 2022-01-01（国内建筑覆盖稀疏）",
       "scope": "冻结上游权重、只训练小探针；按patch或城市做聚类bootstrap。外部基线为公开年度嵌入，其训练集可能覆盖本地测试区域。",
-      "figures_note": "报告第10节两张实测样例图按绝对路径引用；PNG属仓库禁止类型，不进入Git，以本摘要核对。"
+      "figures_note": "报告第10节两张实测样例图按绝对路径引用；PNG属仓库禁止类型，不进入Git，以本摘要核对。",
+      "historical_fewshot_correction": "Few-shot main scores average3seeds, but paired diffs/CI in historical aef_results use seed0only. Reportv1.9 reports differences of means(-.06695,-.07920) without uncomputed across-seed intervals; full-data rows unchanged."
+    },
+    "E11": {
+      "run_dir": "outputs/annual5m/run_100m_20261009_024811/",
+      "files": [
+        {
+          "path": "outputs/annual5m/run_100m_20261009_024811/config.yaml",
+          "sha256": "3706c622e0390eb1393b68107fdffeb85da2d61332fd93679cecf5de103a6140"
+        },
+        {
+          "path": "outputs/annual5m/run_100m_20261009_024811/train.log",
+          "sha256": "57c7b3523970e11dc2f854dcc311d5fbdbab8c68efcf8c031bf5db4ea8e910de"
+        },
+        {
+          "path": "outputs/annual5m/run_100m_20261009_024811/annual5m_100m_v1.pt",
+          "sha256": "bca4c4a12bc62549b42d131847efe2b0d7dc1808473a329785427069497113f1"
+        }
+      ],
+      "note": "104216905 parameters,200 epochs,632000 updates; original immutable checkpoint."
+    },
+    "E12": {
+      "scope": "Completed11candidate arms, immutable selection, full primary head replications,5artifact frozen spatial confirmation,3seed17continuation replicas, and bounded real8GPU EMA resume. No re-selection or independent-truth accuracy certification.",
+      "training_evaluation_git": "147f8ded304d1065a3867e505a73ab4c8c39e350",
+      "training_evaluation_source_code_sha256": "fbc65ee516b10295875206433f45703cf51f57e9f9b19b12673f1a6c546851a0",
+      "files": [
+        {
+          "path": "outputs/annual_abc/20261015_exact/plan.json",
+          "sha256": "6ca6b3435dbf61f3e9b20c041217719f4097ce1f7d0ea0f9d9409c2e7e7d58d2"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/selection_protocol.json",
+          "sha256": "505f0a5fc0dca5c2e11a6d19f7abb7c3a191329d34d7a6e7ff5902e8ac1d7db1"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/selection_control_clarification.json",
+          "sha256": "633b7c7680d4c1df2768fb8a64f08b7a7982da6b2a0b62f6d704bc628dc3a192"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/evaluation/comparison_original.json",
+          "sha256": "9606f4221807ceba80fa5e0056cea9f561ec27c36ee8973281320f56aac1f718"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/plan_fine.json",
+          "sha256": "7465cce20bf5c584c83c50c96d8d46fe1202097210d19d4ec3b4e325f66092fd"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_screen/real_checkpoint_gradient_diagnostic.json",
+          "sha256": "580e31ebe6a071be49341c9b81073693f97f736babf3054f4edafa00b18cd9f8"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_screen/real_pan_mask_diagnostic.json",
+          "sha256": "9c4459442068e0ddc6eeee8ce15d563e16c1f3da111d4b444962daf644939eba"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_screen/pan_mask_precision_diagnostic.json",
+          "sha256": "7ffc3f088da96dcce09256d4e3ccffc48f3975e93478dfdacacc9b0fb564984e"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_screen/confirmation/geographic_audit.json",
+          "sha256": "e9820733a36538382f2eb59e1a09deb1c5059c33f8a7f837cc43b0e8b6860d01"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/pan_visibility_diagnostic.pdf",
+          "sha256": "565e96fcb3f3c19b14b792d4f76f09f0a9f61fb9d7ef82053463063654c5c286"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/class_concentration_diagnostic.json",
+          "sha256": "259b2b9a5b60105839a08dacefeee2fd1ab7fc8980d21c417b2d00dc67884dbf"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/input_diagnostic_summary.json",
+          "sha256": "3826a78e9919f1b0b6122277e92b594e51ecfa6d46d9fa8ed12f52c310ae81ff"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/frozen_assets.json",
+          "sha256": "805a5edfb1292972dc6906cae5dde9386b0564061b158e73ee0d7fab0ccbefde"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/cross_year_training_overlap.json",
+          "sha256": "db4b401d0763747ca3615c279325a029e6b18070819db4d09e7eb93ae71b6295"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/quality/final_pytest.log",
+          "sha256": "21028ad9e810ff22659a29093381c8f0eaa59a94522a155f37e108c8b4c9a13a"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/visualization_inputs/real_pan_input_report.pdf",
+          "sha256": "4c3e3b2bfba271fda1dcbb8f704920c3d49522c7d859b63b1abc80e5133d0efd"
+        },
+        {
+          "path": "src/xuannv_embedding/data_process/materialize.py",
+          "sha256": "d611edb52416031b24fa0b54eb6b749fa286b2e4c15b52c0efa78e31f333efc4"
+        },
+        {
+          "path": "src/xuannv_embedding/data_process/stac_pc.py",
+          "sha256": "26c9d26f73426aa1b09c5bde84e39b52c2abe028a7b18286c30f097010956a79"
+        },
+        {
+          "path": "src/xuannv_embedding/data_process/annual_quality.py",
+          "sha256": "c0d1a0e039455dd9dd554097712db5647b6e02b5cd4a1e796fe27fa1fd2e949d"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/figures/baseline_and_class_uncertainty.pdf",
+          "sha256": "bddfcc4c3176ef02c12c5addef76ec82008a707d74fd7c67af7e53ca5b17715b"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/figures/baseline_and_class_uncertainty.json",
+          "sha256": "97fc9d7908aeaf9daa8a4274b35f9764d1d08dae2cdddf1601f4db7c12f3e30e"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/quality/summary.json",
+          "sha256": "7850ffa2bea972292af7947ce46e24d0526bfdc2f12b8063569e46c1ddd67350"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/conditional_followup_protocol.json",
+          "sha256": "bcabf8a1ec080599ac9c52df6ccdf9e1247c29be5718e7c091b456b93a0170aa"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/resolution_replication_protocol.json",
+          "sha256": "354b816d2ea9b0097c4aa6c23c8c66fb7adfa0a01f3c0d50f4977277209bf7c3"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/gradient_diagnostic_scope.json",
+          "sha256": "cdd6b3660e422b2de9776e767f7b016ee9a246ea1f4c027147f0009e0e50f03e"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ema_periodic_checkpoint_audit.json",
+          "sha256": "142a6d75a36b2898412d7fa3a258bd6568cdd187da20412d33b0659fd3de1914"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/input_support_preflight.json",
+          "sha256": "ba5da26c6ca3273cfce7e7b8256bc2c9f8e5c418cae939de27c399ed88e4cf96"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/training_costs.json",
+          "sha256": "3743eb2f5eba3908a9ee6fe135e4e569d13d74fa3fe928cc3bc72bf085db140b"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/primary_development_summary.json",
+          "sha256": "ead3b1e5c030fec9391a9602f98d20f95317333b9dad38a1d492681ee71c6182"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/fine_composite_confidence.json",
+          "sha256": "38b1e932abeccb249487b3ab9ca7eacf38e547415346e63d47600e51b8d8f335"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/conditional_followup_decision.json",
+          "sha256": "0ff97ab41ee69e0c865822c45a9cc8024db351aca77cb14db792a6752c3ec4a3"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/adaptive_both_hr3/protocol.json",
+          "sha256": "5669c6dbabfb607f18d07e83a9e11233629b59494c281ba945f247a81a265f17"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/figures/resolution_seed_robustness.pdf",
+          "sha256": "7f46f7140fbef52fda255c834c12c99ab2a0de3885f7a11fce740c8e59a073ba"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/figures/resolution_seed_robustness.json",
+          "sha256": "9bd3d734204faee2e3e7c663af1cd5dd81aa0d6d01e281b80cdc57af72f2f90d"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/geometry_diagnostic.json",
+          "sha256": "7b26b4fdc00738a080b7687570e9992c6dcdc1e040dcdeacb62c4fc360dc51ac"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/geometry_diagnostic.py",
+          "sha256": "0d1ef716f1166fe617a8e85a7266669c9cb147d30556b2553ef904e9f323c0f5"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/geographic_information_audit.json",
+          "sha256": "9a511f97506ebcec1aabb840b1bb92c4006d5be5846e9546193fb6bb216ed230"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/observation_budget_audit.json",
+          "sha256": "697a4a57e17ffd3b8ee701f08b8d0b01a15fc88f76bb70ad2f9896b9c3dad776"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/robustness_protocol.json",
+          "sha256": "5a91789e9c40060f0daced96898c592690d610ce2347e8f61ae3c5f1b6ddf1c5"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/post_search_coordinator.py",
+          "sha256": "623160a1c030d0e35ebed8830c9799544b2f4ad92dac60d9786b647a3dee1f45"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/qualitative_selected.py",
+          "sha256": "5d2859f41f63b1e188746d88721d1997b4d77a29c91dc58f9f581519e7c99b6c"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/final_metrics.py",
+          "sha256": "a37d34d50ee3c950f1597e5caf1a2baaf5aa59706ce6ec9e7cf8fc2d19e8af9c"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/bottleneck_noise_diagnostic.json",
+          "sha256": "e58ce9199121b3c4fe1c74b5e8057db0dd1f6440c98213009f78f971fe690671"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/spectral_contract_spotcheck.json",
+          "sha256": "278fb07d1a015109ab20cc04cd6a908b4e8472b304855a0d5eef37b97e47c81a"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/literature_review.json",
+          "sha256": "ed097d723eaa04457d68c86bc1da4ba89b2789502a36ca788427484051a3281f"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/full_probe_replication_protocol.json",
+          "sha256": "96d0b7409894eba727426d1f46106536f134eaa9b079733b48733cc9f80c4610"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/adaptive_followup_decision.json",
+          "sha256": "3eba1ff7c59d5b896c55067773e47381bd7eb450c917e1c5f45a39365f9c542f"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/evaluation/comparison_control.json",
+          "sha256": "5623b8847df873d8709a448f474704fba1e6a047b04b33f842ff3a28c5074c71"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/followup_hr3/plan.json",
+          "sha256": "cdfaacbc2e960a92cfb9b063174c04a8a7cbe3e26b3e0b73655876d41e093fd6"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/followup_hr3/status.json",
+          "sha256": "8669e0c3a6cdcc412e4b9734d606fa95e50fecb7839f4d1ba0abd784ec0be413"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/pretraining_block_and_distance_audit.json",
+          "sha256": "ef2151e854c5c862df66f3e0580ba2c843b586da8ff22c594d1f0c9f5c16a65f"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/geographic_distance_audit.py",
+          "sha256": "40cc1d279039127ba908e96b1397b8ca2881d74fd2b5daadc8fd9ff0afb95d44"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/probe_robustness_summary.py",
+          "sha256": "3ca507fb738cabe6527025ce928a9c8e0034af4d6cfb97d031bf35c302ef3f6e"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ema_cuda_resume_protocol.json",
+          "sha256": "8fafda536b0e6219d692ed3023036be78a759ec39d7d5e49ed2050436708ae7c"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/selection.json",
+          "sha256": "4fc65fbe3e4b37bdef58ed42ea3295126150a36f76cc4c9563c774356aa4f50a"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/selection_plan_final.json",
+          "sha256": "883d678407c0686ec838eca67d6a5a9112fc23a3d6320f04011d20cc232e3a97"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/adaptive_both_hr3/plan.json",
+          "sha256": "293119a89b37e6e407ce80f66014ec7722f4bd87214ce9be7f93a0e789c91e7a"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/adaptive_both_hr3/status.json",
+          "sha256": "8d70a5ca724ce9f24e83db494c36cb68b95c55fda0cecb0aca6434e3d665763c"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/qualitative/selected_metadata.json",
+          "sha256": "f616039bf2ce5846a0d2d11af83ab30920aec1394ae3822ab99cbab6ba7330b2"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/qualitative/selected_logits.npz",
+          "sha256": "b6c498d06a51d034513bb511066c1d3d49625c2b4aac844202e7f760e8b0345d"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/qualitative/fixed_case_selected.pdf",
+          "sha256": "3f327ca65cafa8095ddc2caa68d207f04d4b7c097aa7f269643261f52c177671"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/qualitative/fixed_case_selected.png",
+          "sha256": "45500cfb5b0e78e6cab11ed1a30db8e72bea89093d0245e4708149d35e5c7fc0"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/run_plan.json",
+          "sha256": "7a84911103e75be5a14956bd1f5772a4923ba2f046408d56ce6957600b661bc2"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/post_search_status.json",
+          "sha256": "33883e4eb04759f18876f6e13aa6dd903398f93cec17a604bfa71b20b5840a29"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/probe_robustness_summary.json",
+          "sha256": "c7c4f5acdfb41e2201038bda4a0bcd3cb1c48a7f5bf295665d891bde499d694f"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/summary.json",
+          "sha256": "1848f00cd64975af85c443a5367bbc950c40b1cc3a0153a9c750eb9059e793d2"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/evaluation/comparison_original.json",
+          "sha256": "b7abfea39a329f8ac605f6116f24c0b3f3debe8dc52ea96edaadffbe4cf316b1"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/confirmation/evaluation/comparison_control.json",
+          "sha256": "6072b25ac8f7ec23c13e4aecc5f680af41b30f53e5cd95bf26930ba86eb37715"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/figures/semantic_fine_tradeoff.pdf",
+          "sha256": "794ce7845f7259f50561e603c6300d37916ead4083ffde037d32f80b4d49c61b"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/figures/semantic_fine_tradeoff.json",
+          "sha256": "91c34ac02e46c19412bc3f787ea34e1de64390aecab7551e010360c35eb29bbc"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/plot_tradeoff.py",
+          "sha256": "c607c46352617c62734f5461f726b740fe5cdd7bc0291c28fee6c103053c62bd"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/figures/spatial_confirmation.pdf",
+          "sha256": "6abb0214e9540cf0867b8f5afa8f5bf06566de7a7c6af4bcee923d02b5562313"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/figures/spatial_confirmation.json",
+          "sha256": "6a08cd0c8a9e916b9b1bdfe8b50b570d4154e8f51d944e7360c60b56b4065745"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/plot_confirmation.py",
+          "sha256": "f889071497b617e480b13abaf50228b888b50c18c9a55215b7709b082a8c39ba"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ema_cuda_resume_waiter.py",
+          "sha256": "f0b83faf0463ffcf0a7d75e49030d4be1b9e7e737aa55e84d0c549e27b915cdd"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/control/config.yaml",
+          "sha256": "dc40adf11783c22be6a09c1fb221aab05b03c278b8d8f8c857a0caf1b9bc5281"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/control/model.pt",
+          "sha256": "033005598ed5c8aa0b2243edc6d659747066224f6156f442da0a480607ab808d"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/control/train.log",
+          "sha256": "5bdbac3b46f7def7935013628f12f1effe4f7f71b76ac71476998aaf1e92a935"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/A_context/config.yaml",
+          "sha256": "168112cc497e25de791cda261d53f4750af5716a1cf5cce78253124f873078a9"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/A_context/model.pt",
+          "sha256": "99eaaada3d817667d642fe8eb0c7a7b3bc3aae5ee27ec364fa0b07c696dcfed0"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/A_context/train.log",
+          "sha256": "9c64598f5784594ef86a95682f5f832391486024ea356a1c4b533b065c0a95ff"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible0/config.yaml",
+          "sha256": "ce0a32934a5e9247e08348a76bb2bdfe4554a179bc82e48c31226e478315057e"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible0/model.pt",
+          "sha256": "cf7da571cc30e4a09d0ef8ddfcebb74f4f7236469d3e95ea4060ab3cee6cbe5d"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible0/train.log",
+          "sha256": "f95b3cc9a6d53827f8f7b6587b05626b6c92b3c2b5dbbf9a40eb25008956283f"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible01/config.yaml",
+          "sha256": "4f8b5217f10c3bcbc8c4d247b6ee8800c94e8ac0fcb1c21acd0f17272b3cbf6a"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible01/model.pt",
+          "sha256": "9fb6565137ed4c63b1d568963c46e357e15bfde455059db9729765a02e6e3490"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible01/train.log",
+          "sha256": "0e8c52f0d196d7d72cf23ee16437f7e90668f16bfd59e48b986d144c16ae8332"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible03/config.yaml",
+          "sha256": "72579be1db46dec0155f30e5154d701583d8fe47bcfd61e7aee33d6b6ba3d80f"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible03/model.pt",
+          "sha256": "f1ef268e4da264122e76ba3cf3ef635b0a0451681797ffca92ad99579af2c415"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/AB_visible03/train.log",
+          "sha256": "34c077ff1d0148ff630c48241b590d37bd6a59003ded739787b4d65fc5a08a9d"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_teacher/config.yaml",
+          "sha256": "33aa3ebad5da891b128fac4f777ed030eb0bad1d0b266a1028425521842d7bbf"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_teacher/model.pt",
+          "sha256": "e69ac6f73e7d0aa66f0cf165d1cdc7fe99f9e5f18fb34aa0e5d765eee689c61e"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_teacher/train.log",
+          "sha256": "41db34d914501b01eda4e8c3ee0bfbdc420f844df5f4589964ae1e3d16533f2a"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_views/config.yaml",
+          "sha256": "6a66137de776b667a3ade9eddf699bec6651d5583265ccf61c7da47a3846e5b2"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_views/model.pt",
+          "sha256": "c2f60fe6617f8330e6cbcea5bf12736f9268c9eb3b62613a28c40508e92fc0e8"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_views/train.log",
+          "sha256": "538f335adec265149bdac36ccb124b94781c48be582a5c505d51274e52300431"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_both/config.yaml",
+          "sha256": "8ed0250cdd0d62309e3f4dd7b5387c258b6960b4fec2cbb216bf08a533121109"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_both/model.pt",
+          "sha256": "15c252b4a8adcae68cf0b44d8fd0d65a26df2fd8d37f53417240e70991fc300c"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ABC_both/train.log",
+          "sha256": "4e97b4c3fb6504892d7f673fd4a296b8093b0a3943ba701e88d0c0acf4e2adb1"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/followup_hr3/AB_visible03_hr3/config.yaml",
+          "sha256": "3c87eb428f2a904c506d7721d467b4cfd449c99ea85550e8f4996d652042d753"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/followup_hr3/AB_visible03_hr3/model.pt",
+          "sha256": "67046ddf0283bdcacfd03269753e45920681c782c487e54556a78e14c4254e03"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/followup_hr3/AB_visible03_hr3/train.log",
+          "sha256": "243677cc9ebe3d3ff4c048260c57ac30c33dff4e8b8c7f644571bd07e5464215"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/followup_hr3/ABC_teacher_visible03_hr3/config.yaml",
+          "sha256": "3778b8dce8f377f4a9f4d80c23e1f275b34ec67f80d2ac17de59973a05165061"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/followup_hr3/ABC_teacher_visible03_hr3/model.pt",
+          "sha256": "bed6e7ffc8bd61fc0eac358e8a5e1b797a4a0a05f39501cee370ea077e454b54"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/followup_hr3/ABC_teacher_visible03_hr3/train.log",
+          "sha256": "b316c2a0956d9f72d61adfcba9576709c0bdc0b9b5a756d9ec9ef11c2f28f5eb"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/adaptive_both_hr3/ABC_both_hr3/config.yaml",
+          "sha256": "be67f241da364757a1a63b03a5c542c190dfa8fc7474adc71ed65b4566789c7e"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/adaptive_both_hr3/ABC_both_hr3/model.pt",
+          "sha256": "1ef08bd8874125fdc1c5d340630cd483242083a574aaec50512fdeefec40cef5"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/adaptive_both_hr3/ABC_both_hr3/train.log",
+          "sha256": "73c7bdc844d53eec4e2d77b5458e9bceaa723aac387fd23c80189f56b1cebdd1"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/control/config.yaml",
+          "sha256": "3259f48e746350fa23c76b1edfac405f6b3040d58e4b12f445cba167b320522f"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/control/model.pt",
+          "sha256": "5521dbe15d822d7be330fe59fea9b650f908b76c3c1553103225a56fad47c558"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/control/train.log",
+          "sha256": "c9810a8ebdb39d238cbeeb15ca721d6c44fc05b57a5c9e037e7aaa1b3571bb7b"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/AB_visible01/config.yaml",
+          "sha256": "1eebae20c5ead914133dcd0b338c26bdf9212012edb2cf254791822c6d5662d1"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/AB_visible01/model.pt",
+          "sha256": "8699f2eaf90d00f44225cb33fa8d34d9ad6a57edc655d54b4f9fa7647f6b5f22"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/AB_visible01/train.log",
+          "sha256": "d0c2bc5fd0cd096b3248dd9e355cf634dc9cb05e7bb7b6f28d5d772e934446be"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/ABC_both/config.yaml",
+          "sha256": "c8486db4ce27353bf5238dfe1f437585105cbda37ac07c91c9b59d2d339f2b87"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/ABC_both/model.pt",
+          "sha256": "ab356c4df3a298826d17c22c723160fd5f9f7bcfe10a1d86820bbaa85724a9be"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/ABC_both/train.log",
+          "sha256": "44e661bc9d25fd8481ef84c2198b53266ec2793f67ab9295e31424c1299e00d5"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/final_campaign_metrics.json",
+          "sha256": "7f2eade15e92db2c5ff4895a1f663e2150c633c73762aeb2593abce407cabcb6"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/finalize_evidence.py",
+          "sha256": "024af5830a2a8dda3c5d2ff1d6943ec1a66bfc26efd03b039388db41f709e051"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed_summary.py",
+          "sha256": "101b5caa3e69cce92186946267ac39812d326180a2cd0be5ad2ff0921f1bdc46"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed_summary.json",
+          "sha256": "6ff9c51aab9b3128435a95852583a707bd0091a915941183a79febf8d7b28fac"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/quality/final_black.log",
+          "sha256": "c21d425fdb2ba102979f747935476fe86bc7a9817955a22aa313f9dca4cf2178"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/quality/final_ruff.log",
+          "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/quality/final_repository_policy.log",
+          "sha256": "0bf1f6dbbdce794d76a0c82dadc9af3e2e9b2afcc5ef1a0e5ee2ef46e1a3e163"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/quality/final_report_build.log",
+          "sha256": "7abbc1aa8c479741cebde304e6d2283a10214960071305ec79be063fc74e906b"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/plan.json",
+          "sha256": "8f7126f33f52442cccbabe81d95095af53828aea556980fe2d57434438d9872c"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/selection_plan.json",
+          "sha256": "287337ad19c471a3eb8be0a0f7282d99ae8c2233720ac14e883db10b9acd63ae"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/status.json",
+          "sha256": "65bff8d5ccdf0582567d431d7eb115d2a52b81303f9e4dac41aa302d9bbc9ac0"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/evaluation/completed.json",
+          "sha256": "7955ee9cd92821b331e71b333c11e7ec5a28530e9f2de7ad9db714d732137f32"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/evaluation/comparison_original.json",
+          "sha256": "a8f5cd14ee126a36ffd29b050e9d8bc38ee35c8103d69fe6167e25a68d88979d"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/continuation_seed17/evaluation/comparison_control.json",
+          "sha256": "d718c27b49ca1ea6e5952430830e776663451a240fa226838a9c108716d35b76"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ema_cuda_resume/result.json",
+          "sha256": "575a1c1e1bcfc53aa6690f085d076d8b7a71f89d13c9303122b0e02572ede335"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ema_cuda_resume/status.json",
+          "sha256": "f62526f06db05c46a98e8430ea21696d6664e110472297e672131d5d31e63a0f"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ema_cuda_resume/train.log",
+          "sha256": "769a1f6132175253086a67d273922c34e806037277e3940f935c75ff9e71cd56"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/ema_cuda_resume/smoke.pt",
+          "sha256": "f2c453631f677af2e54024632185cead3a6073b691964d1d187f8fb84981da40"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/baselines/original_exact/config.yaml",
+          "sha256": "d49c4c21c300fa685fa2527b39e87dfcac85fd2165098e5c29befe1c4ae7646a"
+        },
+        {
+          "path": "outputs/annual_abc/20261015_exact/baselines/original_exact/model.pt",
+          "sha256": "eae1ead639e2a3c1dfaa7914545583314b90612d051c8dca488c1fb585b0acc1"
+        }
+      ],
+      "diagnostic_snapshot_git": "539a376820eb653fe9544e84649d4b555151fb6d",
+      "diagnostic_source_code_sha256": "988d8cbc1b5d6ef2962b9349c216101bae7b866ce1157feda0cc19ef41ed5b9c",
+      "confirmation_snapshot_git": "b10018b",
+      "confirmation_source_code_sha256": "f5268c3e56367e0d94ac740364929498a055ba530508274e1d4e8841b793ab32",
+      "quality_git": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
+      "quality_source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50",
+      "selection": {
+        "selected": "original_exact",
+        "kind": "preprocessing_only",
+        "selection_sha256": "4fc65fbe3e4b37bdef58ed42ea3295126150a36f76cc4c9563c774356aa4f50a",
+        "utc": "2026-10-15T17:48:57.507536+00:00",
+        "note": "Locked once; confirmation and secondary seeds qualify claims, never re-rank."
+      },
+      "selection_git": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
+      "selection_source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50"
     }
   },
   "verified_metrics": {
@@ -300,26 +894,189 @@
     },
     "loader_samples_read": 600,
     "training_ready": true,
-    "annual_model_ready": true,
-    "scientific_quality_validated": false
+    "annual_model_ready": false,
+    "scientific_quality_validated": false,
+    "annual_abc_selection": {
+      "selected": "original_exact",
+      "preprocessing_only": true,
+      "new_optimizer_updates": 0,
+      "no_confirmed_balanced_accuracy_upgrade": true
+    },
+    "annual_abc": {
+      "candidate_training_arms": 11,
+      "updates_per_candidate": 2048,
+      "sample_exposures_per_candidate": 65536,
+      "nonfinite_gradient_steps_all_candidates": 0,
+      "selection": "original_exact",
+      "selection_sha256": "4fc65fbe3e4b37bdef58ed42ea3295126150a36f76cc4c9563c774356aa4f50a",
+      "additional_updates_selected": 0,
+      "confirmed_balanced_accuracy_upgrade": false,
+      "head_seed_offsets": [
+        0,
+        100,
+        200
+      ],
+      "native_model_head_results": 30,
+      "continuation_seed17_arms": [
+        "control",
+        "AB_visible01",
+        "ABC_both"
+      ],
+      "continuation_seed_scope": "Same original pretrained checkpoint and sample IDs; not independent pretraining.",
+      "training_cost": {
+        "primary_training_GPU_hours": 31.033565415889022,
+        "extension_training_GPU_hours": 13.515823625537257,
+        "replication_training_GPU_hours": 12.17614182330668,
+        "note": "Logged training-loop wall time times8GPUs. Excludes process/model initialization, evaluation, diagnostics, discarded legacy runs and baseline200epochpretraining."
+      },
+      "confirmation": {
+        "positions": 80,
+        "blocks": 30,
+        "road_positions": 44,
+        "road_blocks": 23,
+        "water_positions": 10,
+        "water_blocks": 6,
+        "building_positions": 1,
+        "building_accuracy_claim_supported": false
+      },
+      "real_CUDA_EMA_resume": {
+        "passed": true,
+        "scope": "Real raster8GPU two-update state-continuity smoke, not a complete epoch or bitwise trajectory reproduction.",
+        "source_sha256": "d3214a7bd6e3e74222cb74f7b794de42aee311b9259effc43d91ec6122e169c1",
+        "output_sha256": "f2c453631f677af2e54024632185cead3a6073b691964d1d187f8fb84981da40",
+        "config_sha256": "6a66137de776b667a3ade9eddf699bec6651d5583265ccf61c7da47a3846e5b2",
+        "git_sha": "147f8ded304d1065a3867e505a73ab4c8c39e350",
+        "source_code_sha256": "fbc65ee516b10295875206433f45703cf51f57e9f9b19b12673f1a6c546851a0",
+        "world_size": 8,
+        "source_epoch_zero_indexed": 1,
+        "output_epoch_marker_zero_indexed": 2,
+        "additional_optimizer_updates": 2,
+        "additional_sample_exposures": 64,
+        "Adam_step_before_after": [
+          512,
+          514
+        ],
+        "EMA_updates_before_after": [
+          512,
+          514
+        ],
+        "EMA_state_keys": 426,
+        "all_checked_tensors_finite": true,
+        "student_projection_max_change": 5.0555914640426636e-05,
+        "EMA_projection_max_change": 4.997476935386658e-06,
+        "nonfinite_gradient_steps": 0,
+        "training_loop_wall_seconds": 30.637373922392726,
+        "subprocess_wall_seconds": 74.01317637227476,
+        "limitation": "Current checkpoint schema does not record RNG state. This test does not assert identical stochastic continuation; epoch marker after steps limit is not a complete epoch."
+      }
+    }
   },
   "current_source_sha256": {
-    "src/xuannv_embedding/models/annual.py": "709f5f80c5fe3577e19a26f64db8bfc13210cb52436af7e7f50607dbd0b97dc6",
-    "src/xuannv_embedding/training/annual.py": "0414aa4c1250ac46ab0078854dc9cb783a1f25c095b9f9b2aaaacd202d5eab18",
-    "src/xuannv_embedding/training/annual_data.py": "c24df17b6140243e2f011385c9cdc9bc0805b3e9a835bc4d75b7c9e9d4e2d0bf",
+    "src/xuannv_embedding/models/annual.py": "87ef1b2df04f748f404670ae7597998379853d6d09f0933f0f24afd735eeefa5",
+    "src/xuannv_embedding/training/annual.py": "b34cc54fb72e97e07fad142d7603caae216c310a8cf8f70ad940ef0ee458ac48",
+    "src/xuannv_embedding/training/annual_data.py": "c863804e126b9b49e064ee4153befc73ee90a063a4a435fda717be28b4f19932",
     "src/xuannv_embedding/export/annual.py": "cdd35df9cc16b9f922c175422a63458c09abcf98ad22c848916d0d27e263849b",
-    "configs/production/annual5m_v1.yaml": "4f4f680a8843493d57eacf8a939b3301156cba1e6ff0eea068d6c0373d62666d",
-    "docs/xuannv_annual5m_report.tex": "c048d2027a1d40a46d5cc409eb28b664c48a2a8d924e84f140982aba5aefe9eb"
+    "configs/production/annual5m_v1.yaml": "04e1fe066625a31e6e86497b0c58850835ae0db5ed2cafbac767a060d1a3e77f",
+    "docs/xuannv_annual5m_report.tex": "9472a5f6652c48dc6b587cc9b4afbfaa76e7b3deb9d09bac2a40ea51ec1967e6",
+    "src/xuannv_embedding/__init__.py": "6d0af358c736e931c7fc052318b50279e2a1b4751c99e3353ce6ddd276b4eb61",
+    "src/xuannv_embedding/config.py": "833b601ce42b984ecb1425da07f70afb44cedbdaf71228b545e42483448cdd98",
+    "src/xuannv_embedding/cli/__init__.py": "c67dbc764a7c61514a855bf4e86b9a1895dcdb113f44c6c556afcb1b7ad6bc2e",
+    "src/xuannv_embedding/cli/__main__.py": "df3e5a28c8aee974d2fc802c48372c015ba8558bc97768122d82822dee95405f",
+    "src/xuannv_embedding/data/__init__.py": "6645bed6d50e1f1c27c08ac6565dba22ac11f016db71ddebc893c5e9461766fe",
+    "src/xuannv_embedding/data/annual_dataset.py": "265abfe0256188581baa6959c819ef13a2d30f9e2ff0c7e5a3dde8a6c3a510f0",
+    "src/xuannv_embedding/data/contracts.py": "ad184ac6ec41926a75eb780c1db994618300f6d1ce31e7968193a5e4afb4a163",
+    "src/xuannv_embedding/data/raster_dataset.py": "a943af01678981dece3b53533cca00285fdcfae88d1579af981e84af8802e15f",
+    "src/xuannv_embedding/data_process/__init__.py": "90dfbf6a8ab2c82ab3f2ca3b541ffdca4c683fd98b7d0f16de8e94f1400037aa",
+    "src/xuannv_embedding/data_process/annual_quality.py": "c0d1a0e039455dd9dd554097712db5647b6e02b5cd4a1e796fe27fa1fd2e949d",
+    "src/xuannv_embedding/data_process/cli.py": "ebd0053c26dd247cb143f49269f7144b77644417dae444ef1f6ce9b27e4f4dc0",
+    "src/xuannv_embedding/data_process/cloud_quality.py": "24f3a9e381ffcee93fcaf773993dc09a2bba130ebb73bad6cba74364df499b94",
+    "src/xuannv_embedding/data_process/confirmation_osm.py": "22b39997d08fed2ad4badab7f1b43fb1ee9b766b8b1e6da63d6831c94d873579",
+    "src/xuannv_embedding/data_process/finalize_catalog.py": "bbcf536e028edce52beb1ded03e779a3dae19764bafd05b290dd032fbbe40329",
+    "src/xuannv_embedding/data_process/grid.py": "41f3a21c2ea1eda2071f8d175bb84f87acb7784c8f001901e5cca3a576dde07a",
+    "src/xuannv_embedding/data_process/highres_catalog.py": "f9db00497b36c4e9e2a4c3a0653e28054f246f90681d223260fbc0f898bf2019",
+    "src/xuannv_embedding/data_process/highres_cloud.py": "db4484eb5c4928b224bd43cf9ad99f4fad28a50370e35e58e2d9454558f88c80",
+    "src/xuannv_embedding/data_process/image_quality.py": "c23eb66238290a4ffb332ecd609683d78e821a56d153a4e4eba7a87ed0f01c7a",
+    "src/xuannv_embedding/data_process/inventory.py": "77dfec103618c472a8446d6ed2f3d5b08d0b5c81c6c67bbe55901889510232b0",
+    "src/xuannv_embedding/data_process/materialize.py": "d611edb52416031b24fa0b54eb6b749fa286b2e4c15b52c0efa78e31f333efc4",
+    "src/xuannv_embedding/data_process/observation_raster.py": "c1d39f159b33269cfd12fa3f763a297f68f1d692ced7ca7dae6c45a56435adcf",
+    "src/xuannv_embedding/data_process/osm.py": "4a159e6f1bf7866d805a6e3d32a02873fd9bd78a8471121c06cf0ceef94ac580",
+    "src/xuannv_embedding/data_process/p0.py": "a414e1224a95d0930879ce6721246d88357d76d131a3357ce03535afb4ebad07",
+    "src/xuannv_embedding/data_process/pair_observations.py": "2609b794c0a16f858692b185f98b23ef6868093e777b2ee9d01fb20f39edc325",
+    "src/xuannv_embedding/data_process/pan_annual.py": "5f2d4b2269ed40f260bc932d1be975c917a3ea0afe54dcb02011bb930ef77f63",
+    "src/xuannv_embedding/data_process/partition.py": "fe8c8ac043b2b254f07b2661349f50b132c04608bee85d1eba79982b1d0273ec",
+    "src/xuannv_embedding/data_process/pilot_cache.py": "45c71e79957e5c8ad0f55854774c825a6c087db7c30b9c449c71d5992c9b571a",
+    "src/xuannv_embedding/data_process/prepare_observations.py": "e446f07fdd99a1cdacb0bfe4944a1d1602bb44e9c71db2ff9847b94ef54dd4c9",
+    "src/xuannv_embedding/data_process/preprocess.py": "a03858647f43ac848a631569cd4875bc45448e827f4af85773722aabde0255b6",
+    "src/xuannv_embedding/data_process/qgis.py": "35c00d0ac5f33a0f0e16fa8354c32698c8f0cdc26cda770544be723a51a56f21",
+    "src/xuannv_embedding/data_process/registry.py": "31adc9732761eab1aa4b5d096eebfea651dcf49d536075b677aa4a21e542ed89",
+    "src/xuannv_embedding/data_process/release_quality.py": "1cc1a3182a9bf699b90febbad26fa69a731f5be175c2b08cc6e2658299d6813b",
+    "src/xuannv_embedding/data_process/reorder.py": "2b6b1b5ffb6e0a428d27f9373ef1e79c50d2d0ba8fa5941a8383034054438745",
+    "src/xuannv_embedding/data_process/sampling.py": "75904cbe5eca5b140b296d04cb9c853f99dedd552a42a65900ed45ccce03b56a",
+    "src/xuannv_embedding/data_process/stac_cdse.py": "46f58b1921f7d77b84fe513041a7179dd2aad91a55afd86149bf89fad1278f51",
+    "src/xuannv_embedding/data_process/stac_pc.py": "26c9d26f73426aa1b09c5bde84e39b52c2abe028a7b18286c30f097010956a79",
+    "src/xuannv_embedding/data_process/statistics.py": "a260b48e57d1cfb81c6bb5479bdd78c79b065eedf697c86d95361f60348b0a78",
+    "src/xuannv_embedding/downstream/__init__.py": "bfff155a3dc6e09ed43261e7f0fee8c6e04cafd1ff673540177af75e7d42e48f",
+    "src/xuannv_embedding/downstream/annual_ablation.py": "91d2671559a0c6ae31fa3526fa24ef3555bdd8e0bc92299c2ed27ab92ffd2832",
+    "src/xuannv_embedding/downstream/heads.py": "8c19b771879268e19a90c63046134869a2782112dd4c0168d401642a5c330603",
+    "src/xuannv_embedding/downstream/metrics.py": "5bf873c03719d3aeb59e99457847ed92f3a8235e17c797c3196683f078af22c9",
+    "src/xuannv_embedding/downstream/protocol.py": "9b7f97d763e6b2dbd797f100614fcfe7b20ec43d88ea063da2f84cd575ab186f",
+    "src/xuannv_embedding/downstream/workflow.py": "45479760c848a6a0e54a6c7b4e6aad9f38b51624eaadcdd5f86f662a0a361544",
+    "src/xuannv_embedding/export/__init__.py": "cf50afbc4c8c03b6921d0f10bccb67ec4e9cbc8a659b4aa0a7c14e2cf59b8a8e",
+    "src/xuannv_embedding/export/cli.py": "07a553de189aa27e972928de12663626f9c60507dd0ac38da52dd38d906e74a7",
+    "src/xuannv_embedding/export/embedding.py": "eedd332943a456306808f497b7b7725d203696a8dccb4317139c6a84d0fefaa3",
+    "src/xuannv_embedding/export/validation.py": "f14a4d3c813fb679d7bc01d19bc949b5f29448dbd7105673894f568e485f8ddb",
+    "src/xuannv_embedding/models/__init__.py": "b13d70543094c4d706690717e51347369a0fa4d230941a19e22e3abee89e90cd",
+    "src/xuannv_embedding/models/blocks.py": "259077d3a8a07f0e34435df4b2caac92dad99b42994c672a040f2a1e97c590d6",
+    "src/xuannv_embedding/models/bottleneck.py": "979ce898fff48ffaadd9bd952ea7f430ad3cabe2ac28d12a3646a2b3c536d2e1",
+    "src/xuannv_embedding/models/decoders.py": "610d3440c065e66c422a787a4046b640d288a67b050e5338d74215b0b9564c51",
+    "src/xuannv_embedding/models/highres_fusion.py": "680d277be5a6d843bb81d3bd3409d364cf3458268d1394412ad6a60007696b30",
+    "src/xuannv_embedding/models/model.py": "78a37da499542429673061a386e7914f132bc7c51827a56b69894903dece764a",
+    "src/xuannv_embedding/models/observation_fusion.py": "03241a4f0eb56069194f7eb43a1f36c0d8b75c5516cf79eed353c3722d1173b3",
+    "src/xuannv_embedding/models/sensor_encoders.py": "180d5768382c1485a47319db65734418eacaffc140c3de09b59154609e1f54aa",
+    "src/xuannv_embedding/models/time_encoding.py": "b3f40c5102722f50091633f375d5a45f09d0a635fa03a4df4d4611f0722de40d",
+    "src/xuannv_embedding/training/__init__.py": "3490f464594e1d0f98f86b4c69bb83baaa9d6b4efbca8b6db088b340c3b7eade",
+    "src/xuannv_embedding/training/annual_experiments.py": "f6916f829a4cf6342a0796dd4e0cf1ca4b74de2a294d775c4aa9c4f29381ee21",
+    "src/xuannv_embedding/training/checkpoint.py": "fcd54ab17fe8501fc751fd17dffbbd57ce9e1cde2902b6b24d853aea9d49e12b",
+    "src/xuannv_embedding/training/cli.py": "be221af44642e0848e68aaad10fade6ee0597747b3a0f044e60551823b018740",
+    "src/xuannv_embedding/training/compatibility.py": "0e6814910e79f7f62718e877741f3f4e7e53bef043e6fbe4c69486bf0e63b0c9",
+    "src/xuannv_embedding/training/distillation.py": "0a1ae177df36855867b5fe7fc386c1cea46425ccb85d96c8465676b282d0fa9c",
+    "src/xuannv_embedding/training/losses.py": "aa28b99f23e45d79e8a031dc92231e9a2f6ad20810eaa66e2c434421d74c2b4c",
+    "src/xuannv_embedding/training/masking.py": "755e8eec7dbe625a4b43bd17668388928e360cdf2ff821c1966f15dabd0a33b6",
+    "src/xuannv_embedding/training/optimizer.py": "4eeeb6283bd4aec06f903a6d9de91ab3bca344a7f40ce7d784a820ca45073ded",
+    "src/xuannv_embedding/training/p0_diagnostics.py": "d533bda30c5cf5f03c70855d816e3f9876cbb8bb42ba1fedb9275d1ec15c979d",
+    "src/xuannv_embedding/training/runtime.py": "0d571ccb05852220308a80431b6dd05074d02e046844fb964dffd8685cd97541",
+    "src/xuannv_embedding/utils/__init__.py": "2a3fe8b3b059aa5f2ba46912dec19c9198facf61a3c6c28c7cd6def37691d085",
+    "src/xuannv_embedding/utils/geo.py": "058b947625c725da99c93045c66634ca23c25733759bbba6658286d1582ecfbf",
+    "src/xuannv_embedding/utils/manifest.py": "69d84a9f982a4627ae53e58b13c05d2adce4cdfd60afe0dfdcf9daa51782d2b6",
+    "src/xuannv_embedding/utils/repository_policy.py": "c600fb5b48f511970137d7bdf5fc3367b94023d3690b57a7539cb1ed6545012f"
   },
   "loader_samples_read": 600,
   "build": {
-    "engine": "Tectonic 0.15.0",
+    "engine": "tectonic 0.15.0Tectonic 0.15.0",
     "binary_sha256": "4df19452c202c5bef9f7c7e4a01a3f2b9d5199f0a1f73b70b4fe1bffbc9837f6",
     "source": "https://github.com/tectonic-typesetting/tectonic/releases/tag/tectonic%400.15.0",
     "tex_bundle": "tlextras-2022.0r0",
-    "fonts": "Fandol via TeX bundle; embedded in PDF"
+    "fonts": "Fandol via TeX bundle; embedded in PDF",
+    "binary_path": "/home/heyuhang/.local/bin/tectonic"
   },
-  "targeted_tests_passed": 348,
-  "report_source_sha256": "c048d2027a1d40a46d5cc409eb28b664c48a2a8d924e84f140982aba5aefe9eb",
-  "report_pdf_sha256": "a6017f4fc5337113172c81dc6382b40e51bc075163342e92215244220dc1ffea"
+  "report_source_sha256": "9472a5f6652c48dc6b587cc9b4afbfaa76e7b3deb9d09bac2a40ea51ec1967e6",
+  "runtime_status": {
+    "annual_model_runtime_completed": true,
+    "two_200_epoch_runs_completed": true,
+    "note": "Runtime status is evidenced by training artifacts. The immutable data-release summary still has annual_model_ready=false.",
+    "annual_abc_completed": true,
+    "actual_CUDA_EMA_state_resume_completed": true
+  },
+  "rendered_report": {
+    "path": "docs/xuannv_annual5m_report.pdf",
+    "sha256": "ec151261b8f89542151ef2be143d5acc330da385caa3cce44d6d3f3130555df4",
+    "bytes": 8423427
+  },
+  "full_test_suite": {
+    "passed": 393,
+    "skipped": 2,
+    "seconds": 261.81,
+    "git_sha": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
+    "source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50"
+  }
 }
