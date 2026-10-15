@@ -10,7 +10,7 @@ from datetime import date
 import torch
 from torch import nn
 
-from xuannv_embedding.models.annual import masked_resample
+from xuannv_embedding.models.annual import masked_resample, visibility_coverage
 from xuannv_embedding.training.losses import batch_uniformity_loss, reconstruction_loss
 
 
@@ -61,7 +61,9 @@ def prepare_annual_batch(batch: dict, config, *, training: bool, generator=None)
             continue
         original_mask = batch["source_pixel_masks"][source].bool()
         validity_masks[source] = original_mask
-        _, coverage = masked_resample(visible, visible, tuple(values.shape[-2:]))
+        coverage = visibility_coverage(
+            visible, tuple(values.shape[-2:]), exact=config.model.annual_exact_mask_coverage
+        )
         keep = (coverage[:, 0] >= 1 - 1e-6)[:, None] & ~hidden_months[:, :, None, None]
         mask = original_mask & keep
         frames[source] = torch.where(mask[:, :, None], values, 0.0)
@@ -100,10 +102,10 @@ def prepare_annual_batch(batch: dict, config, *, training: bool, generator=None)
                 )
             quality = math.exp(-offset / 5.0)
             original_mask = item["mask"].bool()
-            _, coverage = masked_resample(
-                visible[sample_index : sample_index + 1],
+            coverage = visibility_coverage(
                 visible[sample_index : sample_index + 1],
                 tuple(item["values"].shape[-2:]),
+                exact=config.model.annual_exact_mask_coverage,
             )
             month_hidden = bool(hidden_months[sample_index, acquisition.month - 1])
             keep = (coverage[0, 0] >= 1 - 1e-6) & ~torch.tensor(month_hidden)

@@ -6,6 +6,34 @@ import pytest
 from xuannv_embedding.training.annual_experiments import coverage_stratum, stratified_indices
 
 
+def test_common_corrected_targets_do_not_change_the_legacy_model_input_policy():
+    from dataclasses import replace
+
+    import torch
+    from test_annual_model import annual_config, raw_batch
+
+    from xuannv_embedding.training.annual_experiments import prepare_evaluation_batch
+
+    legacy = annual_config()
+    legacy = replace(legacy, training=replace(legacy.training, highres_visible_weight=0.0))
+    exact = replace(legacy, model=replace(legacy.model, annual_exact_mask_coverage=True))
+    raw = raw_batch(32)
+    a = prepare_evaluation_batch(raw, legacy, 11, exact_targets=True)
+    b = prepare_evaluation_batch(raw, exact, 11, exact_targets=True)
+    for target_a, target_b in zip(a["highres_targets"][0], b["highres_targets"][0], strict=True):
+        for part in ["heldout", "visible"]:
+            assert torch.equal(
+                target_a["partitions"][part]["mask"], target_b["partitions"][part]["mask"]
+            )
+            assert torch.equal(
+                target_a["partitions"][part]["values"], target_b["partitions"][part]["values"]
+            )
+    assert any(
+        not torch.equal(x["mask"], y["mask"])
+        for x, y in zip(a["highres_observations"][0], b["highres_observations"][0], strict=True)
+    )
+
+
 def test_cluster_bootstrap_preserves_pairing_and_groups_adjacent_patches():
     import numpy as np
 

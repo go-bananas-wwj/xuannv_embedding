@@ -14,12 +14,15 @@ from xuannv_embedding.training.annual import prepare_annual_batch
 
 
 class AnnualBatchStream:
-    def __init__(self, config, loaders, *, max_steps, start_epoch, teacher_enabled):
+    def __init__(
+        self, config, loaders, *, max_steps, start_epoch, teacher_enabled, teacher_config=None
+    ):
         self.config = config
         self.loaders = loaders
         self.max_steps = max_steps
         self.epoch = start_epoch
         self.teacher_enabled = teacher_enabled
+        self.teacher_config = teacher_config or config
 
     def __iter__(self):
         rank = distributed.get_rank() if distributed.is_initialized() else 0
@@ -36,7 +39,9 @@ class AnnualBatchStream:
             for raw in loader:
                 batch = prepare_annual_batch(raw, self.config, training=True, generator=generator)
                 if self.teacher_enabled:
-                    batch["teacher_view"] = prepare_annual_batch(raw, self.config, training=False)
+                    batch["teacher_view"] = prepare_annual_batch(
+                        raw, self.teacher_config, training=False
+                    )
                 if self.config.training.view_consistency_weight > 0:
                     batch["consistency_view"] = prepare_annual_batch(
                         raw, self.config, training=True, generator=view_generator
@@ -78,7 +83,14 @@ def annual_dataset(config, dataset_config, *, max_records=None):
 
 
 def build_annual_stream(
-    config, *, distributed, max_records, max_steps, start_epoch, teacher_enabled
+    config,
+    *,
+    distributed,
+    max_records,
+    max_steps,
+    start_epoch,
+    teacher_enabled,
+    teacher_config=None,
 ):
     loaders = []
     for dataset_config in config.data.datasets:
@@ -112,4 +124,5 @@ def build_annual_stream(
         max_steps=max_steps,
         start_epoch=start_epoch,
         teacher_enabled=teacher_enabled,
+        teacher_config=teacher_config,
     )

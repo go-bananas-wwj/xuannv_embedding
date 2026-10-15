@@ -192,6 +192,7 @@ class ModelConfig:
     annual_backbone: Literal["stp", "conv"] = "stp"
     annual_fusion: Literal["residual", "concat"] = "residual"
     annual_context_pooling: bool = False
+    annual_exact_mask_coverage: bool = False
 
     @property
     def sensor_channels(self) -> dict[str, int]:
@@ -477,6 +478,7 @@ def _parse_model(value: Any) -> ModelConfig:
             "annual_backbone",
             "annual_fusion",
             "annual_context_pooling",
+            "annual_exact_mask_coverage",
         },
         required={"embed_dim", "num_months", "input_sources", "target_heads"},
     )
@@ -525,6 +527,9 @@ def _parse_model(value: Any) -> ModelConfig:
         annual_fusion=fusion,
         annual_context_pooling=_boolean(
             raw.get("annual_context_pooling", False), "model.annual_context_pooling"
+        ),
+        annual_exact_mask_coverage=_boolean(
+            raw.get("annual_exact_mask_coverage", False), "model.annual_exact_mask_coverage"
         ),
     )
 
@@ -873,6 +878,7 @@ def _validate_cross_contracts(
         raise ConfigError("training.view_consistency_ema_decay 必须小于 1")
     if model.architecture != "annual5m" and (
         model.annual_context_pooling
+        or model.annual_exact_mask_coverage
         or training.highres_visible_weight is not None
         or training.latent_prediction_pool_factors is not None
         or training.view_consistency_weight

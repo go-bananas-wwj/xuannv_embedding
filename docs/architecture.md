@@ -57,6 +57,13 @@ physical sources --source_map--> canonical slots
 版本的数值路径；完整输入下两条路径的推理结果一致。回归测试隔离块内部，验证主干与瓶颈梯度、
 目标值不可见及真实缺测回退。
 
+新训练还应启用 `model.annual_exact_mask_coverage: true`。地理可见性从 10m 投影到 2m 时，
+历史 Float32 面积权重的行和会偏离 1，配合 `1-1e-6` 阈值会误删完整可见 PAN 网格中
+约 48.56% 的像元。该开关用精确的整数网格包含关系投影可见性；非整数网格使用归一化的
+Float64 几何权重。它不改变特征面积聚合算子，也不增加模型参数。开关默认关闭以保留旧制品
+的输入路径；新旧输入策略须显式登记，不能静默混用。测试覆盖 128→640 完整支持、
+非整数网格面积守恒、真实 nodata 和遮挡值不可见性。
+
 `training.highres_visible_weight` 为显式的可见区域像素权重；留出区域的像素权重固定为 1。
 高分损失按两类区域的加权有效支持度归一化，再按观测与 source 聚合，最后乘既有的
 `highres_loss_weight`。训练同时报告 `highres_heldout_recon` 与 `highres_visible_recon`。
@@ -68,6 +75,8 @@ physical sources --source_map--> canonical slots
 月份合同必须一致。`training.latent_prediction_pool_factors: [2, 4, 8]` 在 5m 输出上生成
 10/20/40m 的有效支持加权目标，通过学生专用 1×1 predictor 比较余弦距离；教师固定且不运行
 重建 decoder。损失内的特征归一化不改变模型瓶颈合同。未指定尺度时保留旧的 8×8 目标。
+冻结教师视图按教师自己的配置准备，保留其输入预处理策略；修正学生 PAN 掩膜不会悄悄改变
+既有教师函数。两者仍使用同一年度、位置和训练统计量。
 
 `training.view_consistency_weight` 默认为 0；开启后，同一年度观测生成第二个独立遮挡视图，
 以学生模型的 EMA 提供停止梯度的多尺度目标。两视图使用独立随机数流，增加第二视图不会改变

@@ -14,6 +14,37 @@ from xuannv_embedding.training.cli import build_training_system, teacher_contrac
 from xuannv_embedding.training.runtime import train_steps
 
 
+def test_frozen_teacher_keeps_its_own_preprocessing_policy():
+    from torch.utils.data import DataLoader
+
+    from xuannv_embedding.training.annual_data import AnnualBatchStream
+
+    teacher = annual_config()
+    student = replace(
+        teacher,
+        model=replace(teacher.model, annual_context_pooling=True, annual_exact_mask_coverage=True),
+    )
+    raw = raw_batch(32)
+    stream = AnnualBatchStream(
+        student,
+        [DataLoader([raw], batch_size=None)],
+        max_steps=1,
+        start_epoch=0,
+        teacher_enabled=True,
+        teacher_config=teacher,
+    )
+    batch = next(iter(stream))
+    expected = prepare_annual_batch(raw, teacher, training=False)
+    for actual, reference in zip(
+        batch["teacher_view"]["highres_observations"][0],
+        expected["highres_observations"][0],
+        strict=True,
+    ):
+        assert torch.equal(actual["mask"], reference["mask"])
+    assert "source_validity_masks" not in batch["teacher_view"]
+    assert "source_validity_masks" in batch
+
+
 @pytest.mark.parametrize("weight", [0.0, 0.25, 1.0])
 def test_visible_weight_is_a_normalized_pixel_weight_and_preserves_heldout_gradients(weight):
     config = annual_config()
@@ -52,10 +83,12 @@ def test_visible_weight_is_a_normalized_pixel_weight_and_preserves_heldout_gradi
 
 
 @pytest.mark.parametrize("weight,legacy_visible", [(0.0, False), (1.0, True)])
-def test_weight_endpoints_match_legacy_highres_objectives(weight, legacy_visible):
+@pytest.mark.parametrize("exact_coverage", [False, True])
+def test_weight_endpoints_match_legacy_highres_objectives(weight, legacy_visible, exact_coverage):
     config = annual_config()
     config = replace(
         config,
+        model=replace(config.model, annual_exact_mask_coverage=exact_coverage),
         training=replace(
             config.training,
             highres_visible_targets=legacy_visible,
@@ -67,11 +100,12 @@ def test_weight_endpoints_match_legacy_highres_objectives(weight, legacy_visible
     raw = raw_batch()
     # At native 5 m resolution the geographic blocks do not mix partitions
     # within a target pixel; 2 m PAN is tested separately for support conservation.
-    raw["highres_observations"][0] = [
-        observation
-        for observation in raw["highres_observations"][0]
-        if observation["metadata"]["source"] not in config.model.annual_pan_sources
-    ]
+    if not exact_coverage:
+        raw["highres_observations"][0] = [
+            observation
+            for observation in raw["highres_observations"][0]
+            if observation["metadata"]["source"] not in config.model.annual_pan_sources
+        ]
     model = build_training_system(config).model.eval()
     losses = []
     for variant in [config, split]:

@@ -318,11 +318,29 @@ def run(args) -> None:
         print(json.dumps({"finished": tag}), flush=True)
 
 
+def prepare_evaluation_batch(raw, config, seed, *, exact_targets=False):
+    from xuannv_embedding.training.annual import prepare_annual_batch
+
+    batch = prepare_annual_batch(
+        raw, config, training=True, generator=torch.Generator().manual_seed(seed)
+    )
+    if exact_targets and not config.model.annual_exact_mask_coverage:
+        target_config = replace(
+            config, model=replace(config.model, annual_exact_mask_coverage=True)
+        )
+        common = prepare_annual_batch(
+            raw, target_config, training=True, generator=torch.Generator().manual_seed(seed)
+        )
+        for key in ["targets", "target_masks", "highres_targets"]:
+            batch[key] = common[key]
+    return batch
+
+
 def reconstruction(args) -> None:
     from torch.utils.data import DataLoader
 
     from xuannv_embedding.data.annual_dataset import collate_annual_observations
-    from xuannv_embedding.training.annual import AnnualLoss, prepare_annual_batch
+    from xuannv_embedding.training.annual import AnnualLoss
     from xuannv_embedding.training.annual_data import annual_dataset
 
     plan = json.loads(args.plan.read_text())
@@ -357,15 +375,13 @@ def reconstruction(args) -> None:
                 seed = int.from_bytes(
                     hashlib.sha256(f"heldout:{year}:{patch_id}".encode()).digest()[:8], "little"
                 )
-                batch = _move(
-                    prepare_annual_batch(
-                        raw,
-                        evaluation,
-                        training=True,
-                        generator=torch.Generator().manual_seed(seed),
-                    ),
-                    device,
+                batch = prepare_evaluation_batch(
+                    raw,
+                    evaluation,
+                    seed,
+                    exact_targets=plan.get("exact_mask_coverage_targets", False),
                 )
+                batch = _move(batch, device)
                 with _autocast(device, True):
                     output = _model_view(system.model, batch)
                     losses = criterion(
@@ -404,6 +420,8 @@ def reconstruction(args) -> None:
         "arm": args.arm,
         "checkpoint_sha256": digest(checkpoint),
         "evaluation_source_code_sha256": _source_code_sha256(),
+        "exact_mask_coverage_targets": plan.get("exact_mask_coverage_targets", False),
+        "input_exact_mask_coverage": config.model.annual_exact_mask_coverage,
         "identity": identity,
         "development_only": True,
         "n": len(rows),
@@ -442,7 +460,74 @@ def artifact_paths(plan, tag):
         return Path(plan["initialize_config"]), Path(plan["initialize_checkpoint"])
     if tag == "small":
         return Path(plan["teacher_config"]), Path(plan["teacher_checkpoint"])
+    if tag in plan.get("baselines", {}):
+        entry = plan["baselines"][tag]
+        return Path(entry["config"]), Path(entry["checkpoint"])
     return Path(plan["arms"][tag]["config"]), Path(plan["arms"][tag]["checkpoint"])
+
+
+def model_state_digest(model):
+    sha = hashlib.sha256()
+    for name, value in sorted(model.state_dict().items()):
+        sha.update(name.encode())
+        sha.update(str(value.dtype).encode())
+        sha.update(str(tuple(value.shape)).encode())
+        sha.update(
+            value.detach().cpu().contiguous().reshape(-1).view(torch.uint8).numpy().tobytes()
+        )
+    return sha.hexdigest()
+
+
+def adapt_inputs(args):
+    """Register an unchanged original model under an explicit corrected input policy."""
+    from xuannv_embedding.training.checkpoint import save_training_checkpoint
+    from xuannv_embedding.training.optimizer import build_optimizer
+
+    if args.output.exists():
+        raise ValueError("Preprocessing baseline output must be a new directory")
+    config, system, original = load_model(args.config, args.checkpoint, torch.device("cpu"))
+    state_sha = model_state_digest(system.model)
+    raw = yaml.safe_load(args.config.read_text())
+    raw["model"]["annual_exact_mask_coverage"] = True
+    raw["experiment"]["name"] += "_exact_input_baseline"
+    args.output.mkdir(parents=True)
+    config_path = args.output / "config.yaml"
+    config_path.write_text(yaml.safe_dump(raw, sort_keys=False))
+    adapted = Config.from_yaml(config_path)
+    optimizer = build_optimizer(
+        system, lr=adapted.training.lr, weight_decay=adapted.training.weight_decay
+    )
+    save_training_checkpoint(
+        args.output / "model.pt",
+        model=system.model,
+        criterion=system.criterion,
+        optimizer=optimizer,
+        scheduler=None,
+        epoch=original["epoch"],
+        config_sha256=digest(config_path),
+        git_sha=_git_sha(),
+        source_schema={key: asdict(value) for key, value in adapted.model.input_sources.items()},
+        regions=[dc.region for dc in adapted.data.datasets],
+        metrics={
+            "checkpoint_kind": "preprocessing_only_adapter",
+            "optimizer_steps": 0,
+            "model_state_sha256": state_sha,
+            "source_checkpoint_sha256": digest(args.checkpoint),
+            "source_config_sha256": digest(args.config),
+            "source_git_sha": original["git_sha"],
+            "inherited_training_epoch": original["epoch"],
+            "source_code_sha256": _source_code_sha256(),
+        },
+    )
+    _, restored, _ = load_model(config_path, args.output / "model.pt", torch.device("cpu"))
+    if model_state_digest(restored.model) != state_sha:
+        raise RuntimeError("Preprocessing adapter unexpectedly changed model parameters")
+    print(
+        json.dumps(
+            {"adapter": str(args.output), "model_state_sha256": state_sha, "optimizer_steps": 0}
+        ),
+        flush=True,
+    )
 
 
 def evaluation_manifest(source: Path, destination: Path, wanted: set[str]) -> Path:
@@ -763,7 +848,7 @@ def evaluate_many(args) -> None:
             ):
                 raise RuntimeError("Training failed; evaluation queue stopped")
             time.sleep(10)
-    arms = args.arms or ["original", "small", *plan["arms"]]
+    arms = args.arms or ["original", "small", *plan.get("baselines", {}), *plan["arms"]]
     gpus = args.gpus.split(",")
     command = [sys.executable, "-m", "xuannv_embedding.cli", "experiment"]
     env = os.environ.copy()
@@ -875,6 +960,13 @@ def main(argv=None) -> int:
     command.add_argument("--plan", required=True, type=Path)
     command.add_argument("--labels", required=True, type=Path)
     command.set_defaults(handler=freeze_confirmation)
+    command = commands.add_parser(
+        "adapt-inputs", help="Register corrected preprocessing with unchanged weights"
+    )
+    command.add_argument("--config", required=True, type=Path)
+    command.add_argument("--checkpoint", required=True, type=Path)
+    command.add_argument("--output", required=True, type=Path)
+    command.set_defaults(handler=adapt_inputs)
     command = commands.add_parser(
         "freeze-confirmation-osm", help="Extract local dated OSM for fine confirmation"
     )

@@ -278,6 +278,7 @@ def build_region_batch_stream(
     max_steps: int | None,
     start_epoch: int = 0,
     teacher_enabled: bool = False,
+    teacher_config: Config | None = None,
 ) -> RegionBatchStream:
     if config.model.architecture == "annual5m":
         from xuannv_embedding.training.annual_data import build_annual_stream
@@ -289,6 +290,7 @@ def build_region_batch_stream(
             max_steps=max_steps,
             start_epoch=start_epoch,
             teacher_enabled=teacher_enabled,
+            teacher_config=teacher_config,
         )
     from xuannv_embedding.data.raster_dataset import RegionRasterDataset, collate_region_batch
 
@@ -527,6 +529,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         del initial_state
     teacher_identity = None
+    teacher_config = None
     if (args.teacher_checkpoint is None) != (args.teacher_config is None):
         parser.error("--teacher-checkpoint 与 --teacher-config 必须一起提供")
     if args.teacher_checkpoint is not None:
@@ -625,6 +628,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_steps=args.steps or None,
             start_epoch=start_epoch,
             teacher_enabled=system.teacher_model is not None,
+            teacher_config=teacher_config,
         )
     try:
         epoch_count = _epoch_count(config.training.epochs, args.epochs, start_epoch)

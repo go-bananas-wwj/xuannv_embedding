@@ -9,6 +9,7 @@ from xuannv_embedding.models.annual import (
     area_resample,
     masked_resample,
     overlap_weights,
+    visibility_coverage,
 )
 from xuannv_embedding.training.annual import prepare_annual_batch
 from xuannv_embedding.training.cli import build_training_system
@@ -98,6 +99,58 @@ def test_fractional_area_weights_and_conservation():
     pooled, support = masked_resample(values, mask, (2, 2))
     assert torch.allclose(pooled, torch.ones_like(pooled))
     assert torch.allclose(support, torch.full_like(support, 0.8))
+
+
+@pytest.mark.parametrize("size", [(256, 256), (640, 640), (43, 43)])
+def test_exact_geographic_visibility_never_erases_fully_observed_pixels(size):
+    visible = torch.ones(1, 1, 128, 128)
+    projected = visibility_coverage(visible, size, exact=True)
+    assert torch.equal(projected, torch.ones_like(projected))
+    if size == (640, 640):
+        legacy = visibility_coverage(visible, size)
+        assert (legacy < 1 - 1e-6).float().mean() > 0.48
+    visible[..., :32, :32] = 0
+    projected = visibility_coverage(visible, size, exact=True)
+    assert abs(float(projected.mean() - visible.mean())) < 1e-7
+    if size[0] % 128 == 0:
+        factor = size[0] // 128
+        assert torch.equal(
+            projected, visible.repeat_interleave(factor, -2).repeat_interleave(factor, -1)
+        )
+
+
+def test_exact_full_input_pan_mask_matches_the_real_observation_support():
+    config = annual_config()
+    config = replace(config, model=replace(config.model, annual_exact_mask_coverage=True))
+    raw = raw_batch(128)
+    batch = prepare_annual_batch(raw, config, training=False)
+    for observation, original in zip(
+        batch["highres_observations"][0], raw["highres_observations"][0], strict=True
+    ):
+        assert torch.equal(observation["mask"], original["mask"])
+
+
+def test_exact_projection_keeps_hidden_native_values_out_of_the_embedding():
+    config = annual_config()
+    config = replace(
+        config,
+        model=replace(config.model, annual_context_pooling=True, annual_exact_mask_coverage=True),
+    )
+    raw = raw_batch(32)
+    batch = prepare_annual_batch(
+        raw, config, training=True, generator=torch.Generator().manual_seed(11)
+    )
+    model = build_training_system(config).model.eval()
+    with torch.no_grad():
+        expected = model_forward(model, batch).embedding_map
+        for original, hidden in zip(
+            raw["highres_observations"][0], batch["highres_observations"][0], strict=True
+        ):
+            original["values"][:, ~hidden["mask"]] = 9999
+        changed = prepare_annual_batch(
+            raw, config, training=True, generator=torch.Generator().manual_seed(11)
+        )
+        assert torch.equal(expected, model_forward(model, changed).embedding_map)
 
 
 def test_annual_forward_backward_and_frozen_noise():

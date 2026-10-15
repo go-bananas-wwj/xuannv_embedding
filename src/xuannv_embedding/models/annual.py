@@ -15,11 +15,17 @@ from xuannv_embedding.models.bottleneck import VMFBottleneck
 from xuannv_embedding.models.model import AEFOutput
 
 
-def overlap_weights(input_size: int, output_size: int, reference: torch.Tensor) -> torch.Tensor:
+def overlap_weights(
+    input_size: int,
+    output_size: int,
+    reference: torch.Tensor,
+    *,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
     """Exact pixel-footprint overlaps for coextensive, axis-aligned grids."""
-    edges = torch.arange(output_size + 1, device=reference.device, dtype=torch.float32)
+    edges = torch.arange(output_size + 1, device=reference.device, dtype=dtype)
     edges = edges * (input_size / output_size)
-    pixels = torch.arange(input_size, device=reference.device, dtype=torch.float32)
+    pixels = torch.arange(input_size, device=reference.device, dtype=dtype)
     overlap = torch.minimum(edges[1:, None], pixels[None] + 1)
     overlap = overlap - torch.maximum(edges[:-1, None], pixels[None])
     return overlap.clamp(min=0) / (input_size / output_size)
@@ -43,6 +49,27 @@ def masked_resample(
     support = area_resample(mask.float(), size)
     numerator = area_resample(clean * mask, size)
     return numerator / support.clamp(min=1e-6), support
+
+
+def visibility_coverage(visible: torch.Tensor, size: tuple[int, int], *, exact: bool = False):
+    """Project a binary geographic mask without false missingness from float32 mass error.
+
+    Integer subdivisions have exact containment. Other grids use normalized double
+    geometry; feature resampling and historical checkpoints retain their original math.
+    """
+    if not exact:
+        return masked_resample(visible, visible, size)[1]
+    height, width = visible.shape[-2:]
+    if size[0] % height == 0 and size[1] % width == 0:
+        return visible.repeat_interleave(size[0] // height, -2).repeat_interleave(
+            size[1] // width, -1
+        )
+    rows = overlap_weights(height, size[0], visible, dtype=torch.float64)
+    columns = overlap_weights(width, size[1], visible, dtype=torch.float64)
+    rows = rows / rows.sum(1, keepdim=True)
+    columns = columns / columns.sum(1, keepdim=True)
+    with torch.autocast(device_type=visible.device.type, enabled=False):
+        return (rows @ visible.double() @ columns.t()).clamp(0, 1).float()
 
 
 def seasonal_features(timestamps: torch.Tensor) -> torch.Tensor:
