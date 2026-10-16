@@ -116,3 +116,33 @@ def test_invalid_spatial_grid_and_static_input_rejected():
         model(x, m, t, {k: v[:, 0] for k, v in hi.items()}, valid)
     with pytest.raises(ValueError, match="divisible"):
         model.encoders["optical"](hi["optical"], valid["optical"], (17, 16), t)
+
+
+def test_static_highres_is_encoded_once_without_fabricated_months():
+    model, x, m, t, hi, valid = example()
+    model.eval()
+    observed = []
+    hook = model.encoders["optical"].register_forward_pre_hook(
+        lambda module, args: observed.append((args[0].shape, args[3].clone()))
+    )
+    result = model(x, m, t, {"optical": hi["optical"][:, 0]}, {"optical": valid["optical"][:, 0]})
+    hook.remove()
+    assert observed[0][0] == (1, 1, 3, 53, 53)
+    assert observed[0][1].tolist() == [[0]]
+    assert result.embedding_map.shape == (1, 2, 8, 16, 16)
+    assert torch.isfinite(result.embedding_map).all()
+
+
+def test_static_highres_missing_pixels_restore_base_and_receive_gradients():
+    model, x, m, t, hi, valid = example()
+    image, mask = hi["optical"][:, 0], valid["optical"][:, 0]
+    for injector in model.injectors.values():
+        torch.nn.init.normal_(injector.output.weight, std=0.02)
+    model.eval()
+    absent = model(x, m, t, {"optical": image * float("nan")}, {"optical": mask * 0})
+    torch.testing.assert_close(absent.embedding_map, model.base(x, m, t).embedding_map)
+    model.train()
+    result = model(x, m, t, {"optical": image}, {"optical": mask})
+    result.embedding_map.square().mean().backward()
+    grad = model.encoders["optical"].projection.weight.grad
+    assert grad is not None and torch.isfinite(grad).all() and grad.abs().sum() > 0

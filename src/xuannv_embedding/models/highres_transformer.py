@@ -121,6 +121,8 @@ class HighResWindowEncoder(nn.Module):
             (torch.sin(month * math.pi / 6), torch.cos(month * math.pi / 6), (year - 2000) / 100),
             dim=-1,
         )
+        # Zero denotes an undated static acquisition, never a synthetic month.
+        date = torch.where(timestamps.flatten()[:, None] == 0, 0, date)
         value = value + self.position(metadata.to(value.dtype)) + self.time(date)[:, None, None]
         value = value * visible[..., None]
         flat = value.reshape(-1, nk, s.dim)
@@ -285,10 +287,25 @@ class HighResTransformerModel(nn.Module):
         if set(highres_frames) != set(highres_masks) or set(highres_frames) - set(self.encoders):
             raise ValueError("unregistered or mismatched highres sources")
         shape = next(iter(source_frames.values())).shape[-2:]
-        encoded = {
-            name: self.encoders[name](image, highres_masks[name], shape, timestamps)
-            for name, image in highres_frames.items()
-        }
+        encoded = {}
+        for name, image in highres_frames.items():
+            mask = highres_masks[name]
+            if image.ndim == 4:
+                if mask.shape != (image.shape[0], 1, *image.shape[-2:]):
+                    raise ValueError("static highres requires a static mask, not a monthly mask")
+                dates = timestamps.new_zeros((image.shape[0], 1))
+                source = self.encoders[name](image[:, None], mask[:, None], shape, dates)
+                months = timestamps.shape[1]
+                # Share encoded context; do not repeat imagery or claim monthly observations.
+                source = (
+                    source[0].expand(-1, months, -1, -1, -1),
+                    source[1].expand(-1, months, -1, -1),
+                    source[2],
+                    *([source[3].expand(-1, months, -1, -1)] if len(source) == 4 else []),
+                )
+                encoded[name] = source
+            else:
+                encoded[name] = self.encoders[name](image, mask, shape, timestamps)
 
         def inject(index, feature):
             key = str(index)
