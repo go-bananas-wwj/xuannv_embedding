@@ -16,7 +16,7 @@ import rasterio
 import requests
 from rasterio.transform import from_origin
 from rasterio.warp import Resampling, reproject, transform_bounds
-from rasterio.windows import Window, from_bounds
+from rasterio.windows import Window
 
 from xuannv_embedding.export.context import dump, sha
 
@@ -50,18 +50,36 @@ def normalize_vectors(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return result, valid
 
 
+def source_window(bounds, transform, width, height, *, padding=2) -> Window:
+    """Support both north-up and the official south-up COG affine transforms."""
+    west, south, east, north = bounds
+    corners = [~transform * (x, y) for x in (west, east) for y in (south, north)]
+    col = max(0, math.floor(min(p[0] for p in corners)) - padding)
+    row = max(0, math.floor(min(p[1] for p in corners)) - padding)
+    right = min(width, math.ceil(max(p[0] for p in corners)) + padding)
+    bottom = min(height, math.ceil(max(p[1] for p in corners)) + padding)
+    if right <= col or bottom <= row:
+        raise ValueError("Reference window is outside the source raster")
+    return Window(col, row, right - col, bottom - row)
+
+
 def _header(task: tuple) -> dict:
     item, target_crs, bounds, cache = task
     url = "https://storage.googleapis.com/" + _BUCKET + "/" + item["name"]
     path = Path(cache) / (hashlib.sha256(url.encode()).hexdigest() + ".json")
     if path.exists():
-        return json.loads(path.read_text())
+        cached = json.loads(path.read_text())
+        if cached.get("header_schema") == 2:
+            return cached
     with rasterio.Env(**_ENV), rasterio.open(url) as raster:
-        box = transform_bounds(raster.crs, target_crs, *raster.bounds, densify_pts=21)
+        left, bottom, right, top = raster.bounds
+        ordered = (min(left, right), min(bottom, top), max(left, right), max(bottom, top))
+        box = transform_bounds(raster.crs, target_crs, *ordered, densify_pts=21)
         intersects = (
             box[0] < bounds[2] and box[2] > bounds[0] and box[1] < bounds[3] and box[3] > bounds[1]
         )
         result = {
+            "header_schema": 2,
             "url": url,
             "generation": item.get("generation"),
             "md5Hash": item.get("md5Hash"),
@@ -152,11 +170,7 @@ def acquire(args: argparse.Namespace) -> dict:
     for i, source in enumerate(selected):
         with rasterio.Env(**_ENV), rasterio.open(source["url"]) as raster:
             region = transform_bounds(args.crs, raster.crs, *bounds, densify_pts=21)
-            w = from_bounds(*region, transform=raster.transform)
-            col, row = max(0, math.floor(w.col_off) - 2), max(0, math.floor(w.row_off) - 2)
-            right = min(raster.width, math.ceil(w.col_off + w.width) + 2)
-            bottom = min(raster.height, math.ceil(w.row_off + w.height) + 2)
-            window = Window(col, row, right - col, bottom - row)
+            window = source_window(region, raster.transform, raster.width, raster.height)
             decoded = dequantize(raster.read(window=window))
             warped = np.full_like(mosaic, np.nan)
             reproject(

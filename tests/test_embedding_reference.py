@@ -1,7 +1,22 @@
 import numpy as np
 import pytest
+from affine import Affine
+from rasterio.windows import Window
 
-from xuannv_embedding.data_process.embedding_reference import dequantize, normalize_vectors
+from xuannv_embedding.data_process.embedding_reference import (
+    dequantize,
+    normalize_vectors,
+    source_window,
+)
+
+
+def test_source_window_handles_south_up_official_cogs():
+    box = (20, 30, 60, 70)
+    south_up = Affine(10, 0, 0, 0, 10, 0)
+    north_up = Affine(10, 0, 0, 0, -10, 100)
+    assert source_window(box, south_up, 10, 10, padding=0) == Window(2, 3, 4, 4)
+    assert source_window(box, north_up, 10, 10, padding=0) == Window(2, 3, 4, 4)
+    assert source_window((-20, -20, 60, 60), south_up, 10, 10, padding=0) == Window(0, 0, 6, 6)
 
 
 def test_dequantization_is_signed_square_and_masks_nodata():
