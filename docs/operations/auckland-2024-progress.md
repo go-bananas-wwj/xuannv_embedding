@@ -4,20 +4,20 @@ Generated from registered local artifacts; no runtime payloads are published.
 
 ```json
 {
-  "stage": "data_prepared",
-  "updated_utc": "2026-10-16T13:55:36.194712+00:00",
+  "stage": "progress_check",
+  "updated_utc": "2026-10-16T14:31:05.960081+00:00",
   "models": {
     "public": {
       "state": "running",
-      "optimizer_steps": 160,
-      "elapsed_seconds": 1014.9983903896064,
-      "loss": 2.565810203552246
+      "optimizer_steps": 480,
+      "elapsed_seconds": 3043.27874737978,
+      "loss": 2.10390043258667
     },
     "highres": {
       "state": "running",
-      "optimizer_steps": 80,
-      "elapsed_seconds": 846.4438444897532,
-      "loss": 2.6887784004211426
+      "optimizer_steps": 280,
+      "elapsed_seconds": 2965.918346580118,
+      "loss": 2.436060667037964
     }
   },
   "reference": {
@@ -37,7 +37,7 @@ Generated from registered local artifacts; no runtime payloads are published.
     70,
     71
   ],
-  "classification_jobs_complete": 1,
+  "classification_jobs_complete": 48,
   "classification_jobs_total": 215,
   "overleaf_modified": false
 }
