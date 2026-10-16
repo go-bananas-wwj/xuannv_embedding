@@ -189,7 +189,7 @@ class AnnualObservationDataset(Dataset):
 
 
 def collate_annual_observations(samples: list[dict]) -> dict:
-    return {
+    result = {
         "source_frames": {
             source: torch.stack([item["source_frames"][source] for item in samples])
             for source in samples[0]["source_frames"]
@@ -209,6 +209,15 @@ def collate_annual_observations(samples: list[dict]) -> dict:
             for item in samples
         ],
     }
+    if any("independent_targets" in sample for sample in samples):
+        from xuannv_embedding.data.targets import collate_targets
+
+        if not all("independent_targets" in sample for sample in samples):
+            raise ValueError("Independent target presence differs across annual samples")
+        result["independent_targets"] = collate_targets(
+            [sample["independent_targets"] for sample in samples]
+        )
+    return result
 
 
 def check_manifest(task: tuple[Path, int]) -> dict:

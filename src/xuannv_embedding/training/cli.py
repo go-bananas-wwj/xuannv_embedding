@@ -484,6 +484,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("训练输出不得覆盖初始化或教师 checkpoint")
 
     config = Config.from_yaml(args.config)
+    target_config = config.training.independent_targets
+    target_identity = None
+    if target_config is not None:
+        from xuannv_embedding.data_process.target_audit import WC_CODES
+
+        target_identity = {
+            **config.to_dict()["training"]["independent_targets"],
+            "worldcover_raw_codes": list(WC_CODES),
+            "dem_spacing_m": 40,
+        }
+        if target_config.engineering_only and not (1 <= args.steps <= 128 and args.epochs == 1):
+            parser.error(
+                "Engineering target supervision requires --epochs 1 and --steps between1and128"
+            )
     if args.synthetic and config.model.architecture == "annual5m":
         parser.error(
             "annual5m synthetic input is not a substitute for native-grid observations; "
@@ -563,6 +577,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         lr=config.training.lr,
         weight_decay=config.training.weight_decay,
         fused=accelerate,
+        auxiliary_lr_multiplier=(target_config.head_lr_multiplier if target_config else 1.0),
     )
     scheduler = build_scheduler(
         optimizer,
@@ -661,6 +676,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "teacher_identity": teacher_identity,
                     "initialization_identity": initialization_identity,
                     "source_code_sha256": source_code_sha256,
+                    **({"independent_targets": target_identity} if target_identity else {}),
                 },
             )
         if distributed:
@@ -706,6 +722,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 item["peak_allocated_bytes"] for item in rank_metrics
             ),
             "rank_metrics": rank_metrics,
+            **({"independent_targets": target_identity} if target_identity else {}),
         }
     )
     if rank == 0:

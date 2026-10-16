@@ -29,7 +29,8 @@ def test_module_help_is_available_without_optional_dependencies() -> None:
     assert "region-agnostic monthly geospatial embeddings" in result.stdout
 
 
-def test_target_audit_help_does_not_import_optional_data_stack() -> None:
+@pytest.mark.parametrize("command", ["targets-audit", "targets-prepare"])
+def test_target_audit_help_does_not_import_optional_data_stack(command: str) -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
     code = """
@@ -41,8 +42,9 @@ def guarded_import(name, *args, **kwargs):
     return original_import(name, *args, **kwargs)
 builtins.__import__ = guarded_import
 from xuannv_embedding.cli import main
-main(['data', 'targets-audit', '--help'])
+main(['data', COMMAND, '--help'])
 """
+    code = code.replace("COMMAND", repr(command))
     result = subprocess.run(
         [sys.executable, "-c", code],
         cwd=PROJECT_ROOT,
@@ -52,7 +54,19 @@ main(['data', 'targets-audit', '--help'])
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "--target-root" in result.stdout
+    assert "--output" in result.stdout
+
+
+def test_supervised_experiment_preparation_help() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "xuannv_embedding.cli", "experiment", "prepare-targets", "--help"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--prepared-root" in result.stdout
 
 
 @pytest.mark.parametrize(

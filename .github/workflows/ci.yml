@@ -74,6 +74,7 @@ jobs:
           done
           /tmp/xuannv-clean-install/bin/xuannv downstream train --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv downstream evaluate --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment prepare-targets --help > /dev/null
       - run: >-
           XUANNV_GIT_SHA=${{ github.sha }}
           /tmp/xuannv-clean-install/bin/xuannv train

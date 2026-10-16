@@ -153,6 +153,11 @@ def prepare_annual_batch(batch: dict, config, *, training: bool, generator=None)
         highres_targets.append(sample_targets)
         requests.append(sample_requests)
     return {
+        **(
+            {"independent_targets": batch["independent_targets"]}
+            if "independent_targets" in batch
+            else {}
+        ),
         "source_frames": frames,
         "source_masks": temporal_masks,
         "source_pixel_masks": pixel_masks,
@@ -196,6 +201,21 @@ class AnnualLoss(nn.Module):
             else None
         )
         self.current_epoch = 0
+        self.target_supervision = None
+        self.target_ramp_batches = 0
+        if config.training.independent_targets is not None:
+            from xuannv_embedding.training.target_supervision import TargetSupervision
+
+            target = config.training.independent_targets
+            self.target_supervision = TargetSupervision(
+                config.model.embed_dim,
+                target.weights,
+                dem_mean=target.dem_mean,
+                dem_std=target.dem_std,
+                seed=config.experiment.seed,
+            )
+            self.target_ramp_batches = target.ramp_batches
+            self.register_buffer("target_batches", torch.tensor(0, dtype=torch.long))
 
     def set_epoch(self, epoch: int) -> None:
         self.current_epoch = epoch
@@ -211,6 +231,7 @@ class AnnualLoss(nn.Module):
         teacher_output=None,
         consistency_output=None,
         highres_targets=None,
+        independent_targets=None,
     ) -> dict[str, torch.Tensor]:
         zero = output.embedding_map.sum() * 0
         reconstruction = zero
@@ -305,6 +326,24 @@ class AnnualLoss(nn.Module):
                 "view_consistency": consistency,
             }
         )
+        if self.target_supervision is not None:
+            if independent_targets is None:
+                raise ValueError("Configured independent targets are missing from annual batch")
+            ramp = (
+                min(1.0, int(self.target_batches) / self.target_ramp_batches)
+                if self.target_ramp_batches
+                else 1.0
+            )
+            auxiliary = self.target_supervision.loss(
+                self.target_supervision(output.embedding_map[:, 0]),
+                independent_targets,
+                ramp=ramp,
+            )
+            result["total"] = result["total"] + auxiliary.pop("total")
+            result.update(auxiliary)
+            result["target_ramp"] = zero.detach() + ramp
+            if self.training:
+                self.target_batches.add_(1)
         return result
 
 

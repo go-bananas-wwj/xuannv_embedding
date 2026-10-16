@@ -231,6 +231,21 @@ class InputMaskingConfig:
 
 
 @dataclass(frozen=True)
+class IndependentTargetsConfig:
+    schema: str
+    target_root: Path
+    prepared_root: Path
+    preparation_sha256: str
+    scope: str
+    weights: dict[str, float]
+    dem_mean: float
+    dem_std: float
+    head_lr_multiplier: float = 10.0
+    ramp_batches: int = 512
+    engineering_only: bool = True
+
+
+@dataclass(frozen=True)
 class TrainingConfig:
     epochs: int
     lr: float
@@ -263,6 +278,7 @@ class TrainingConfig:
     highres_visible_weight: float | None = None
     compile: bool = False
     input_masking: InputMaskingConfig = field(default_factory=InputMaskingConfig)
+    independent_targets: IndependentTargetsConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -632,6 +648,7 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "highres_visible_weight",
         "compile",
         "input_masking",
+        "independent_targets",
     }
     required = {
         "epochs",
@@ -755,6 +772,72 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         ),
         compile=_boolean(raw.get("compile", False), "training.compile"),
         input_masking=_parse_masking(raw.get("input_masking", {}), model),
+        independent_targets=_parse_independent_targets(raw.get("independent_targets"), model),
+    )
+
+
+def _parse_independent_targets(value: Any, model: ModelConfig) -> IndependentTargetsConfig | None:
+    if value is None:
+        return None
+    section = "training.independent_targets"
+    raw = _strict(
+        value,
+        section,
+        allowed={
+            "schema",
+            "target_root",
+            "prepared_root",
+            "preparation_sha256",
+            "scope",
+            "weights",
+            "dem_mean",
+            "dem_std",
+            "head_lr_multiplier",
+            "ramp_batches",
+            "engineering_only",
+        },
+        required={
+            "schema",
+            "target_root",
+            "prepared_root",
+            "preparation_sha256",
+            "scope",
+            "weights",
+            "dem_mean",
+            "dem_std",
+        },
+    )
+    if model.architecture != "annual5m":
+        raise ConfigError("Independent annual targets require annual5m architecture")
+    schema = _string(raw["schema"], section + ".schema")
+    if schema != "annual-dem40m-worldcover-v1":
+        raise ConfigError("Unsupported independent target schema")
+    scope = _string(raw["scope"], section + ".scope")
+    if scope not in {"screen", "expanded"}:
+        raise ConfigError("Independent target scope must be screen or expanded")
+    sha = _string(raw["preparation_sha256"], section + ".preparation_sha256")
+    if not re.fullmatch(r"[0-9a-f]{64}", sha):
+        raise ConfigError("Independent target preparation SHA must be64hexcharacters")
+    weights = _mapping(raw["weights"], section + ".weights")
+    if not weights or set(weights) - {"dem_elevation", "worldcover"}:
+        raise ConfigError("Independent target weights contain an unknown or empty task list")
+    return IndependentTargetsConfig(
+        schema=schema,
+        scope=scope,
+        preparation_sha256=sha,
+        target_root=Path(_string(raw["target_root"], section + ".target_root")),
+        prepared_root=Path(_string(raw["prepared_root"], section + ".prepared_root")),
+        weights={
+            name: _positive_float(weight, section + f".weights.{name}")
+            for name, weight in weights.items()
+        },
+        dem_mean=_finite_float(raw["dem_mean"], section + ".dem_mean"),
+        dem_std=_positive_float(raw["dem_std"], section + ".dem_std"),
+        head_lr_multiplier=_positive_float(
+            raw.get("head_lr_multiplier", 10), section + ".head_lr_multiplier"
+        ),
+        ramp_batches=_non_negative_int(raw.get("ramp_batches", 512), section + ".ramp_batches"),
+        engineering_only=_boolean(raw.get("engineering_only", True), section + ".engineering_only"),
     )
 
 

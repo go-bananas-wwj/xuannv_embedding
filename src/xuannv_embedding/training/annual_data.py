@@ -13,6 +13,31 @@ from xuannv_embedding.data.annual_dataset import (
 from xuannv_embedding.training.annual import prepare_annual_batch
 
 
+class TargetAnnualDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset, reader, tasks):
+        self.dataset, self.reader, self.tasks = dataset, reader, tuple(tasks)
+        identities = getattr(dataset.records, "identities", None)
+        patches = (
+            [patch for _, patch in identities]
+            if identities is not None
+            else [record.patch_id for record in dataset.records]
+        )
+        if set(patches) - reader.roles["train"]:
+            raise ValueError(
+                "Annual training manifest contains positions outside the frozen target scope"
+            )
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        raw = self.dataset[index]
+        raw["independent_targets"] = self.reader.read(
+            raw["patch_id"], raw["year"], tasks=self.tasks
+        )
+        return raw
+
+
 class AnnualBatchStream:
     def __init__(
         self, config, loaders, *, max_steps, start_epoch, teacher_enabled, teacher_config=None
@@ -93,12 +118,36 @@ def build_annual_stream(
     teacher_config=None,
 ):
     loaders = []
+    reader = None
+    target_config = config.training.independent_targets
+    if target_config is not None:
+        from xuannv_embedding.data.targets import AnnualTargetReader
+
+        reader = AnnualTargetReader(
+            target_config.target_root,
+            target_config.prepared_root,
+            preparation_sha256=target_config.preparation_sha256,
+            scope=target_config.scope,
+        )
+        if (reader.dem_mean, reader.dem_std) != (target_config.dem_mean, target_config.dem_std):
+            raise ValueError(
+                "Configured target normalization differs from the pinned training statistics"
+            )
+        if (
+            not target_config.engineering_only
+            and not reader.preparation["formal_training_released"]
+        ):
+            raise ValueError(
+                "Formal target-supervised training has not been released by preparation"
+            )
     for dataset_config in config.data.datasets:
         if ".train." not in dataset_config.manifest_path.name:
             raise ValueError("Training requires explicitly named annual train manifests")
         if dataset_config.sampling_weight != 1.0:
             raise ValueError("Annual epoch traversal requires sampling_weight=1")
         dataset = annual_dataset(config, dataset_config, max_records=max_records)
+        if reader is not None:
+            dataset = TargetAnnualDataset(dataset, reader, target_config.weights)
         sampler = (
             DistributedSampler(dataset, shuffle=True, drop_last=True, seed=config.experiment.seed)
             if distributed

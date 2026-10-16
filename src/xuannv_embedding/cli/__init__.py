@@ -75,6 +75,7 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
         "release-quality": "年度数据云影、地物对齐和重复划分收尾验收",
         "check-annual": "抽样验收年度原生网格和变长观测读取器",
         "targets-audit": "全量核验独立目标包、年度关联、覆盖与候选训练统计量",
+        "targets-prepare": "冻结空间实验划分，并从原生DEM生成40m监督缓存",
         "p0": "从观测 pilot 准备真实 P0 训练数据",
     }
     for command, help_text in descriptions.items():

@@ -934,9 +934,26 @@ def evaluate_many(args) -> None:
     )
 
 
+def prepare_targets(args):
+    from xuannv_embedding.training.target_experiments import prepare_experiments
+
+    result = prepare_experiments(
+        args.prepared_root, args.target_root, args.initial_config, args.output
+    )
+    print(
+        json.dumps({"target_configs_prepared": len(result["configs"]), "training_started": False})
+    )
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv experiment", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    command = commands.add_parser(
+        "prepare-targets", help="Freeze supervised target configs without training"
+    )
+    for name in ("prepared-root", "target-root", "initial-config", "output"):
+        command.add_argument(f"--{name}", required=True, type=Path)
+    command.set_defaults(handler=prepare_targets)
     command = commands.add_parser(
         "prepare", help="Freeze paired ABC configs and stratified sample IDs"
     )

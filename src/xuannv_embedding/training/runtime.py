@@ -184,6 +184,8 @@ class TrainingSystem(nn.Module):
         loss_optional = (
             {"highres_targets": batch["highres_targets"]} if "highres_targets" in batch else {}
         )
+        if "independent_targets" in batch:
+            loss_optional["independent_targets"] = batch["independent_targets"]
         if self.ema_model is not None:
             if "consistency_view" not in batch:
                 raise ValueError("EMA consistency requires an independent consistency_view")

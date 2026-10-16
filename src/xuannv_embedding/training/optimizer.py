@@ -16,9 +16,28 @@ def build_optimizer(
     weight_decay: float,
     *,
     fused: bool = False,
+    auxiliary_lr_multiplier: float = 1.0,
 ) -> Optimizer:
     """构造生产训练使用的 AdamW；``fused`` 仅用于 CUDA，把逐参数更新合并为少量 kernel。"""
     parameters = model.parameters() if isinstance(model, nn.Module) else model
+    if not math.isfinite(auxiliary_lr_multiplier) or auxiliary_lr_multiplier <= 0:
+        raise ValueError("Auxiliary learning-rate multiplier must be positive and finite")
+    if auxiliary_lr_multiplier != 1:
+        targets = getattr(getattr(model, "criterion", None), "target_supervision", None)
+        if targets is None:
+            raise ValueError("Auxiliary learning-rate group requires target supervision heads")
+        head_ids = {id(parameter) for parameter in targets.heads.parameters()}
+        parameters = list(parameters)
+        parameters = [
+            {
+                "params": [parameter for parameter in parameters if id(parameter) not in head_ids],
+                "lr": lr,
+            },
+            {
+                "params": [parameter for parameter in parameters if id(parameter) in head_ids],
+                "lr": lr * auxiliary_lr_multiplier,
+            },
+        ]
     if fused:
         return AdamW(parameters, lr=lr, weight_decay=weight_decay, fused=True)
     return AdamW(parameters, lr=lr, weight_decay=weight_decay)

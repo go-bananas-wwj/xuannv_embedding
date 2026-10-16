@@ -84,6 +84,33 @@ xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
 
 ## 年度消融实验
 
+独立目标实验先使用 `xuannv data targets-prepare` 完成数据准备，再物化已冻结的实验：
+
+```bash
+xuannv experiment prepare-targets \
+  --prepared-root /path/to/prepared --target-root /path/to/targets \
+  --initial-config /path/to/original/config.yaml --output /path/to/new_experiments
+```
+
+它生成 2020/2021 配对清单、一个 D3 工程配置，以及种子 17/42 的 R0/R1/D1/D2/D3
+五组筛选配置；扩大阶段仅固定数据，不提前选择配方。旧模型的输入统计量用于全部继续训练组，
+新增 DSM 监督使用 screen 训练位置的统计量。具体预算和评测约束见年度技术报告第14节。
+工程配置只允许显式 `--epochs 1 --steps 1..128`，建议 8 卡完成 128 步后另存恢复检查：
+
+```bash
+scripts/cuda/launch.sh /path/to/engineering/D3.yaml \
+  --initialize-from /path/original/model.pt --initialize-config /path/original/config.yaml \
+  --epochs 1 --steps 128 --output /path/new_engineering/model.pt
+scripts/cuda/launch.sh /path/to/engineering/D3.yaml \
+  --resume /path/new_engineering/model.pt --epochs 1 --steps 2 \
+  --output /path/new_engineering/resumed.pt
+```
+
+这次短跑不使用教师或 EMA，也不构成精度比较。监督头和渐入批次计数保存在 criterion 状态中，
+恢复同时核对原配置身份及 optimizer 两组状态。损失按跨 rank 有效目标总量归一化，
+全缺测保留有限零项及参数梯度图；人工遮挡不删除独立目标监督。准备凭据未放行时，
+正式的 D1/D2/D3 训练会被拒绝。监督头、单位/类别映射及准备摘要会写入新 checkpoint 元数据。
+
 年度 ABC 实验使用 `xuannv experiment prepare/run/reconstruction/export/probe/compare`。`prepare` 冻结
 按 UTM 区域与 MS/PAN 覆盖率分层的训练/验证样本，排除已有下游开发集，记录源 manifest、
 训练统计量、标签、初始化权重及教师的摘要；生成相同学习率、数据、epoch 的八个对照配置。

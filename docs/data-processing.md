@@ -31,6 +31,7 @@ xuannv data pan-annual            审计 2m 全色观测并接入年度候选清
 xuannv data release-quality       完成云影、配准、重复和放行门禁
 xuannv data check-annual          抽样读取年度原生网格数据
 xuannv data targets-audit         核验独立目标包、年度关联、覆盖及候选训练统计量
+xuannv data targets-prepare       冻结空间实验划分并生成原生DEM的40m监督缓存
 xuannv data p0                    从观测 pilot 准备真实 P0 训练数据
 ```
 
@@ -57,6 +58,32 @@ OSM 只检查全部归档哈希和数组元数据，暂不全量扫描其语义�
 静态训练统计量按唯一 train 位置计数，排除所有 validation/test 位置；在最终评测排除名单冻结前
 仅为候选值。退出码 0 表示本命令的数据检查通过；仍须查看 `training_ready` 和 `open_gates`，
 它不认证原生标签尺度、物理标定、地物配准或训练效果。失败保留已生成证据，重新执行需使用新目录。
+
+`targets-prepare` 在上述审计后生成独立实验数据，输出同样必须为新目录：
+
+```bash
+xuannv data targets-prepare \
+  --audit-root /path/to/audit \
+  --source-integrity /path/to/native_dem_integrity.json \
+  --initial-config /path/to/original_pretraining_config.yaml \
+  --seen-patches /path/to/previously_seen_positions.json \
+  --output /path/to/new_prepared_directory --workers 4
+```
+
+`--source-integrity` 是原生 DEM 分卷按顺序记录的本地完整性凭据，包含 `files` 中每个文件的
+`path/bytes/mtime_ns/sha256`，以及完整 ZIP 成员 CRC 检查的 `all_zip_member_crc_passed: true`。
+本命令核对凭据与当前文件身份，拒绝源文件在处理期间变化；它不将本地摘要当作供应商签名。
+`--seen-patches` 可以重复，须包含所有曾查看的候选及评测位置；原预训练 manifest 则从
+`--initial-config` 读取并与审计时的完整摘要绑定。
+
+输出冻结 development/validation/confirmation 三个角色及嵌套的 screen/expanded 训练位置。
+选样只依据当前年度划分、坐标、macro/component、高分可用性与确定性哈希；所有新评测位置
+均避开原预训练和既往查看的地理块，按完整父格多边形核验缓冲，包括相邻 UTM 分区。
+DEM 从原生 GLO-30 DSM 直接聚合为每父格 `32×32` 的 40m 网格，保留有效 mask、米制值、
+原生文件指纹、逐行摘要和处理记录。40m 是监督网格，不能解释为新的测量精度。
+WorldCover 使用已验收的 2020/2021 年度 10m 数组。三套 `train_statistics.<scope>.json`
+分别只用该训练清单的有效目标，静态 DSM 每位置计一次。`preparation.json` 只放行工程联调，
+物理标定及独立定位/真值要求仍需单独完成。
 
 ## 全国不变量
 

@@ -47,6 +47,19 @@ input_sources:
 - [China P10C pilot](../configs/examples/china_p10c_pilot.yaml)
 - [全国年度 5m v1](../configs/production/annual5m_v1.yaml)
 
+年度模型可通过 `training.independent_targets` 接入监督；默认 `null` 保持旧训练行为。
+严格字段为 `schema: annual-dem40m-worldcover-v1`、`target_root`、`prepared_root`、
+`preparation_sha256`、`scope`（`screen` 或 `expanded`）、`weights`、`dem_mean`、`dem_std`，
+以及可选的 `head_lr_multiplier`（默认 10）、`ramp_batches`（默认 512）、
+`engineering_only`（默认 true）。`weights` 只接受 `dem_elevation`、`worldcover` 的正权重，
+DEM 标准化必须逐值匹配该 scope 的训练统计量。配置加载本身不读取监督数据，导出也不依赖目标文件。
+
+监督读取器核对准备凭据、原目标 manifest/index、冻结划分、训练统计量及原生 DEM 凭据的摘要。
+WorldCover 归档在训练初始化时完整核验，再由各 worker 独立打开；DEM 每次读取核验行摘要。
+WorldCover 原码 `10,20,30,40,50,60,70,80,90,95,100` 映射到 `0..10`，缺测为 `-100` 且 mask=false。
+2020/2021 只读取匹配年份，评测角色默认封存。监督值只交给损失，不能进入编码器或推理输入。
+两个新头仅从公开 64 维嵌入按面积池化到 DSM 40m / WorldCover 10m 后读出，不增加归一化瓶颈。
+
 ## manifest v1
 
 支持 `.json` 列表和全国规模 `.jsonl`。每条记录必填：
