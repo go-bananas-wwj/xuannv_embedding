@@ -96,3 +96,13 @@ def test_amp_overflow_is_not_counted_as_successful_update():
             self.scale /= 2
 
     assert step_optimizer(object(), Scaler()) is False
+
+
+def test_registered_checkpoint_steps_are_unique_and_within_training_budget():
+    from xuannv_embedding.training.regional_base import checkpoint_steps
+
+    assert checkpoint_steps({"steps": 10}) == []
+    assert checkpoint_steps({"steps": 10, "checkpoint_steps": [2, 5]}) == [2, 5]
+    for values in [[0], [True], [10], [3, 3], [5, 2], [2.0]]:
+        with pytest.raises(ValueError):
+            checkpoint_steps({"steps": 10, "checkpoint_steps": values})

@@ -251,6 +251,9 @@ def prepare(args: argparse.Namespace) -> dict:
                 "save_every": 100,
                 "static_weight": 0.25,
                 "min_free_gib": 100,
+                "checkpoint_steps": (
+                    [math.ceil(200 * len(dataset) / 48)] if args.epochs > 200 else []
+                ),
             },
         }
         if name == "public":

@@ -69,6 +69,17 @@ def validate_static_weight(weight: float) -> float:
     return float(weight)
 
 
+def checkpoint_steps(settings: dict[str, Any]) -> list[int]:
+    values = settings.get("checkpoint_steps", [])
+    if (
+        not isinstance(values, list)
+        or any(type(v) is not int or not 0 < v < settings["steps"] for v in values)
+        or values != sorted(set(values))
+    ):
+        raise ValueError("Checkpoint steps must be unique, ordered and inside the update budget")
+    return values
+
+
 class RegionalObjective(StaticObjective):
     def __init__(
         self,
@@ -342,11 +353,12 @@ def read_spec(path: Path) -> tuple[dict[str, Any], Config, dict[str, Any]]:
     }
     if (
         not expected.issubset(training)
-        or set(training) - expected - {"static_weight"}
+        or set(training) - expected - {"static_weight", "checkpoint_steps"}
         or training["effective_batch"] != 48
     ):
         raise ValueError("Invalid training settings")
     validate_static_weight(training.get("static_weight", 0.25))
+    checkpoint_steps(training)
     if training["steps"] < 1 or not 0 <= training["head_steps"] < training["steps"]:
         raise ValueError("Invalid update budget")
     if set(training["rates"]) != {"public", "highres", "heads"}:
@@ -538,7 +550,10 @@ def run_training(
                     "active_months": domain["months"],
                 },
             )
-        if rank == 0 and (step % settings["save_every"] == 0 or step == settings["steps"]):
+        milestones = checkpoint_steps(settings)
+        if rank == 0 and (
+            step % settings["save_every"] == 0 or step == settings["steps"] or step in milestones
+        ):
             kwargs = dict(
                 model=system.model,
                 criterion=system.criterion,
@@ -552,6 +567,8 @@ def run_training(
                 metrics={"steps": step, "static_weight": system.criterion.weight},
             )
             save_training_checkpoint(output / "latest.pt", **kwargs)
+            if step in milestones:
+                save_training_checkpoint(output / f"step{step:06d}.pt", **kwargs)
             if step in [400, settings["steps"]]:
                 save_training_checkpoint(
                     output / ("final.pt" if step == settings["steps"] else "step0400.pt"), **kwargs
