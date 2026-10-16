@@ -32,3 +32,28 @@ Updated 2026-10-16. Approved protocol: [paired experiment](auckland-2024-experim
   dataset is produced by Google and Google DeepMind (CC-BY 4.0).
 
 No downstream accuracy or superiority is claimed at this stage. No Overleaf changes.
+
+## Watchdog deployment, 2026-10-16
+
+The local [training Watchdog](training-watchdog.md) is enabled for both original training
+groups and the downstream scheduler. It adopted the existing launchers without restarting
+them; both model restart counts were zero at verification. Policy: 30-second polling,
+900-second progress timeout, 600-second startup grace and at most five recoveries per model.
+Runtime heartbeats and recovery journals are under the trial's `watchdog` directory.
+
+Recovery verification passed:
+
+- The full CPU suite passed 828 tests; subsequent malformed-state and journal changes
+  passed seven targeted checkpoint/Watchdog tests. Formatting, lint, repository validation
+  and package build also passed.
+- Three-rank CPU full-state recovery reproduced uninterrupted model/head parameters
+  bitwise, including sampler and per-rank random-state restoration.
+- An independent diagnostic NPU job was stopped after two updates. The actual Watchdog
+  selected its checkpoint and completed the registered four-update budget. Maximum
+  parameter difference from its uninterrupted reference was 3.92e-8.
+- Existing production checkpoints were checked read-only: public update 800 and LINZ
+  update 400 were valid at the audit. Legacy checkpoints restore weights, optimizer and
+  progress; their missing historical random/AMP states are explicitly recorded at recovery.
+
+The diagnostic models and their checkpoints are test artifacts, separate from the two
+production encoders. No existing production training was interrupted for these checks.
