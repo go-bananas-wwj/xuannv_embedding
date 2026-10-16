@@ -274,6 +274,8 @@ def run(args) -> None:
             "--device",
             "cuda",
         ]
+        if arm.get("steps_per_epoch"):
+            command += ["--steps", str(arm["steps_per_epoch"])]
         periodic = sorted(checkpoint.parent.glob("model.epoch-*.pt"))
         if periodic:
             command += ["--resume", str(periodic[-1])]
@@ -358,6 +360,7 @@ def reconstruction(args) -> None:
             latent_prediction_weight=0.0,
             view_consistency_weight=0.0,
             uniformity_weight=0.0,
+            independent_targets=None,
         ),
     )
     criterion = AnnualLoss(evaluation).to(device)
@@ -960,6 +963,15 @@ def prepare_local_supervision(args):
     )
 
 
+def prepare_target_comparison(args):
+    from xuannv_embedding.training.target_comparison import prepare_comparison
+
+    result = prepare_comparison(args.local_plan, args.evaluation_plan, args.output)
+    print(
+        json.dumps({"comparison_configs_prepared": len(result["arms"]), "training_started": False})
+    )
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv experiment", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -976,6 +988,12 @@ def main(argv=None) -> int:
         command.add_argument(f"--{name}", required=True, type=Path)
     command.add_argument("--workers", type=int, default=4)
     command.set_defaults(handler=prepare_local_supervision)
+    command = commands.add_parser(
+        "prepare-target-comparison", help="Freeze a bounded two-recipe, two-seed comparison"
+    )
+    for name in ("local-plan", "evaluation-plan", "output"):
+        command.add_argument(f"--{name}", required=True, type=Path)
+    command.set_defaults(handler=prepare_target_comparison)
     command = commands.add_parser(
         "prepare", help="Freeze paired ABC configs and stratified sample IDs"
     )

@@ -57,7 +57,9 @@ main(['data', COMMAND, '--help'])
     assert "--output" in result.stdout
 
 
-@pytest.mark.parametrize("command", ["prepare-targets", "prepare-multisource"])
+@pytest.mark.parametrize(
+    "command", ["prepare-targets", "prepare-multisource", "prepare-target-comparison"]
+)
 def test_supervised_experiment_preparation_help(command) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "xuannv_embedding.cli", "experiment", command, "--help"],
@@ -67,7 +69,8 @@ def test_supervised_experiment_preparation_help(command) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "--prepared-root" in result.stdout
+    expected = "--local-plan" if command == "prepare-target-comparison" else "--prepared-root"
+    assert expected in result.stdout
 
 
 @pytest.mark.parametrize(

@@ -139,6 +139,7 @@ def build_annual_stream(
             )
         if (
             not target_config.engineering_only
+            and not target_config.research_max_updates
             and not reader.preparation["formal_training_released"]
         ):
             raise ValueError(

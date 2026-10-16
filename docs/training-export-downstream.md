@@ -212,3 +212,14 @@ JSON 的每项包含互斥 `train / val / test`。
 
 阈值只用 validation 选择，test 报告 F1、AP、AUC。full-label 与 5/10/50-shot 必须分开报告；
 更换标签、fold、shot、seed 或数据文件后，身份摘要不一致会直接拒绝评测。
+
+七目标对照可用 `xuannv experiment prepare-target-comparison --local-plan /path/local/plan.json
+--evaluation-plan /path/frozen_development/plan.json --output /path/new_comparison` 冻结。
+它复用已核验的 screen 缓存和 8,192 位置双年清单，生成两组、种子 42/17 的四次研究配置；
+每次 2 轮、每轮 512 步、全局 batch 32，从同一原100M制品重新初始化。
+七目标总权重沿用 0.2，渐入为 128 批；不使用教师、EMA，不按中途分数选 checkpoint。
+联合版显式设置 `research_max_updates: 1024`，不会把准备凭据改成正式放行。
+执行 `experiment run --plan ... --arms control_s42 multisource_s42 multisource_s17 control_s17`；
+运行器将已冻结的 `steps_per_epoch` 传给训练入口。重建评测统一关闭独立目标及可见重建，
+冻结嵌入探针沿用开发标签、fold、训练步数及阈值。WorldCover/OSM 的同产品评分仅作开发诊断；
+新确认集保持封存，研究对照结果不会自动覆盖原生产模型。

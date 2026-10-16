@@ -245,6 +245,7 @@ class IndependentTargetsConfig:
     head_lr_multiplier: float = 10.0
     ramp_batches: int = 512
     engineering_only: bool = True
+    research_max_updates: int = 0
 
 
 @dataclass(frozen=True)
@@ -797,6 +798,7 @@ def _parse_independent_targets(value: Any, model: ModelConfig) -> IndependentTar
             "head_lr_multiplier",
             "ramp_batches",
             "engineering_only",
+            "research_max_updates",
         },
         required={
             "schema",
@@ -823,6 +825,12 @@ def _parse_independent_targets(value: Any, model: ModelConfig) -> IndependentTar
     weights = _mapping(raw["weights"], section + ".weights")
     if not weights or set(weights) - SCHEMA_TASKS[schema]:
         raise ConfigError("Independent target weights contain an unknown or empty task list")
+    engineering = _boolean(raw.get("engineering_only", True), section + ".engineering_only")
+    research = _non_negative_int(
+        raw.get("research_max_updates", 0), section + ".research_max_updates"
+    )
+    if engineering and research:
+        raise ConfigError("Engineering and bounded research target modes are mutually exclusive")
     return IndependentTargetsConfig(
         schema=schema,
         scope=scope,
@@ -839,7 +847,8 @@ def _parse_independent_targets(value: Any, model: ModelConfig) -> IndependentTar
             raw.get("head_lr_multiplier", 10), section + ".head_lr_multiplier"
         ),
         ramp_batches=_non_negative_int(raw.get("ramp_batches", 512), section + ".ramp_batches"),
-        engineering_only=_boolean(raw.get("engineering_only", True), section + ".engineering_only"),
+        engineering_only=engineering,
+        research_max_updates=research,
     )
 
 

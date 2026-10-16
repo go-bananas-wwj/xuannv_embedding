@@ -485,6 +485,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     config = Config.from_yaml(args.config)
     target_config = config.training.independent_targets
+    from xuannv_embedding.training.target_supervision import validate_research_budget
+
+    try:
+        validate_research_budget(
+            target_config,
+            steps=args.steps,
+            epochs=args.epochs if args.epochs is not None else config.training.epochs,
+            initialize_from=args.initialize_from,
+            resume=args.resume,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     target_identity = None
     if target_config is not None:
         from xuannv_embedding.data_process.target_audit import WC_CODES

@@ -13,6 +13,22 @@ from torch.nn import functional as F
 from xuannv_embedding.data.target_contract import TARGET_TASKS
 
 
+def validate_research_budget(target, *, steps, epochs, initialize_from, resume):
+    """Bound explicitly requested research without changing formal data release status."""
+    if target is None or not target.research_max_updates:
+        return
+    if target.engineering_only:
+        raise ValueError("Engineering and bounded research modes are mutually exclusive")
+    if steps < 1 or epochs < 1 or steps * epochs > target.research_max_updates:
+        raise ValueError(
+            "Bounded target research requires explicit steps within research_max_updates"
+        )
+    if initialize_from is None or resume is not None:
+        raise ValueError(
+            "Bounded target research requires a fresh explicit initialization, not resume"
+        )
+
+
 class TargetSupervision(nn.Module):
     """Isolated readouts; target tensors enter loss(), never the encoder or forward()."""
 
