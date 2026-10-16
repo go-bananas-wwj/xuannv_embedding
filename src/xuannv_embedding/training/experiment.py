@@ -534,6 +534,10 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "regional-benchmark":
+        from xuannv_embedding.training.regional_followup import main as benchmark_main
+
+        return benchmark_main(forwarded[1:])
     if forwarded and forwarded[0] == "paired-region":
         from xuannv_embedding.training.paired_region import main as paired_main
 
@@ -544,6 +548,7 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("regional-benchmark", help="固定空间下游评测与阶段同步", add_help=False)
     sub.add_parser("paired-region", help="准备同区域公共三源与静态高分对照", add_help=False)
     sub.add_parser("regional-base", help="严格初始化并准备区域底座实验", add_help=False)
     p = sub.add_parser("prepare")
