@@ -39,6 +39,22 @@ def test_dense_readout_standardization_keeps_float32_inputs():
     assert result.sum() == 64
 
 
+def test_dense_readout_skips_tiles_without_eligible_labels():
+    features = np.ones((1, 3, 8, 8), np.float32)
+    scaler = StandardScaler().fit(np.array([[0, 0, 0], [2, 2, 2]], np.float32))
+    result = _confusion(
+        torch.nn.Conv2d(3, 2, 1),
+        features,
+        np.zeros((1, 8, 8), np.int64),
+        np.zeros((1, 8, 8), bool),
+        [0],
+        [1, 2],
+        scaler,
+        torch.device("cpu"),
+    )
+    assert result.sum() == 0
+
+
 def test_multiclass_metrics_retain_declining_and_empty_prediction_classes():
     confusion = np.array([[8, 2, 0], [1, 9, 0], [0, 10, 0]])
     report = classification_metrics(confusion, [1, 2, 3])

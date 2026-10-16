@@ -294,6 +294,8 @@ def _confusion(head, features, target, valid, tiles, classes, scaler, device, pr
     head.eval()
     with torch.inference_mode():
         for tile in tiles:
+            if not valid[tile].any():
+                continue
             x = np.asarray(features[tile], np.float32)
             x = ((x - scaler.mean_[:, None, None]) / scaler.scale_[:, None, None]).astype(
                 np.float32
@@ -425,6 +427,8 @@ def score_job(spec: dict, job: dict, *, device_name: str) -> dict:
             matrix = np.zeros((len(classes), len(classes)), np.int64)
             for tile in fold["test"]:
                 positions = np.flatnonzero(valid[tile]) + tile * labels.shape[1] * labels.shape[2]
+                if not len(positions):
+                    continue
                 prediction = head.predict(_points(features, positions, target.shape))
                 predictions.ravel()[positions] = np.asarray(classes, np.uint8)[prediction]
                 matrix += confusion_matrix(
