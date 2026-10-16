@@ -22,6 +22,13 @@ def test_followup_registers_all_comparisons_without_per_task_month_selection():
     assert {j["budget"] for j in registered if j["feature"].endswith("april")} == {200}
 
 
+def test_figure_scenes_are_determined_by_reference_labels():
+    from xuannv_embedding.downstream.regional_figures import choose_scenes
+
+    labels = np.array([[[1, 1], [1, 40]], [[1, 40], [40, 40]]])
+    assert choose_scenes(labels, np.ones_like(labels, bool), [1, 40]) == [(1, 0), (40, 1)]
+
+
 def test_dense_readout_standardization_keeps_float32_inputs():
     torch.set_num_threads(1)
     features = np.ones((1, 3, 8, 8), np.float32)

@@ -295,8 +295,15 @@ def follow(spec_path: Path) -> None:
             state = snapshot(spec, "evaluating")
             state["active_jobs"] = {k: v["device"] for k, v in active.items()}
             dump(root / "follow-status.json", state)
-            if len([k for k in completed if k.startswith("job:")]) == len(planned) and not active:
+            if (
+                len([k for k in completed if k.startswith("job:")]) == len(planned)
+                and len([k for k in completed if k.startswith("regression:")]) == 5
+                and not active
+            ):
                 summarize(spec)
+                from xuannv_embedding.downstream.regional_figures import render
+
+                render(spec)
                 publish(spec, "evaluation_complete")
                 dump(root / "follow-status.json", snapshot(spec, "complete"))
                 return
