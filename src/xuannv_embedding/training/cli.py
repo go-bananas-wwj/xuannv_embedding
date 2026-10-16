@@ -494,6 +494,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             "worldcover_raw_codes": list(WC_CODES),
             "dem_spacing_m": 40,
         }
+        from xuannv_embedding.data.target_contract import (
+            MULTISOURCE_TARGET_SCHEMA,
+            OSM_CHANNELS,
+            STRUCTURE_CHANNELS,
+            TARGET_TASKS,
+        )
+
+        if target_config.schema == MULTISOURCE_TARGET_SCHEMA:
+            target_identity.update(
+                task_contracts={
+                    name: {
+                        "channels": TARGET_TASKS[name][0],
+                        "spacing_m": TARGET_TASKS[name][1] * 5,
+                        "objective": TARGET_TASKS[name][2],
+                    }
+                    for name in target_config.weights
+                },
+                clcd_raw_codes=list(range(1, 10)),
+                osm_channels=list(OSM_CHANNELS),
+                structure_channels=list(STRUCTURE_CHANNELS),
+                slope_units="degrees; loss divided by90",
+                nightlights_units="published stored units; no extra normalization",
+            )
         if target_config.engineering_only and not (1 <= args.steps <= 128 and args.epochs == 1):
             parser.error(
                 "Engineering target supervision requires --epochs 1 and --steps between1and128"

@@ -57,9 +57,10 @@ main(['data', COMMAND, '--help'])
     assert "--output" in result.stdout
 
 
-def test_supervised_experiment_preparation_help() -> None:
+@pytest.mark.parametrize("command", ["prepare-targets", "prepare-multisource"])
+def test_supervised_experiment_preparation_help(command) -> None:
     result = subprocess.run(
-        [sys.executable, "-m", "xuannv_embedding.cli", "experiment", "prepare-targets", "--help"],
+        [sys.executable, "-m", "xuannv_embedding.cli", "experiment", command, "--help"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,

@@ -181,3 +181,81 @@ def prepare_experiments(
     }
     write_json(output / "plan.json", result)
     return result
+
+
+def prepare_multisource(prepared, target_root, experiment_plan, output, *, workers=4):
+    """One fixed engineering recipe and matched control; do not run efficacy experiments."""
+    import yaml
+
+    from xuannv_embedding.config import Config
+    from xuannv_embedding.data.target_contract import MULTISOURCE_TARGET_SCHEMA
+    from xuannv_embedding.data_process.local_targets import prepare_local_targets
+
+    if output.exists():
+        raise FileExistsError("Multi-source experiment output must be new")
+    if any(
+        output.resolve().is_relative_to(source.resolve())
+        for source in (prepared, target_root, experiment_plan.parent)
+    ):
+        raise ValueError("New experiment must not write into frozen source roots")
+    old = json.loads(experiment_plan.read_text())
+    if old["preparation_sha256"] != digest(prepared / "preparation.json"):
+        raise ValueError("Experiment and prepared targets have different identities")
+    engineering = old["configs"]["engineering/42/D3"]
+    config_path = Path(engineering["path"])
+    if digest(config_path) != engineering["sha256"]:
+        raise ValueError("Parent engineering configuration changed")
+    for entry in old["manifests"]["engineering"]:
+        if digest(Path(entry["path"])) != entry["sha256"]:
+            raise ValueError("Frozen engineering manifest changed")
+    output.mkdir(parents=True)
+    preparation = prepare_local_targets(prepared, target_root, output / "ready", workers=workers)
+    weights = {
+        "dem_elevation": 0.04,
+        "dem_slope": 0.01,
+        "worldcover": 0.035,
+        "clcd": 0.015,
+        "nightlights": 0.05,
+        "osm_semantic": 0.025,
+        "osm_structure": 0.025,
+    }
+    configs = {}
+    for name in ("multisource", "control"):
+        raw = yaml.safe_load(config_path.read_text())
+        raw["experiment"]["name"] = f"local_targets_{name}_engineering_s42"
+        target = raw["training"]["independent_targets"]
+        target.update(
+            schema=MULTISOURCE_TARGET_SCHEMA,
+            prepared_root=str((output / "ready").resolve()),
+            preparation_sha256=digest(output / "ready/preparation.json"),
+            weights=weights,
+            ramp_batches=32,
+            engineering_only=True,
+        )
+        if name == "control":
+            raw["training"]["independent_targets"] = None
+        path = output / f"{name}.yaml"
+        path.write_text(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True))
+        Config.from_yaml(path)
+        configs[name] = {"path": str(path.resolve()), "sha256": digest(path)}
+    result = {
+        "schema": "xuannv.local-target-engineering.v2",
+        "training_started": False,
+        "preparation_sha256": digest(output / "ready/preparation.json"),
+        "parent_plan": {"path": str(experiment_plan.resolve()), "sha256": digest(experiment_plan)},
+        "manifests": old["manifests"]["engineering"],
+        "configs": configs,
+        "engineering_patch_ids": old["engineering_patch_ids"],
+        "initial_config": old["original_config"],
+        "initial_config_sha256": old["original_config_sha256"],
+        "weights": weights,
+        "total_auxiliary_weight": sum(weights.values()),
+        "family_weights": {"terrain": 0.05, "landcover": 0.05, "nightlights": 0.05, "OSM": 0.05},
+        "engineering_budget": "128updates across both years, then2strict-resumeupdates; "
+        "no efficacy or confirmation scoring.",
+        "next_comparison": "Matched control versus full local supervision; "
+        "no five-arm queue launched.",
+        "formal_training_released": preparation["formal_training_released"],
+    }
+    write_json(output / "plan.json", result)
+    return result

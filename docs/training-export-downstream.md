@@ -112,6 +112,24 @@ scripts/cuda/launch.sh /path/to/engineering/D3.yaml \
 全缺测保留有限零项及参数梯度图；人工遮挡不删除独立目标监督。准备凭据未放行时，
 正式的 D1/D2/D3 训练会被拒绝。监督头、单位/类别映射及准备摘要会写入新 checkpoint 元数据。
 
+本地多源监督的工程接入使用已有的冻结划分与工程 manifest：
+
+```bash
+xuannv experiment prepare-multisource \
+  --prepared-root /path/to/prepared \
+  --target-root /path/to/targets \
+  --experiment-plan /path/to/frozen_target_experiments/plan.json \
+  --output /path/to/new_local_supervision --workers 4
+```
+
+命令只生成新的监督缓存、`multisource.yaml`、同数据的 `control.yaml` 和计划凭据，不启动训练。
+原始标签与已冻结清单只读；缓存逐行校验，派生缓存和源码均登记摘要。多源工程配置使用
+地形/覆盖/夜光/OSM 各 0.05，总辅助权重 0.2，前 32 批渐入；这是一套未调参的起始设置。
+用前述 8 卡启动器执行 `multisource.yaml --epochs 1 --steps 128`，再另存恢复 2 步，
+即可覆盖同一批 2,048 个位置的两个年份。控制组留待后续效果对照，不在接入检查中自动排队。
+原五组方案保留为历史计划；当前快速路线为修复基线与多监督联合版两个组。
+CLCD、OSM 接入上游后，相同产品的下游评分只能作产品相关的开发/回归检查。
+
 年度 ABC 实验使用 `xuannv experiment prepare/run/reconstruction/export/probe/compare`。`prepare` 冻结
 按 UTM 区域与 MS/PAN 覆盖率分层的训练/验证样本，排除已有下游开发集，记录源 manifest、
 训练统计量、标签、初始化权重及教师的摘要；生成相同学习率、数据、epoch 的八个对照配置。

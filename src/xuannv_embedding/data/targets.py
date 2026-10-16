@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
+from xuannv_embedding.data.target_contract import LEGACY_TARGET_SCHEMA, LOCAL_TASKS, SCHEMA_TASKS
 from xuannv_embedding.data_process.target_audit import WC_CODES, digest, local_path
 
 
@@ -56,6 +57,7 @@ class AnnualTargetReader:
             role: {row["patch_id"] for row in rows} for role, rows in split["roles"].items()
         }
         self.roles["train"] = set(split[f"{scope}_patch_ids"])
+        self.tasks = SCHEMA_TASKS[self.preparation.get("target_schema", LEGACY_TARGET_SCHEMA)]
         self.allow_evaluation = allow_evaluation
         stats_path = prepared_root / f"train_statistics.{scope}.json"
         if digest(stats_path) != self.preparation["train_statistics_sha256"][scope]:
@@ -98,6 +100,13 @@ class AnnualTargetReader:
         if len(self.receipts) != 2:
             raise ValueError("Both annual WorldCover archives are required")
         self.groups, self.stores, self.pid = {}, {}, os.getpid()
+        self.local_cache = None
+        if "local_manifest_sha256" in self.preparation:
+            from xuannv_embedding.data.local_target_cache import LocalTargetCache
+
+            self.local_cache = LocalTargetCache(
+                prepared_root, self.preparation, scope, self.roles["train"], self.rows
+            )
 
     def _group(self, name: str):
         import zarr
@@ -139,7 +148,7 @@ class AnnualTargetReader:
         if role not in self.roles or patch_id not in self.roles[role]:
             raise ValueError("Position is outside the frozen target experiment role")
         tasks = ("dem_elevation", "worldcover") if tasks is None else tuple(tasks)
-        if not tasks or set(tasks) - {"dem_elevation", "worldcover"}:
+        if not tasks or set(tasks) - self.tasks:
             raise ValueError("Unknown or empty independent target task list")
         row, result = self.rows[patch_id], {}
         if "dem_elevation" in tasks:
@@ -165,6 +174,11 @@ class AnnualTargetReader:
             for code, label in zip(WC_CODES, range(len(WC_CODES))):
                 values[valid & (raw == code)] = label
             result["worldcover"] = {"values": values, "valid": valid}
+        local_tasks = sorted(set(tasks) & set(LOCAL_TASKS))
+        if local_tasks:
+            if self.local_cache is None or role != "train":
+                raise ValueError("Local targets require a prepared training-only cache")
+            result.update(self.local_cache.read(patch_id, year, local_tasks))
         return result
 
     def close(self):
@@ -172,6 +186,8 @@ class AnnualTargetReader:
             store.close()
         self.stores.clear()
         self.groups.clear()
+        if self.local_cache is not None:
+            self.local_cache.close()
 
     def __getstate__(self):
         state = dict(self.__dict__)
@@ -193,10 +209,18 @@ def collate_targets(samples: list[dict]) -> dict:
     tasks = set(samples[0])
     if any(set(sample) != tasks for sample in samples):
         raise ValueError("Target task lists differ across samples")
+    fields = {task: set(samples[0][task]) for task in tasks}
+    if any(
+        fields[task] - {"values", "valid", "weight"} or not {"values", "valid"} <= fields[task]
+        for task in tasks
+    ):
+        raise ValueError("Invalid supervision tensor fields")
+    if any(set(sample[task]) != fields[task] for sample in samples for task in tasks):
+        raise ValueError("Target tensor fields differ across samples")
     return {
         task: {
             field: torch.from_numpy(np.stack([sample[task][field] for sample in samples]))
-            for field in ("values", "valid")
+            for field in sorted(fields[task])
         }
         for task in sorted(tasks)
     }

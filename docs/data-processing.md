@@ -85,6 +85,11 @@ WorldCover 使用已验收的 2020/2021 年度 10m 数组。三套 `train_statis
 分别只用该训练清单的有效目标，静态 DSM 每位置计一次。`preparation.json` 只放行工程联调，
 物理标定及独立定位/真值要求仍需单独完成。
 
+`xuannv experiment prepare-multisource` 在这套冻结位置上追加本地监督缓存，复用原生 DSM，
+按 40m/640m/5m 的监督网格聚合坡度、CLCD、夜光及 OSM 结构，并核验实际使用的七个新增
+年度归档。它不重新选样或读取确认位置；输出与原监督目录分开保存，细节见
+[训练、导出与下游评测](training-export-downstream.md)。
+
 ## 全国不变量
 
 - `parent_key = EPSG:grid_col:grid_row`，同一父格只能有一个 owner UTM zone；

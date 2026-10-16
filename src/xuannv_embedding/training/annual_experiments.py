@@ -945,6 +945,21 @@ def prepare_targets(args):
     )
 
 
+def prepare_local_supervision(args):
+    from xuannv_embedding.training.target_experiments import prepare_multisource
+
+    result = prepare_multisource(
+        args.prepared_root,
+        args.target_root,
+        args.experiment_plan,
+        args.output,
+        workers=args.workers,
+    )
+    print(
+        json.dumps({"target_configs_prepared": len(result["configs"]), "training_started": False})
+    )
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv experiment", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -954,6 +969,13 @@ def main(argv=None) -> int:
     for name in ("prepared-root", "target-root", "initial-config", "output"):
         command.add_argument(f"--{name}", required=True, type=Path)
     command.set_defaults(handler=prepare_targets)
+    command = commands.add_parser(
+        "prepare-multisource", help="Prepare local supervision and a bounded engineering pilot"
+    )
+    for name in ("prepared-root", "target-root", "experiment-plan", "output"):
+        command.add_argument(f"--{name}", required=True, type=Path)
+    command.add_argument("--workers", type=int, default=4)
+    command.set_defaults(handler=prepare_local_supervision)
     command = commands.add_parser(
         "prepare", help="Freeze paired ABC configs and stratified sample IDs"
     )

@@ -129,6 +129,10 @@ def build_annual_stream(
             preparation_sha256=target_config.preparation_sha256,
             scope=target_config.scope,
         )
+        from xuannv_embedding.data.target_contract import LEGACY_TARGET_SCHEMA
+
+        if reader.preparation.get("target_schema", LEGACY_TARGET_SCHEMA) != target_config.schema:
+            raise ValueError("Configured target schema differs from the pinned preparation")
         if (reader.dem_mean, reader.dem_std) != (target_config.dem_mean, target_config.dem_std):
             raise ValueError(
                 "Configured target normalization differs from the pinned training statistics"

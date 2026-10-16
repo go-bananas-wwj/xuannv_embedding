@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 import yaml
 
+from xuannv_embedding.data.target_contract import SCHEMA_TASKS
+
 
 class ConfigError(ValueError):
     """配置解析或合同校验失败。"""
@@ -810,7 +812,7 @@ def _parse_independent_targets(value: Any, model: ModelConfig) -> IndependentTar
     if model.architecture != "annual5m":
         raise ConfigError("Independent annual targets require annual5m architecture")
     schema = _string(raw["schema"], section + ".schema")
-    if schema != "annual-dem40m-worldcover-v1":
+    if schema not in SCHEMA_TASKS:
         raise ConfigError("Unsupported independent target schema")
     scope = _string(raw["scope"], section + ".scope")
     if scope not in {"screen", "expanded"}:
@@ -819,7 +821,7 @@ def _parse_independent_targets(value: Any, model: ModelConfig) -> IndependentTar
     if not re.fullmatch(r"[0-9a-f]{64}", sha):
         raise ConfigError("Independent target preparation SHA must be64hexcharacters")
     weights = _mapping(raw["weights"], section + ".weights")
-    if not weights or set(weights) - {"dem_elevation", "worldcover"}:
+    if not weights or set(weights) - SCHEMA_TASKS[schema]:
         raise ConfigError("Independent target weights contain an unknown or empty task list")
     return IndependentTargetsConfig(
         schema=schema,
