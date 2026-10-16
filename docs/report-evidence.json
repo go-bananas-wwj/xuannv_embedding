@@ -1,8 +1,8 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.13",
-  "verified_date": "2026-10-16",
-  "scope": "Preserves E1-E16 and every prior scientific metric. Adds E17-E18 for7local supervision heads, frozen training cache, real8GPU128+2engineering, legacy restore and target-free export. Effectiveness comparison and long training have not started.",
+  "report_version": "1.14",
+  "verified_date": "2026-10-17",
+  "scope": "Preserves E1-E18 and all prior scientific metrics. Adds E19-E20 for a frozen two-recipe,two-continuation-seed1024update comparison, common held-out reconstruction, historical weak-label probes, second probe seed and pooled10m diagnostic. Reports the preregistered decision without opening new confirmation roles or replacing production weights.",
   "evidence": {
     "E1": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
@@ -1721,6 +1721,1215 @@
         "Resume2updates is a partial second epoch, not another complete dataset traversal."
       ],
       "packaging_scope": "Isolated wheel import path with existing interpreter dependencies, not a clean dependency installation."
+    },
+    "E19": {
+      "scope": "Preregistered bounded repaired-control versus7local-target comparison, two continuation seeds, fixed final1024update artifacts; no new-source or confirmation-set selection.",
+      "verified_at": "2026-10-17T06:46:04.942688+08:00",
+      "training_git_sha": "8b2ec8dfda856a8930999b9e22ab430bde523b76",
+      "training_source_code_sha256": "08f76f6a73e78a8157ffd176956654664e7bbc5bc0d04806fb283e3ed2eace95",
+      "plan_sha256": "18788100f1da7dd5ff733e35ef08eed2564c9bdd6a4b5005a9f6e272c5ecbd0d",
+      "files": [
+        {
+          "path": "outputs/annual_targets/comparison_20261017/plan.json",
+          "sha256": "18788100f1da7dd5ff733e35ef08eed2564c9bdd6a4b5005a9f6e272c5ecbd0d"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/control_s42/config.yaml",
+          "sha256": "519fa1a946aeedbf6f248c46d7d0ce51de98570baae0c6ebe98b391000af5ffe"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/multisource_s42/config.yaml",
+          "sha256": "65a1dc405bf73235d4986df67ab154ba7ae44a83394a94a7edde0d80c4691300"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/control_s17/config.yaml",
+          "sha256": "4ef28b9425282db8389c56c77afc21c6b56760c1a35b11830357cfadec17c679"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/multisource_s17/config.yaml",
+          "sha256": "a11de77ecbd5e07d5994c30bc34e3004297266cdc27d1acb56239e79ba3ae5fb"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/prepare.log",
+          "sha256": "2097862021db8dd885d8e3bef27844fc54a5861ff8e6a03d5696cc899f9b8343"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/pairing_verification.json",
+          "sha256": "67a7920696e76e3f9a907c34c129f1cca4e02766b1ed3686e0854f77d0e36278"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/check_pairing.py",
+          "sha256": "644370e254a352c45ddf580edcce03da362dd5ffd2d159505e14dd3c30737750"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/first_batch_pairing.json",
+          "sha256": "b2b71061f089a76ddd80082cdf53607c336bb96c0ebfe9e046d63d6e89579903"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/check_initial_pair.py",
+          "sha256": "057f1fb054312d0d6a3128c8db1b105814c3c32036959405791b3083abb2ebbf"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/evaluation_support_audit.json",
+          "sha256": "d016abf4213278582042a3a94ac288d6aa255a3fa519808f449d001bb70374c7"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/evaluation_input_freeze.json",
+          "sha256": "533232db970c1611b7bee5d16462d69ed98c693aa8d7a8c521d27a3ca215b0fb"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/freeze_evaluation_inputs.py",
+          "sha256": "156615e201f3ef30bd7dfb030c3ffdf44a1ab2dc187130d35c1f5fd9981ee488"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/evaluation_freeze.log",
+          "sha256": "7b0638f30d08bf7dc2425abd873ea7ba1ee66f523902cdef9692b8b9f83e7c58"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/evaluation_cache_verification.json",
+          "sha256": "c4c6c518955f6431aceab15d4873c6c0a069c320eff70782008b9128551369d8"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/prepare_eval_cache.py",
+          "sha256": "bf7a6c9aef19fb1d80f50f9c20531ca888c24b62f0cb8eeadd7dccb3d53ef795"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/eval_cache.log",
+          "sha256": "b726347f3cb53b5c67cc33d0ec1a6cfbe8807f304925379be92532be7ba31c3b"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.test.manifest.jsonl",
+          "sha256": "085021a91dd30af0b24d4c7c31e270c9e8080653ba40555c65c4595a24b91a0a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.train.manifest.jsonl",
+          "sha256": "868873a1293d924c7b864db5a2f2f904ae88a49c61d5c3a3d24527b5d386e290"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.validation.manifest.jsonl",
+          "sha256": "643eec2f0523a8242b4ada830425485669ef62992338e545e0b9d43111297fdc"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.test.manifest.jsonl.meta.json",
+          "sha256": "f0bf3935ea9e4960acce8fbcb0b5e9b327af5149dff3a3b37120e0c794e816ba"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.train.manifest.jsonl.meta.json",
+          "sha256": "0257f6d82b01ce1fcaeae08bcb68952c06bcc8044dd8fe60ffaa1fbe97ff0bc7"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.validation.manifest.jsonl.meta.json",
+          "sha256": "64afadc3c957dd2435cf56c7e8b4c06faa7c3b16bbd8f1d5259f4804b020937a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.test.manifest.origin.json",
+          "sha256": "3c46324281057d36da4fc04604db136945b8d1c52e919f666a9a838db08d2a14"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.train.manifest.origin.json",
+          "sha256": "4f9ef936e6000a2405dbcede512a6d20dba9c9c6306dd5f2db8a134b936ac194"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/development_data/2021.validation.manifest.origin.json",
+          "sha256": "c1562d6e73a96c2b189aa518f16edb2748e9c751f9845c2dc26ffba14810ff1d"
+        }
+      ],
+      "training_budget": {
+        "runs": 4,
+        "updates_per_run": 1024,
+        "total_updates": 4096,
+        "global_batch": 32,
+        "annual_exposures_per_run": 32768,
+        "paired_positions_per_run": 8192,
+        "teacher": false,
+        "EMA": false
+      },
+      "evaluation_protocol": {
+        "semantic": "Same124weak-label positions;5spatial folds; train-fold normalization and class weights; fixed linear head.",
+        "fine": "Same203candidate positions in16cities; frozen task eligibility;5city folds;600steps; linear and conv3x3 heads; fixed logit threshold0.",
+        "probe_seed_offsets": [
+          0,
+          10
+        ],
+        "reference_feature_mode": "pooled10m",
+        "primary_semantic_score": "Mean(water:F1, landcover:mIoU)",
+        "primary_fine_score": "Mean(road:conv3x3:F1, road:conv3x3:boundaryF1, building:conv3x3:F1, water:conv3x3:F1)",
+        "joint_score": "Mean(primary_semantic_score, primary_fine_score)",
+        "guardrails": {
+          "semantic_average_drop": 0.002,
+          "fine_average_drop": 0.002,
+          "water_F1_drop": 0.01,
+          "landcover_mIoU_drop": 0.005,
+          "road_F1_drop": 0.005
+        },
+        "decision": "Recommend longer supervised training only for positive semantic and fine deltas in both continuation seeds, with guardrails versus paired control and original_exact; fine gain must retain its sign in the second head seed. Otherwise retain control/original and diagnose before spending more.",
+        "uncertainty": "Paired2000whole-spatial-group bootstrap per metric; two continuation seeds share one original pretrained artifact.",
+        "no_posthoc_recipe_or_checkpoint_search": true,
+        "new_confirmation_roles_untouched": true
+      },
+      "all_non_supervision_configuration_fields_paired": true,
+      "downstream_candidate_overlap": 0,
+      "downstream_candidate_positions": 327,
+      "frozen_training_positions": 8192,
+      "actual_evaluation_source_split_counts": {
+        "train": 283,
+        "validation": 5,
+        "test": 39
+      },
+      "reliable_target_cache_reused_from": "E17",
+      "preparation_formal_release_changed": false,
+      "research_mode": "Explicit1024update bound; fresh initialization; no resume. Default0 preserves the original formal-training release check; old128engineering limit retained.",
+      "snapshot_note": "plan.training_started is a preparation-time snapshot; actual execution is recorded by status.json and E20.",
+      "first_batch_pairing": {
+        "42": {
+          "auxiliary_ramp_at_first_batch": 0,
+          "component_differences": {
+            "recon_s2_recon": 0.0,
+            "recon_s1_recon": 0.0,
+            "highres_heldout_recon": 0.0,
+            "highres_visible_recon": 0.0,
+            "total": 2.1278858184814453e-05,
+            "recon": 0.0,
+            "highres_recon": 0.0,
+            "uniformity": 0.004252433776855469,
+            "uniformity_weighted": 2.1262094378471375e-05,
+            "latent_prediction": 0.0,
+            "view_consistency": 0.0
+          },
+          "gradient_norm_difference": -0.00135040283203125,
+          "reconstruction_components_exactly_equal": true,
+          "absolute_total_loss_difference": 2.1278858184814453e-05,
+          "total_loss_difference_accounted_by_common_components": true,
+          "scope": "Paired seeds, samples and configuration; CUDA AMP is not required to reproduce bitwise identical reductions."
+        },
+        "17": {
+          "auxiliary_ramp_at_first_batch": 0,
+          "component_differences": {
+            "recon_s2_recon": 0.0,
+            "recon_s1_recon": 0.0,
+            "highres_heldout_recon": 0.0,
+            "highres_visible_recon": 0.0,
+            "total": -1.1324882507324219e-06,
+            "recon": 0.0,
+            "highres_recon": 0.0,
+            "uniformity": -0.00022840499877929688,
+            "uniformity_weighted": -1.1418014764785767e-06,
+            "latent_prediction": 0.0,
+            "view_consistency": 0.0
+          },
+          "gradient_norm_difference": 0.0001678466796875,
+          "reconstruction_components_exactly_equal": true,
+          "absolute_total_loss_difference": 1.1324882507324219e-06,
+          "total_loss_difference_accounted_by_common_components": true,
+          "scope": "Paired seeds, samples and configuration; CUDA AMP is not required to reproduce bitwise identical reductions."
+        }
+      },
+      "no_new_confirmation_labels_or_scores_used": true
+    },
+    "E20": {
+      "scope": "Completed four real8GPU runs, strict finite checkpoint/optimizer checks, paired development probes, second head seed, pooled10m reference, group bootstrap and report. Product-related weak labels only, no production promotion.",
+      "verified_at": "2026-10-17T06:46:04.942688+08:00",
+      "training_git_sha": "8b2ec8dfda856a8930999b9e22ab430bde523b76",
+      "training_source_code_sha256": "08f76f6a73e78a8157ffd176956654664e7bbc5bc0d04806fb283e3ed2eace95",
+      "files": [
+        {
+          "path": "outputs/annual_targets/comparison_20261017/status.json",
+          "sha256": "d3acdf4f2e00e09bfd7bf99480e87b3f505208742173578bc585f4be96ac6ced"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/control_s42/train.log",
+          "sha256": "16eb72e5f5fd42316883b4d64d03fb47d5345947c5691ef16523fb394c47d340"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/multisource_s42/train.log",
+          "sha256": "3912fa830b60d4d85b8728777d8d768c6ca46149b66c38d544426fa3b07ad827"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/multisource_s17/train.log",
+          "sha256": "04f5e9a2f99d0e7cd06aa05531228201e69b3823ec9f81aa4e4431670c0131ea"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/control_s17/train.log",
+          "sha256": "d8ba1207a670d7b8fdfd7f999cb48624f6c1cf7aebfdd8e533aa7f8f0b77e6d0"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/run_comparison.py",
+          "sha256": "a1cd2a8c5191e4532c0fdf0debab69fe43ef9ab56c1688c3f79519a8e77def34"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/run.log",
+          "sha256": "d8c62376e215c7b9e2514efcc22c7c01320928a91eee66b41e39103ea90a1cee"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/run_process.json",
+          "sha256": "13901b75f6b95ccaa082fea840afe9f338c90709fc5bdd256e45a10b1e2936b4"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/runner.log",
+          "sha256": "13901b75f6b95ccaa082fea840afe9f338c90709fc5bdd256e45a10b1e2936b4"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/check_training.py",
+          "sha256": "db3079332a2dfad328c318f1e7de599825c825b771ed5cb6ea9faf429a92ebd9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/training_verification.json",
+          "sha256": "1b2b5a834e5d9c9490a8401a4da760dd76fd3bdee267ccc17d985025d5f6c74f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/training_verification.log",
+          "sha256": "1b2b5a834e5d9c9490a8401a4da760dd76fd3bdee267ccc17d985025d5f6c74f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/run_evaluation.py",
+          "sha256": "506f8a6e7b74f9f71477d50c2eb58935de93dbaa15ee150a3448bc8c3157a30a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/evaluation_process.json",
+          "sha256": "6fa1f98189eeb44c95a21ee2351c58b19042ecbabc784d950f54a261e7fbdd84"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/evaluation_runner.log",
+          "sha256": "abf33ce5e8e1cdcd01ec67298b767197edc380d993daf1dd49af2568cefeba34"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/evaluate_main.log",
+          "sha256": "a8326acdc1ac78d2862d9ba472779241580c7a039a3cd49a34872bbc97290000"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/check_exports.py",
+          "sha256": "13225a5d19a18a76fc8e54ab971cc67d39590fe940f6446ea685c6f424d02c18"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/check_exports.log",
+          "sha256": "55915f055edf0d972f6ff20bb8d73b7bdc8d780def4edce2db477cab968031d2"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/export_integrity.json",
+          "sha256": "d534950f77ad343553a8aa8961273fa7cd4bcb0ef3b8b57d353e2404ac68a9d5"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/summarize_results.py",
+          "sha256": "681a4a9d880a20fdc96781592a134d30ffee02867ebc56a65353bac4194b0079"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/comparison_results.json",
+          "sha256": "d44959d0ceb3de0db294f2a2619c2d3ad37f38eec09339e9c0a4a26673deb45a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/summary.log",
+          "sha256": "fc78ea653277f6602c15c5580d2149d4ee7c8c13a8b2b23e436af799eb795603"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/plot_results.py",
+          "sha256": "72f1eaad3bbe94ab0e89915da6f054c70752f6267d61991c3c5b0d05b25d3bb9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/paired_comparison.pdf",
+          "sha256": "312c7adf9ea389ca8e4a2c19f20d680457d9c91734c354d1a34fe15661025d7f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/paired_comparison.png",
+          "sha256": "163cd1c0782731b661ffd08908a2eb5af3b168d00b71ce84821855b836f98372"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/figure_derivation.json",
+          "sha256": "a2830d2abebe8ca5276272badeb42a1368ea0626636d5f9bf6b58e185db33c9e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/pytest_full.log",
+          "sha256": "76e4b283d508501d32d224db030b3a44ac04e7fce9f91fbe7aa277de07e9cc79"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/pytest_prelaunch.log",
+          "sha256": "c67a0fcd24d2eaca4a6b9487debc3abe39790808838f7529f7a718a09dabb1e3"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/build.log",
+          "sha256": "c5ad4556deb9887f03294add6c11cb8258d8f6a71db1f555ef6dbac3b4616a1e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/wheel_verification.json",
+          "sha256": "da32a7c2d8cd46e68bc7e00565e54e5828882a6917ecad204b87bdc3266b1231"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/check_wheel.py",
+          "sha256": "898e76592017893b4d4b5b75fabf45b66bf91bf2650f113d871fc59b9bfbae6b"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/wheel.log",
+          "sha256": "da32a7c2d8cd46e68bc7e00565e54e5828882a6917ecad204b87bdc3266b1231"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/report_v1_14_build.log",
+          "sha256": "d33d55c4a260c7bd42d7a487ffc6744e11fddc0215bf55119f344412258fd707"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/pdf_verification.json",
+          "sha256": "5b31fd4de0552c520dbe07ff5d955b2597100774e9100013adffa6e54d0c46bc"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/excerpt_derivation.json",
+          "sha256": "31c38ca7ea634f96f1f481462fe7536dc3d429e9bf13cec7e9fa49b9cab985d9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_control_s17_pooled10m_process.json",
+          "sha256": "db3442e956e71385eeb97d6dd22e7c06c97381651d6ee41bbf7f5186297273d4"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_control_s17_seed10_process.json",
+          "sha256": "6b0c84aeb0e6ad5e3c8e597a836584b0416cccfe53baa2a395538ef41b52e128"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_control_s42_pooled10m_process.json",
+          "sha256": "4e81d05d2ea4c6000bb975475f290f12ee1d0cb2bc7e29d69194892e7a038f00"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_control_s42_seed10_process.json",
+          "sha256": "f4dfcbec2d97a5b2b1d4a6fece03207a1731221c4494d1372f21fcc20e18b848"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_multisource_s17_pooled10m_process.json",
+          "sha256": "90aa1a3f3959c86ee649a95d18a96b4b3afd2f1d5e05580f7f60ef85f64de4b5"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_multisource_s17_seed10_process.json",
+          "sha256": "efec4218b074e99aa95bae89b00f7699203263cf74ab2cdec817bcfa7d43d4a9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_multisource_s42_pooled10m_process.json",
+          "sha256": "c1cd5996bdf102f9d584b0e66ee677f638a4e81a237f2ca9c781195bdd8560a8"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_multisource_s42_seed10_process.json",
+          "sha256": "281dba7391ebf609e5208f86247f7d1c9bf34050c813d8a49dcd8c070227b60d"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_original_exact_pooled10m_process.json",
+          "sha256": "dd8e107e929a17b8d866c7944dbcc656f3273d34ee9dcb55ab2d04676a2a3346"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_original_exact_seed10_process.json",
+          "sha256": "cc4bcd5a4f5426f5314679996782c05c189bdb2f77ac996bb91810df9636516c"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_control_s17_pooled10m.log",
+          "sha256": "1648469555db0957fe4d058f6e19c44e086f6e2f53e2b2de3977669d92355c43"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_control_s17_seed10.log",
+          "sha256": "40832ee85059f906b404f1d73375b7f29ba977f18da29d912d3041ec1aff59d4"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_control_s42_pooled10m.log",
+          "sha256": "53cd5c5470237bc71491a86cd87b6fc8a02a28e3b7aa8fb670c89dbb513480bc"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_control_s42_seed10.log",
+          "sha256": "ad8e8d28a8b811652d5f131d81383c88f8b34a982c05dc186dc414bff50b67a3"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_multisource_s17_pooled10m.log",
+          "sha256": "9a6a90ee0a18192f2d1f9aec5571fd33a25bce76b5642dc88b6e145192f2c6ed"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_multisource_s17_seed10.log",
+          "sha256": "6049cacaaaf3606c022a74cfee59c1f579d5a140166d4c7162510a4bfa51081c"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_multisource_s42_pooled10m.log",
+          "sha256": "7a7d4f5c26cde8545bd6527e4832f988909d48e1b806770576c53ea725180fd5"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_multisource_s42_seed10.log",
+          "sha256": "7dd0e1f629276331ccb7b9b15e552d03a0f4b51e711bef24bef69d9fa17b6527"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_original_exact_pooled10m.log",
+          "sha256": "b0da6ddf696c49dd61cb91c8c52e0ba1055297662d975bda60d4128c97693bed"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/probe_original_exact_seed10.log",
+          "sha256": "f6367be8c223b1345d0376fb79cee001be7e1e128c59bc357dc90aca789d96c0"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/evaluate.log",
+          "sha256": "38bb52d1d30a06178653e1a50ccecac0eb549000f2287cac44d51a44daf05b0c"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/export.json",
+          "sha256": "2003d793a81378081fc905792ce1abc92fa3a6d56681b0ae82baaf07f0223c50"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/reconstruction.json",
+          "sha256": "0914f833429fd760960d0ea023b5df08aa4ebb30293d4991563e704d8993699f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/semantic_probe/metrics.json",
+          "sha256": "ea22a2ba6308bc3b9b3a2dcce13cfb608c09a1703092fecaddf92c0c1feab928"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/semantic_probe/landcover.npy",
+          "sha256": "1c399d2c390250d7232fb831fc8237b24d42b41dbc64e661adf2dec6be390d40"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/semantic_probe/water.npy",
+          "sha256": "ebf469f8f00765fa7aa6000aa5645279e239a259f440da98f223236f40d2797b"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe/metrics.json",
+          "sha256": "6391d8a933a446783e143f8d7961b0a4232be388d9e15a8ad14c7d7edb9db29d"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe/building_conv3x3.npy",
+          "sha256": "a535347424ae76b7af9084f56168f869185bccd4d6f0ed57e8e4ace765c68a9f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe/building_linear.npy",
+          "sha256": "3b471e4249b437d19c820a8441e8369ab54e015aca61544748a2cff97c560184"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe/road_conv3x3.npy",
+          "sha256": "45695646fce183a72968bd2051e73bc126232edf2640fbbcf9b15ed2c7af892f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe/road_linear.npy",
+          "sha256": "97b28be149553816edc48d869cb59013cb1c8b69382a0e872c64380478c387d7"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe/water_conv3x3.npy",
+          "sha256": "5c9d2d61af97d0b019cb2b7dff3601929ac8fd02551a4d0a1a0e4d241456f955"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe/water_linear.npy",
+          "sha256": "f7c82bb38f993c9fc0223e6739a5ac8350c0c02f45f53af18cae6742aa384c34"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_seed10/metrics.json",
+          "sha256": "22206e025cd3f45c52186787b44aa31877928745da78e5e8ebc24cdbdf4e80f9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_seed10/building_conv3x3.npy",
+          "sha256": "21cf4196754d5540e689aa1e2f5cf88c8bac4b9124c81f70b60dd0cbe61e0734"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_seed10/building_linear.npy",
+          "sha256": "bf6c95a79f77d540f2461a5b12826e6cf5c43bc0ebf0599ec5cd37550bb8f280"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_seed10/road_conv3x3.npy",
+          "sha256": "7e5b388d1b3384e44851b6d1f9cc896b8f42ce302f2aa05f6610171746af99d9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_seed10/road_linear.npy",
+          "sha256": "6d3e507e032dca5c2ce7f0b9637a99b22f50e7767cfe61d37b4f67fcbeba4003"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_seed10/water_conv3x3.npy",
+          "sha256": "5558d936cb5988c25ec14132f24847f9d25b7f580798adee301dcf05ca1e7b7f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_seed10/water_linear.npy",
+          "sha256": "79c49a9715fee2f206350f4b5f6900278be0b105d6cabaa35ffb4dc6b956beee"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_pooled10m/metrics.json",
+          "sha256": "21734cd8258d0726bb4b2cb91274cad331045fa8f809b07c04f224c86bce516a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_pooled10m/building_conv3x3.npy",
+          "sha256": "88c8b2b98a6d9b3a0924853a192ce54c68472f354dc4409ff507a57a71c6157a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_pooled10m/building_linear.npy",
+          "sha256": "d129b18e011fbcfabe5b30cd3deda0ae5d46701f1085e167a5280ee2f7e67662"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_pooled10m/road_conv3x3.npy",
+          "sha256": "e816facb663f09e8f98576aeacf3326a36d85c833241d03a35e729430faeee8d"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_pooled10m/road_linear.npy",
+          "sha256": "692c02214867a5182cca908f74645089672ef75659ad9860ab6a7f80204800b6"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_pooled10m/water_conv3x3.npy",
+          "sha256": "4970f7a6fd6e979d6af1a662f8971baf605fd773074bd2b821fe59ecbf5040ee"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original_exact/city_probe_pooled10m/water_linear.npy",
+          "sha256": "c2970da0c3b7ba82d55b6d6e115d331f3cfb8d5bc8f7c0c6e537c638bc43f841"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/evaluate.log",
+          "sha256": "119a363c169b91b498fb7c90073e731275170280a43a9a20ab5ab7c3d18b5319"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/export.json",
+          "sha256": "ef66ebadda9edcb55c5385ed5615381833e2a6e96341a64020c2c73d560a8732"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/reconstruction.json",
+          "sha256": "4ebc4ad6b4b07c433d608767f995fcfabe331f9bb424f3f1b9834cb4ed746d4e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/semantic_probe/metrics.json",
+          "sha256": "125c6dba2cf8a70f01924eb4ffd9d0cf89c724a568d8583c46e0e3f4f755a62f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/semantic_probe/landcover.npy",
+          "sha256": "9c7b5c06fa6fcda9a6bad9482a11cb7fa5813bada46f0e91a48c473c1cf8d580"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/semantic_probe/water.npy",
+          "sha256": "2d013c02c0e509f464d126dd4ab4f0b898b0c0eab53d7b653ca33e77bd9549b3"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe/metrics.json",
+          "sha256": "5471880391ca7b60cd66230bd1836bdaa9b42b6913806fa668f9ea18121d1bea"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe/building_conv3x3.npy",
+          "sha256": "af40a2694bec564d0842640a239f42d054305d14caa4c677a76836eda5064c7e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe/building_linear.npy",
+          "sha256": "37f2554e500bd3562ff2d5ddcb1e3fef1b64d49d8f4b4b08477ed924dc815da1"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe/road_conv3x3.npy",
+          "sha256": "84f11125c382d105d4f8d315c483f441483c48f5fda656f0fab70f36cc3b3a4c"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe/road_linear.npy",
+          "sha256": "7657c443c3027edbac09f09876fb6d6b5ff7809ef54fc9bdbe4ebd708602096a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe/water_conv3x3.npy",
+          "sha256": "5d4e55dc132477ba49b0bbc201bc80c279856caf4b788a0a4e007e81a5cf5cc9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe/water_linear.npy",
+          "sha256": "40f97151b4fe804e381dd6e7a04cd813fdf84986104cc856dd3a424ec73b9534"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_seed10/metrics.json",
+          "sha256": "9eb5a573207db64561f11b0a515e4a77bfd6972bce02093159832f137943595f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_seed10/building_conv3x3.npy",
+          "sha256": "9377f28c4ba44a751759adcdf6bf970cc70a08446cfc504cd034e0f0235fb859"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_seed10/building_linear.npy",
+          "sha256": "3064e0f10029ef3a559983b93377ebc2f9fc655aa97efbdfeeb5daa91f7d193e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_seed10/road_conv3x3.npy",
+          "sha256": "4e49f2756caaeaf6e7d415cf9ca47df22047830ee87e880cd4cc3847fd59caee"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_seed10/road_linear.npy",
+          "sha256": "3462327822a7d0c5856d80caad7abb45a99f62a1e627148238a527a8db4d8621"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_seed10/water_conv3x3.npy",
+          "sha256": "15f4c5bf96f9d70537a08298298d8b56ffd1efe204957f4a7e57b5ee5d0d997f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_seed10/water_linear.npy",
+          "sha256": "191a45fd5a9eabea45136183f546f89a517d0c1f42cf709086dc3edb800b2f37"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_pooled10m/metrics.json",
+          "sha256": "b86ce370ac673ece0e8d7a6528333288d19889323e3162c9d024a5cf60d5505d"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_pooled10m/building_conv3x3.npy",
+          "sha256": "cd026594ac4b5bca7383bfaadc5334a79077e4771e5ed714ec46a1c48a9297b6"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_pooled10m/building_linear.npy",
+          "sha256": "7c34bae9ca9be7433bbdbc2e0b5b6a6a94539240bbb7df9ff83557890a174fd0"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_pooled10m/road_conv3x3.npy",
+          "sha256": "be9f867d720f87a043d76960e496af99debbb0a306748b861d747fdf2207a41a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_pooled10m/road_linear.npy",
+          "sha256": "e1843192d7c047250e748e0960ec394f2a2722411e9c95a1d7f7b2dc932d0b6f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_pooled10m/water_conv3x3.npy",
+          "sha256": "2bcb4c5b9719cdc99d521040b6c3fadf895349c58559635e661672411fde9d88"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s42/city_probe_pooled10m/water_linear.npy",
+          "sha256": "d6bf48cf1bf144eeaa96fcbd0b2cadf27bd88f3707447edd1990f4f60af18dcc"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/evaluate.log",
+          "sha256": "cec019f85c4db1d32f197d403978e7a979110c44a367dbe165902e80ce1735fb"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/export.json",
+          "sha256": "b3ee557f3ac5a11096cb07d9518aded4673b8807b628cd07c03b407bf84d8f74"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/reconstruction.json",
+          "sha256": "fd382e64d425a94a3d7f57bd7f7999470d4fcec7e4d4de4ccb21039f26b6b432"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/semantic_probe/metrics.json",
+          "sha256": "dc6f556f858804bdf54a301f609937303cf3b1072be48dbb3d6acb6212577d9e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/semantic_probe/landcover.npy",
+          "sha256": "fade86df0759c9a0fc10cd82a5bd6723ba26e2ca8cb5feeceeef9fb05afb69e2"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/semantic_probe/water.npy",
+          "sha256": "fb6427a608cfcf026df05d89280423358d9d26417f1bd3cbc9b3b77506e99883"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe/metrics.json",
+          "sha256": "fffeee789aa40aa61a5c5695ced5deb7ccbdbfe5dbdca67f0361271d0fe05835"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe/building_conv3x3.npy",
+          "sha256": "e9a3779a6c0fc58fcac1e010cfa152aa9350d4cd3e7c937c606a5a8ce9b32708"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe/building_linear.npy",
+          "sha256": "3fdfcf29fafceb45d89aff2d5c2c62966d2c127490140b0ada450a862f8c1428"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe/road_conv3x3.npy",
+          "sha256": "648f6b43a7480c5b93c12e2facb769923f3dab505bac2b27aba567327db6dfc0"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe/road_linear.npy",
+          "sha256": "1c7f154dab569ee53961915d7c2a991bd8b450b533f97fadeb58472bfc74a945"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe/water_conv3x3.npy",
+          "sha256": "0d2ab4447e65c7dca91a359984f2f5ab5f886a5d545d53404e7f8dea4599f473"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe/water_linear.npy",
+          "sha256": "be248ff44866f331bcce44aba9ea144efa7134c61371dc442e4981185c6733f9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_seed10/metrics.json",
+          "sha256": "638c604ca99d43445acaf1e4b5c68cf26f1941c91558130e6547c15f44b94fac"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_seed10/building_conv3x3.npy",
+          "sha256": "3237f53ab9174f8f31e00a6152c5eb2d8b49e1bf08be8aa7200ecfb3cfb66374"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_seed10/building_linear.npy",
+          "sha256": "0b877e7c028792c0bad7d650c8b5d19ffa137fa5c4c377b47124af9f813c1e1e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_seed10/road_conv3x3.npy",
+          "sha256": "fd9d6ab598fceaae542edf82582af3eb4d7a4bf23f66019728dd8d06b73027f1"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_seed10/road_linear.npy",
+          "sha256": "bcad225d274faedfa63e7f15128ee34819c27ea3bbe8d0174ef1d756a7a27aaf"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_seed10/water_conv3x3.npy",
+          "sha256": "4f7e9b79122c71693d27940a017c063715e34f04d392913e78baadb22041b8bd"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_seed10/water_linear.npy",
+          "sha256": "559362ffbc12f3adf9b4426fabc19b032a87da8e92cb47acd6a3027eef039128"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_pooled10m/metrics.json",
+          "sha256": "7e859725ff5d4648e98c4371b7a115bc7d909963d69bbe3bf1af5bf24d934386"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_pooled10m/building_conv3x3.npy",
+          "sha256": "5f0f634ad8f9469f9c4900e865f03ce174c17ec229fbcc439614c3ba40076691"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_pooled10m/building_linear.npy",
+          "sha256": "a737d7143537df44c840001e3852794c3668406f2b09771f594403e7ff7ceaf3"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_pooled10m/road_conv3x3.npy",
+          "sha256": "91650e004c8d091cb91cf4510aafe5291329262af721120ca406cf7e97d45428"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_pooled10m/road_linear.npy",
+          "sha256": "01eb3d4e05f19657e0cbea56c4aa57de168e375520e5d700ee02a30fd53de187"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_pooled10m/water_conv3x3.npy",
+          "sha256": "b1299a316735d778289fe19075d7a32fdd9bc09f62a96fcc127010b28ee6a194"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s42/city_probe_pooled10m/water_linear.npy",
+          "sha256": "adef5f068ad04b8f78356a5362c7513df07ca2f6364b4c2fe7b2d96a27ceb1b4"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/evaluate.log",
+          "sha256": "e9340fc487830d1087d087fe5635793a4d1094940976bf288b178e87e80f144f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/export.json",
+          "sha256": "b726764e7a1c43fafac2a5911a3ddc340083f4571304ab23abf003468e87560e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/reconstruction.json",
+          "sha256": "c0daa79754107b819f9a79886a9769e3270f7aaddf30ebcd961a852034ba1125"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/semantic_probe/metrics.json",
+          "sha256": "214ae4a74e5b620bd15b66f8f1c9b3d682e8204ded142e977caa223172e3d521"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/semantic_probe/landcover.npy",
+          "sha256": "afc0db559361d8dc334b448de7f796a086fe9ceded25dc7c8d5b3ee4c4a96f38"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/semantic_probe/water.npy",
+          "sha256": "a71377b885d9865886fd5d0d7747f2589194cf6492de5fccadfa057a9068e531"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe/metrics.json",
+          "sha256": "a9b6577fef6b3e27542bdbeefdab7bc98305eefeef1e3f306bc827f76a6653c7"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe/building_conv3x3.npy",
+          "sha256": "b184dc66cc704aafb17e19d82d316be85ba4b16393a8b1e8223cf730ca990494"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe/building_linear.npy",
+          "sha256": "43c620a354cc8e422a24395ed85a950c88bf56a4f0d0142687494f34057ba707"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe/road_conv3x3.npy",
+          "sha256": "5e8923dd771986c89bb380f223dab4a132ae17e1ae91b0d652f91f2974fea1ac"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe/road_linear.npy",
+          "sha256": "c730b4c369990d00a89fde77ca3ae0734d8ece959fd85e95ff1a4d0407f09e05"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe/water_conv3x3.npy",
+          "sha256": "c3a2e304b906a7e8597304fcb0bca1087aba5c2f945395be021c66c1cc8daac3"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe/water_linear.npy",
+          "sha256": "1b9d571495a7db5c663f0e2bbbc2c0268c7736703a5811516d737243e84ee2f5"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_seed10/metrics.json",
+          "sha256": "8816a6fee849dcaaef17b6255f2ec4abcd4e48cb599a1442a55af2f532a2ca86"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_seed10/building_conv3x3.npy",
+          "sha256": "03ad63aa5fc1d2e9880e0213e3624bcb370d26fb91ea3096d1e7f076ff2995ad"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_seed10/building_linear.npy",
+          "sha256": "c082989a43933ea2eca8c3115336a252a3f1af86ea0b420cbf37c494b14d4281"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_seed10/road_conv3x3.npy",
+          "sha256": "ee1bef4f80246980b83cf64355b0145b0e155b49d504f4ce5e540b45cab51ee6"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_seed10/road_linear.npy",
+          "sha256": "865042da613c16f5a6b097c8d1bfaa803d82d5e4b2e21b6cf6f64bf8845a11d3"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_seed10/water_conv3x3.npy",
+          "sha256": "08930eca181de119b0999cebc76c3f523368a76af405463d04d7216ba002aebb"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_seed10/water_linear.npy",
+          "sha256": "b307016c05bb193f0a537daf72750efe303a5bac38af3f32ae85929229cccaa0"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_pooled10m/metrics.json",
+          "sha256": "2e7eb1f3381388fff7932584cc7e8e8550cb21e752c290e572f70bbed946bbe5"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_pooled10m/building_conv3x3.npy",
+          "sha256": "4de3cc6db45b2aae5f1e5053e5f7bd71dc96b21febb6e31da4ced33c1c5dca32"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_pooled10m/building_linear.npy",
+          "sha256": "83308f75bad558fca85f916e6476d80e71f1f0fe0c3976df08d79bbe69e16751"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_pooled10m/road_conv3x3.npy",
+          "sha256": "b179a1f6c7e46092bac9984262c197a474cb19acca77c0956c5a8ab3c0552073"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_pooled10m/road_linear.npy",
+          "sha256": "029bc25f65add878fd33f6d791da15cd2f421bb65bdc6f6c190c1f092765109a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_pooled10m/water_conv3x3.npy",
+          "sha256": "8377ee843e4264e30fe0dba691d706ce49f364ee076a2c1a43d1f5ff9c569fb8"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/multisource_s17/city_probe_pooled10m/water_linear.npy",
+          "sha256": "3ccd28170932a6555958f65c114f8867f929a6b3b0af46e566ef684b001c5351"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/evaluate.log",
+          "sha256": "09f706a108f22f867858eaabb44a7cee44567876a0479e1931a2015bb98a35c2"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/export.json",
+          "sha256": "87918ada44b3fe5d7aeec2c3d848c8a79769e49d84107c83214f4ff11a57ff23"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/reconstruction.json",
+          "sha256": "d6894e81bb1cbc31507d984523ecf9ea7f48e553e6b8a92296c10ced18ff83c1"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/semantic_probe/metrics.json",
+          "sha256": "01be8548ddaf7c3285af19cefee697a948d4fdc38b30551452c6bdb0008ae399"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/semantic_probe/landcover.npy",
+          "sha256": "df8dd0214092192d984e10d105b743c518f3bca16ea5ee27c305cbe59d4e9ebd"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/semantic_probe/water.npy",
+          "sha256": "b020c73ec67081b6f1cef04ebc674185cfcbceedaccb55813ee9d5b486911a18"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe/metrics.json",
+          "sha256": "8379648d56e27b1f974608e370187dd99c5d35157ba4eb36cd46c311c6e00e0b"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe/building_conv3x3.npy",
+          "sha256": "8e99f5aa30b0492a9456947c056989c00193f6e1aff452a3adfda40e07bbb784"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe/building_linear.npy",
+          "sha256": "2a3c092fa0ef00a0f2f30196086f86ebe0e3d9c888785784e55f70972bafafca"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe/road_conv3x3.npy",
+          "sha256": "9142d92c25d3cf6a75277c191eedfe0695e34b82d64d22318e5363b2421fc71c"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe/road_linear.npy",
+          "sha256": "6dfc8431cd8fb4f0495cc9ab6666b8b80b7702248bcf7c115a4b5c1169ee0398"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe/water_conv3x3.npy",
+          "sha256": "058116f51e4191b35f44cd967b0c8b970d227adb6b0850acd7c7af3a7d946d4f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe/water_linear.npy",
+          "sha256": "c1e07881cedce798de81f53fc8028dadb445aa0ed218e892f3f1ebf41659dcf8"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_seed10/metrics.json",
+          "sha256": "328346e594f177c119e3717a7a7dc3d598318fcabb6aa6063eb6ded4cf6802d3"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_seed10/building_conv3x3.npy",
+          "sha256": "194dedc22656d50b7f15244d6f8b5f63a0516798d110e20ec49960a4861e2044"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_seed10/building_linear.npy",
+          "sha256": "9413cc0bf59789072c2f6a0b4c154f6fc3d7423e0fd53f25d79562d35f93c188"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_seed10/road_conv3x3.npy",
+          "sha256": "74e2c0a4ec23daac26b4526f26e133042a02080af8f41cbece6f194d73c7e8c9"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_seed10/road_linear.npy",
+          "sha256": "b8d023a29e99bfb23610b96429db551e33a208fedb9f49fa55003034cf430e7e"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_seed10/water_conv3x3.npy",
+          "sha256": "71aac9e5be0a4d4a6498b90e6a451d80654b51b488b8d908b0e3cfb652c7279b"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_seed10/water_linear.npy",
+          "sha256": "f0ea5bb351351dde2e43472897780c9f77fea21b36986f5b6f7e7ffe46965ca5"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_pooled10m/metrics.json",
+          "sha256": "9347a4e8ff58a7d6cc06e266788af0cc655f0d500af4a4e9bfcd262fd3f76dc7"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_pooled10m/building_conv3x3.npy",
+          "sha256": "876313b4ee4c08671475c7be4a4c59d1023a8e733fa197c6ae1fae061a914197"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_pooled10m/building_linear.npy",
+          "sha256": "33bbd830ac1b7fc2bee1adf7ecc77521f49872f5f3adbb06d0c5e6bb750f1755"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_pooled10m/road_conv3x3.npy",
+          "sha256": "bc8e95c5c4883a7dafe0d57237ecce454c1e0abaad31552fcae204b0e07da6f7"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_pooled10m/road_linear.npy",
+          "sha256": "664e19033b2067d2b3415be48ced3219b119ad734932a7a0ec6f6048ee547881"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_pooled10m/water_conv3x3.npy",
+          "sha256": "01aee72e80aeb12f9c7fe21b5f9333da740eb60ca888c9717c72cbd9bd5aef19"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/control_s17/city_probe_pooled10m/water_linear.npy",
+          "sha256": "1482afc9a122f68ddc49c8edf3758b6d6f741aa8e9c395de3e2e7a12554ed409"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/original/export.json",
+          "sha256": "8df89afaa561fdb7fbe72c53338afb239ed3f50840a5453c212ab17982efdcc7"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/completed.json",
+          "sha256": "10465fb29df2cd4b1f2310b910039a71024ecf422fc7210d5ed28ef61d653e80"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/comparison_control_s17.json",
+          "sha256": "5e02d1116a3e33cbce12bf8b390a9a11346ed8a6385f2b7260aaa907c2822539"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/comparison_control_s42.json",
+          "sha256": "b6969d2fbd70ddd757d0d8c7fa018fc29a1897fbc4f6582e2117681b5bf4bc26"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/evaluation/comparison_original_exact.json",
+          "sha256": "9bff0042379e0b1e3ca8623e5d37e14198f588991f24571d5c1343048341a96f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/check_zero_update_context.py",
+          "sha256": "6307d559ca0dfd4da60f86d9ae062ca0305a871ff7f9c6560bc660fb1d0a449a"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/zero_update_context.json",
+          "sha256": "ad6a2c18e004e3eb979d3f36a528238179f082d697c069986fcdcc143e0ed173"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/zero_update_context.log",
+          "sha256": "f152545275c56b362cfcac64235121b16351e7f23abf3c3dcc9769edde488f9f"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/prepare_next_lr_proposal.py",
+          "sha256": "0cf32060cccac1925f3bba09f26fdc202afae96523723a404a93b2a4b2cb5ef0"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/next_proposal_verification.json",
+          "sha256": "d12306436fa4259a0f738cfdb7cd1c045007275982d78d69940c2f5a4bb4fd1d"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/next_proposal.log",
+          "sha256": "444f53dd7d3faba612a2ff5997efe05abcd7e0246bd117b421cd7d2525fc7dfe"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/update_report_results.py",
+          "sha256": "171b86da5ec8c6ed140bedc2e6928aa613687fd7fc991338d01e57b40bcae7cc"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/plot.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/check_report.py",
+          "sha256": "81d1c5a441d13207e4921ac7dcf8bf83c5b313cd93a0f30e657e46ab6a750244"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/report_verification.log",
+          "sha256": "4bd44d03c156d9c67c4426a10f989823d003bf3636fa44b6d78567a4c7c6c0f4"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/black_final.log",
+          "sha256": "453727f23e452d534ee7a53685c0952718601541a49950ff3254bf7a4f3ac519"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/ruff_final.log",
+          "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/repository_final.log",
+          "sha256": "2651f590ed6c53d14190667a7dbd6cc6b616c7dc76f2cb79356a3ae9e69c6215"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_checks_20261017/update_evidence.py",
+          "sha256": "833d19e3d87b7cad0311b1e90b2be0db76e4f107ecc3cafaea05cdae1ceaa9f0"
+        },
+        {
+          "path": "outputs/annual_targets/comparison_20261017/next_low_lr_proposal/plan.json",
+          "sha256": "53e2b59c0d826da092d51b1853ef08593412ca725a22b69068ebdf96f7f70103"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/next_low_lr_proposal/control_low_lr_s42/config.yaml",
+          "sha256": "5672588d79995a8cf78a8646a7fd922e351e508fa7347787fee778abe9ececda"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/next_low_lr_proposal/multisource_low_lr_s42/config.yaml",
+          "sha256": "227b0a2c2222f20d0f708fc2d7d609bd3b1c7a667d8f2d5c46dc510a6871f14e"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/next_low_lr_proposal/multisource_low_lr_s17/config.yaml",
+          "sha256": "291d42f547d4160cee61ee5ec91463b8646ac83dddd708d1f88a6dfa91b79039"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/next_low_lr_proposal/control_low_lr_s17/config.yaml",
+          "sha256": "f68d5231c838042f8c859cf28008554d8de9787e55b4942aabe6a44d29b783d1"
+        }
+      ],
+      "checkpoints": {
+        "control_s42": {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/control_s42/model.pt",
+          "sha256": "6872297e3a25158b3826bcd70f08d2d2a560afee8c94b0f3c68fae964f601b9c"
+        },
+        "multisource_s42": {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/multisource_s42/model.pt",
+          "sha256": "010a38b681d4051817c9d4f238770e09a93b88c2b0edd28c1be95a8296afbbb3"
+        },
+        "multisource_s17": {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/multisource_s17/model.pt",
+          "sha256": "5226347bc8e0f42a968a5c290b9aa65f6458dfc875512bdd804d902e9f7c297a"
+        },
+        "control_s17": {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/control_s17/model.pt",
+          "sha256": "c7e2bcc78787bbeee917c673e4d90f328d42c3adc2282890b286147b07d33ac6"
+        }
+      },
+      "training_total_updates": 4096,
+      "training_total_annual_exposures": 131072,
+      "training_loop_GPU_hours": 10.043537342064083,
+      "feature_files_verified_finite": 1962,
+      "feature_export_tags": [
+        "original",
+        "original_exact",
+        "control_s42",
+        "multisource_s42",
+        "multisource_s17",
+        "control_s17"
+      ],
+      "primary_scored_artifacts": 5,
+      "additional_city_probe_runs": 10,
+      "same_source_evaluation_and_training": true,
+      "new_confirmation_roles_opened": false,
+      "decision": {
+        "recommend_longer_seven_target_training": false,
+        "production_model_promoted": false,
+        "rule": "Recommend longer supervised training only for positive semantic and fine deltas in both continuation seeds, with guardrails versus paired control and original_exact; fine gain must retain its sign in the second head seed. Otherwise retain control/original and diagnose before spending more.",
+        "confirmation_roles_opened": false
+      },
+      "limits": [
+        "Historical development weak labels, not an untouched test set.",
+        "WorldCover and OSM now share product families with upstream supervision; scores are held-position product-related diagnostics, not independent manual accuracy.",
+        "Some development positions were seen by original pretraining; report the existing unseen and HR strata separately.",
+        "Training positions exclude every downstream candidate, not only the task-eligible scored subset.",
+        "A short continued-training comparison does not establish full retraining gains or manual5m accuracy."
+      ],
+      "interval_scope": "Whole spatial groups paired within each suite, including all correlated fine tasks. Composite score formulas verified against published leaf metrics. No joint CI combines unrelated grouping schemes.",
+      "posthoc_zero_update_diagnostic": {
+        "scope": "Posthoc mechanism check on the6previously frozen TRAIN observations, after the primary result; not a new performance-selection candidate.",
+        "optimizer_updates": 0,
+        "no_optimizer_constructed": true,
+        "model_state_unchanged": true,
+        "model_state_sha256": "b15c237ad2857fc19dc5f757b8b36a992986e5093ff35ce4390758b743b3afb3",
+        "checkpoint_sha256": "eae1ead639e2a3c1dfaa7914545583314b90612d051c8dca488c1fb585b0acc1",
+        "selection": {
+          "selection": "Top3 mechanism checks by historical OSM support inside the already frozen engineering TRAIN subset; no evaluation positions or model scores used.",
+          "patch_ids": [
+            "parent_32650:470:3431",
+            "parent_32651:198:2605",
+            "parent_32645:551:3709"
+          ]
+        },
+        "samples": [
+          {
+            "patch_id": "parent_32650:470:3431",
+            "year": 2020,
+            "embedding_max_abs_difference": 0.0,
+            "embedding_exactly_equal": true,
+            "validity_identical": true
+          },
+          {
+            "patch_id": "parent_32651:198:2605",
+            "year": 2020,
+            "embedding_max_abs_difference": 0.0,
+            "embedding_exactly_equal": true,
+            "validity_identical": true
+          },
+          {
+            "patch_id": "parent_32645:551:3709",
+            "year": 2020,
+            "embedding_max_abs_difference": 0.0,
+            "embedding_exactly_equal": true,
+            "validity_identical": true
+          },
+          {
+            "patch_id": "parent_32650:470:3431",
+            "year": 2021,
+            "embedding_max_abs_difference": 0.0,
+            "embedding_exactly_equal": true,
+            "validity_identical": true
+          },
+          {
+            "patch_id": "parent_32651:198:2605",
+            "year": 2021,
+            "embedding_max_abs_difference": 0.0,
+            "embedding_exactly_equal": true,
+            "validity_identical": true
+          },
+          {
+            "patch_id": "parent_32645:551:3709",
+            "year": 2021,
+            "embedding_max_abs_difference": 0.0,
+            "embedding_exactly_equal": true,
+            "validity_identical": true
+          }
+        ],
+        "maximum_embedding_difference": 0.0,
+        "all_six_embeddings_exactly_equal": true,
+        "wall_seconds": 12.774844648316503,
+        "interpretation": "At full input support, the contextual-pooling switch has no forward difference on these6observations; this does not isolate learning-rate effects from changed training gradients."
+      },
+      "next_low_lr_proposal": {
+        "plan": "outputs/annual_targets/comparison_20261017/next_low_lr_proposal/plan.json",
+        "sha256": "53e2b59c0d826da092d51b1853ef08593412ca725a22b69068ebdf96f7f70103",
+        "configs": {
+          "control_low_lr_s42": {
+            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/next_low_lr_proposal/control_low_lr_s42/config.yaml",
+            "sha256": "5672588d79995a8cf78a8646a7fd922e351e508fa7347787fee778abe9ececda"
+          },
+          "multisource_low_lr_s42": {
+            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/next_low_lr_proposal/multisource_low_lr_s42/config.yaml",
+            "sha256": "227b0a2c2222f20d0f708fc2d7d609bd3b1c7a667d8f2d5c46dc510a6871f14e"
+          },
+          "multisource_low_lr_s17": {
+            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/next_low_lr_proposal/multisource_low_lr_s17/config.yaml",
+            "sha256": "291d42f547d4160cee61ee5ec91463b8646ac83dddd708d1f88a6dfa91b79039"
+          },
+          "control_low_lr_s17": {
+            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/next_low_lr_proposal/control_low_lr_s17/config.yaml",
+            "sha256": "f68d5231c838042f8c859cf28008554d8de9787e55b4942aabe6a44d29b783d1"
+          }
+        },
+        "training_started": false,
+        "optimizer_updates": 0,
+        "parent_decision_unchanged": true,
+        "all_configs_strict_parse_passed": true,
+        "auxiliary_absolute_lr_preserved": true
+      },
+      "next_proposal_is_posthoc_and_not_started": true,
+      "wheel_verification_scope": "Isolated wheel import path using existing interpreter dependencies; not a clean dependency installation."
     }
   },
   "verified_metrics": {
@@ -2460,15 +3669,1348 @@
         "scope": "One frozen training parent, inference only, no accuracy score."
       },
       "no_new_accuracy_results": true
+    },
+    "target_comparison_20261017": {
+      "evidence": [
+        "E19",
+        "E20"
+      ],
+      "status": "completed",
+      "git_sha": "8b2ec8dfda856a8930999b9e22ab430bde523b76",
+      "source_code_sha256": "08f76f6a73e78a8157ffd176956654664e7bbc5bc0d04806fb283e3ed2eace95",
+      "training": {
+        "passed": true,
+        "git_sha": "8b2ec8dfda856a8930999b9e22ab430bde523b76",
+        "source_code_sha256": "08f76f6a73e78a8157ffd176956654664e7bbc5bc0d04806fb283e3ed2eace95",
+        "checkpoints": {
+          "control_s42": {
+            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/control_s42/model.pt",
+            "sha256": "6872297e3a25158b3826bcd70f08d2d2a560afee8c94b0f3c68fae964f601b9c",
+            "config_sha256": "519fa1a946aeedbf6f248c46d7d0ce51de98570baae0c6ebe98b391000af5ffe",
+            "model_parameters": 104216905,
+            "auxiliary_parameters": 0,
+            "all_state_tensors_finite": true,
+            "strict_model_and_criterion_load": true,
+            "optimizer_updates": 1024,
+            "annual_exposures": 32768,
+            "initialization_identity": {
+              "checkpoint_sha256": "bca4c4a12bc62549b42d131847efe2b0d7dc1808473a329785427069497113f1",
+              "config_sha256": "3706c622e0390eb1393b68107fdffeb85da2d61332fd93679cecf5de103a6140",
+              "epoch": 199,
+              "git_sha": "13a073f31d628b2ebe521321d7140834407a0a4c"
+            },
+            "training_loop_wall_seconds": 1112.5101283863187,
+            "global_samples_per_second": 29.454113867286363,
+            "process_wall_seconds": 1158.985487,
+            "max_rank_peak_allocated_bytes": 15869657088,
+            "max_rank_peak_reserved_bytes": 18509463552,
+            "nonfinite_gradient_steps_by_rank": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "data_wait_seconds_by_rank": [
+              38.06842938810587,
+              39.65287628956139,
+              37.72302817739546,
+              39.792153308168054,
+              41.94339288584888,
+              39.38951680064201,
+              41.732939502224326,
+              40.535706048831344
+            ]
+          },
+          "multisource_s42": {
+            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/multisource_s42/model.pt",
+            "sha256": "010a38b681d4051817c9d4f238770e09a93b88c2b0edd28c1be95a8296afbbb3",
+            "config_sha256": "65a1dc405bf73235d4986df67ab154ba7ae44a83394a94a7edde0d80c4691300",
+            "model_parameters": 104216905,
+            "auxiliary_parameters": 1950,
+            "all_state_tensors_finite": true,
+            "strict_model_and_criterion_load": true,
+            "optimizer_updates": 1024,
+            "annual_exposures": 32768,
+            "initialization_identity": {
+              "checkpoint_sha256": "bca4c4a12bc62549b42d131847efe2b0d7dc1808473a329785427069497113f1",
+              "config_sha256": "3706c622e0390eb1393b68107fdffeb85da2d61332fd93679cecf5de103a6140",
+              "epoch": 199,
+              "git_sha": "13a073f31d628b2ebe521321d7140834407a0a4c"
+            },
+            "training_loop_wall_seconds": 1150.4713091421872,
+            "global_samples_per_second": 28.482240052063904,
+            "process_wall_seconds": 1202.87646,
+            "max_rank_peak_allocated_bytes": 15875181568,
+            "max_rank_peak_reserved_bytes": 18522046464,
+            "nonfinite_gradient_steps_by_rank": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "data_wait_seconds_by_rank": [
+              45.261413196101785,
+              42.931646740064025,
+              43.157781947404146,
+              42.19097529165447,
+              43.74352134205401,
+              43.23983242921531,
+              43.66876896470785,
+              46.10193477757275
+            ]
+          },
+          "multisource_s17": {
+            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/multisource_s17/model.pt",
+            "sha256": "5226347bc8e0f42a968a5c290b9aa65f6458dfc875512bdd804d902e9f7c297a",
+            "config_sha256": "a11de77ecbd5e07d5994c30bc34e3004297266cdc27d1acb56239e79ba3ae5fb",
+            "model_parameters": 104216905,
+            "auxiliary_parameters": 1950,
+            "all_state_tensors_finite": true,
+            "strict_model_and_criterion_load": true,
+            "optimizer_updates": 1024,
+            "annual_exposures": 32768,
+            "initialization_identity": {
+              "checkpoint_sha256": "bca4c4a12bc62549b42d131847efe2b0d7dc1808473a329785427069497113f1",
+              "config_sha256": "3706c622e0390eb1393b68107fdffeb85da2d61332fd93679cecf5de103a6140",
+              "epoch": 199,
+              "git_sha": "13a073f31d628b2ebe521321d7140834407a0a4c"
+            },
+            "training_loop_wall_seconds": 1147.7016647681594,
+            "global_samples_per_second": 28.550973659709097,
+            "process_wall_seconds": 1199.775786,
+            "max_rank_peak_allocated_bytes": 15875329024,
+            "max_rank_peak_reserved_bytes": 18524143616,
+            "nonfinite_gradient_steps_by_rank": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "data_wait_seconds_by_rank": [
+              43.16747025214136,
+              43.96459921449423,
+              44.06938120350242,
+              42.059676703065634,
+              43.12155291438103,
+              44.75199360027909,
+              44.61610073968768,
+              43.37918711267412
+            ]
+          },
+          "control_s17": {
+            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/comparison_20261017/control_s17/model.pt",
+            "sha256": "c7e2bcc78787bbeee917c673e4d90f328d42c3adc2282890b286147b07d33ac6",
+            "config_sha256": "4ef28b9425282db8389c56c77afc21c6b56760c1a35b11830357cfadec17c679",
+            "model_parameters": 104216905,
+            "auxiliary_parameters": 0,
+            "all_state_tensors_finite": true,
+            "strict_model_and_criterion_load": true,
+            "optimizer_updates": 1024,
+            "annual_exposures": 32768,
+            "initialization_identity": {
+              "checkpoint_sha256": "bca4c4a12bc62549b42d131847efe2b0d7dc1808473a329785427069497113f1",
+              "config_sha256": "3706c622e0390eb1393b68107fdffeb85da2d61332fd93679cecf5de103a6140",
+              "epoch": 199,
+              "git_sha": "13a073f31d628b2ebe521321d7140834407a0a4c"
+            },
+            "training_loop_wall_seconds": 1108.9087016321719,
+            "global_samples_per_second": 29.549772629405552,
+            "process_wall_seconds": 1157.967477,
+            "max_rank_peak_allocated_bytes": 15865527296,
+            "max_rank_peak_reserved_bytes": 18511560704,
+            "nonfinite_gradient_steps_by_rank": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "data_wait_seconds_by_rank": [
+              39.61566640436649,
+              38.63686215132475,
+              40.784832732751966,
+              37.68279878050089,
+              41.223994482308626,
+              41.95936241559684,
+              40.44333425164223,
+              39.61785760708153
+            ]
+          }
+        },
+        "total_updates": 4096,
+        "total_annual_exposures": 131072,
+        "training_loop_GPU_hours": 10.043537342064083,
+        "fresh_original_initialization_every_run": true,
+        "teacher_used": false,
+        "EMA_used": false,
+        "scope": "Real four-run bounded research comparison; no production-model replacement."
+      },
+      "primary_scores": {
+        "original_exact": {
+          "semantic_score": 0.6494428665082292,
+          "fine_score": 0.3842645012407119,
+          "joint_score": 0.5168536838744706,
+          "metrics": {
+            "water_F1": 0.8611167311316077,
+            "landcover_mIoU": 0.4377690018848508,
+            "road_F1": 0.23022231498726264,
+            "road_boundary_F1": 0.33322088688927476,
+            "building_F1": 0.2461987574236479,
+            "water5m_F1": 0.727416045662662
+          },
+          "semantic_strata": {
+            "water": {
+              "pretraining_seen": {
+                "F1": 0.8772194168431341,
+                "IoU": 0.7812919371803707,
+                "OA": 0.980041862441764,
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "F1": 0.25418265541059093,
+                "IoU": 0.14559521716194831,
+                "OA": 0.9734588199307384,
+                "patches": 14
+              }
+            },
+            "landcover": {
+              "pretraining_seen": {
+                "mIoU": 0.44358421857441394,
+                "macroF1": 0.5228582830079618,
+                "OA": 0.8202562849929369,
+                "per_class_IoU": {
+                  "tree": 0.8184180458667386,
+                  "shrub": 0.0029919760641914863,
+                  "grass": 0.579607329141401,
+                  "crop": 0.6642738360842008,
+                  "built": 0.669129225278186,
+                  "bare": 0.778873773628053,
+                  "snow": 0.010793793568697998,
+                  "water": 0.7987258822277296,
+                  "wetland": 0.11220898754737411,
+                  "moss": 0.0008193363375665711
+                },
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "mIoU": 0.4852020376836968,
+                "macroF1": 0.6082270536958418,
+                "OA": 0.7759375990036815,
+                "per_class_IoU": {
+                  "tree": 0.8780968468468469,
+                  "grass": 0.4337854737854738,
+                  "crop": 0.5776410298627261,
+                  "built": 0.6712609730084502,
+                  "bare": 0.4857173159867072,
+                  "water": 0.3389570552147239,
+                  "wetland": 0.010955569080949483
+                },
+                "patches": 14
+              }
+            }
+          },
+          "fine_strata": {
+            "building:linear": {
+              "with_highres": {
+                "F1": 0.20431248434618274,
+                "IoU": 0.11377953155273328,
+                "boundaryF1": 0.23734368111778112,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.3142325458147896,
+                "IoU": 0.18640325807373534,
+                "boundaryF1": 0.35335532672711367,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.22598958501199426,
+                "IoU": 0.12738909710038102,
+                "boundaryF1": 0.23566171760113616,
+                "patches": 8
+              }
+            },
+            "building:conv3x3": {
+              "with_highres": {
+                "F1": 0.22121418966890924,
+                "IoU": 0.12436246589336913,
+                "boundaryF1": 0.27081466791695286,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.29617553713724687,
+                "IoU": 0.17382984197774395,
+                "boundaryF1": 0.3855570216039182,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.23004446258954714,
+                "IoU": 0.1299718878396886,
+                "boundaryF1": 0.28682827038841585,
+                "patches": 8
+              }
+            },
+            "road:linear": {
+              "with_highres": {
+                "F1": 0.1784335544509532,
+                "IoU": 0.09795610524499462,
+                "boundaryF1": 0.3025509714653384,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.18725811087724503,
+                "IoU": 0.10330103364459976,
+                "boundaryF1": 0.2935742003574589,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.17310375078681936,
+                "IoU": 0.09475291815907597,
+                "boundaryF1": 0.3025853711905,
+                "patches": 30
+              }
+            },
+            "road:conv3x3": {
+              "with_highres": {
+                "F1": 0.23768137843037013,
+                "IoU": 0.1348685620870739,
+                "boundaryF1": 0.35421117743988473,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.2211448262872084,
+                "IoU": 0.12431862332313387,
+                "boundaryF1": 0.3084181312595212,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.24545185367485609,
+                "IoU": 0.1398946242592138,
+                "boundaryF1": 0.3768148499788451,
+                "patches": 30
+              }
+            },
+            "water:linear": {
+              "with_highres": {
+                "F1": 0.6966076083942702,
+                "IoU": 0.5344573229678563,
+                "boundaryF1": 0.33577454610598867,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7271991667782914,
+                "IoU": 0.5713377519856014,
+                "boundaryF1": 0.2381259955887862,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.7254360119319949,
+                "IoU": 0.5691640582373718,
+                "boundaryF1": 0.524702011377148,
+                "patches": 15
+              }
+            },
+            "water:conv3x3": {
+              "with_highres": {
+                "F1": 0.7264054160279483,
+                "IoU": 0.5703584367974109,
+                "boundaryF1": 0.37528034865137233,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7290171676733995,
+                "IoU": 0.5735853774978971,
+                "boundaryF1": 0.26098439671366336,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.6973786659745653,
+                "IoU": 0.5353656106794182,
+                "boundaryF1": 0.5059526168502269,
+                "patches": 15
+              }
+            }
+          },
+          "scored_patches": {
+            "building": 38,
+            "road": 186,
+            "water": 80
+          },
+          "scored_cities": {
+            "building": 14,
+            "road": 16,
+            "water": 16
+          }
+        },
+        "control_s42": {
+          "semantic_score": 0.6611324023524014,
+          "fine_score": 0.3709820339479384,
+          "joint_score": 0.5160572181501699,
+          "metrics": {
+            "water_F1": 0.8403854704856943,
+            "landcover_mIoU": 0.48187933421910856,
+            "road_F1": 0.2128753847122038,
+            "road_boundary_F1": 0.31736446617560327,
+            "building_F1": 0.24270804684220432,
+            "water5m_F1": 0.7109802380617422
+          },
+          "semantic_strata": {
+            "water": {
+              "pretraining_seen": {
+                "F1": 0.8525957350893152,
+                "IoU": 0.743064812606115,
+                "OA": 0.9757576479715515,
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "F1": 0.3067722075637643,
+                "IoU": 0.18117598171618532,
+                "OA": 0.9784731857063264,
+                "patches": 14
+              }
+            },
+            "landcover": {
+              "pretraining_seen": {
+                "mIoU": 0.4862828197641595,
+                "macroF1": 0.58162735322447,
+                "OA": 0.8263900197396903,
+                "per_class_IoU": {
+                  "tree": 0.8288709370429889,
+                  "shrub": 0.004043905257076834,
+                  "grass": 0.5735544770317761,
+                  "crop": 0.6515141335685763,
+                  "built": 0.6414550602272584,
+                  "bare": 0.7987453259449475,
+                  "snow": 0.41033280046504866,
+                  "water": 0.8265448011874073,
+                  "wetland": 0.12632545712615847,
+                  "moss": 0.001441299790356394
+                },
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "mIoU": 0.5061469456622283,
+                "macroF1": 0.6295009955724138,
+                "OA": 0.7981253482198455,
+                "per_class_IoU": {
+                  "tree": 0.8794056668970284,
+                  "grass": 0.5174560733384262,
+                  "crop": 0.5713517204278827,
+                  "built": 0.6303911332423099,
+                  "bare": 0.555019920318725,
+                  "water": 0.37447873227689743,
+                  "wetland": 0.014925373134328358
+                },
+                "patches": 14
+              }
+            }
+          },
+          "fine_strata": {
+            "building:linear": {
+              "with_highres": {
+                "F1": 0.2089930578893295,
+                "IoU": 0.11669025561845943,
+                "boundaryF1": 0.24456208251008069,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.3117867938859114,
+                "IoU": 0.18468448935047665,
+                "boundaryF1": 0.3555260258205265,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.21668929262586292,
+                "IoU": 0.12150955620343376,
+                "boundaryF1": 0.2220593210476829,
+                "patches": 8
+              }
+            },
+            "building:conv3x3": {
+              "with_highres": {
+                "F1": 0.21542335652381697,
+                "IoU": 0.12071398407646593,
+                "boundaryF1": 0.2462521294248344,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.2820758761829409,
+                "IoU": 0.16419577108923528,
+                "boundaryF1": 0.3692940317075478,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.19734125042501846,
+                "IoU": 0.10947232828817224,
+                "boundaryF1": 0.22186896033296036,
+                "patches": 8
+              }
+            },
+            "road:linear": {
+              "with_highres": {
+                "F1": 0.17672426986861808,
+                "IoU": 0.09692679332482732,
+                "boundaryF1": 0.3005158784942299,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.18804757087952717,
+                "IoU": 0.10378173723402111,
+                "boundaryF1": 0.29796644756918206,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.17191020046086455,
+                "IoU": 0.09403815967038567,
+                "boundaryF1": 0.3113215924634501,
+                "patches": 30
+              }
+            },
+            "road:conv3x3": {
+              "with_highres": {
+                "F1": 0.22669954326729289,
+                "IoU": 0.12784045839867716,
+                "boundaryF1": 0.33934222797915514,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.19671122985961456,
+                "IoU": 0.10908470851526496,
+                "boundaryF1": 0.29082342737247185,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.24245280934459673,
+                "IoU": 0.1379495302508402,
+                "boundaryF1": 0.3699108678042926,
+                "patches": 30
+              }
+            },
+            "water:linear": {
+              "with_highres": {
+                "F1": 0.7053117433164939,
+                "IoU": 0.5447734152800857,
+                "boundaryF1": 0.34550871512605213,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7313252404491565,
+                "IoU": 0.576448167620259,
+                "boundaryF1": 0.2575953764406312,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.7281217603508224,
+                "IoU": 0.5724775671542746,
+                "boundaryF1": 0.5307903568661498,
+                "patches": 15
+              }
+            },
+            "water:conv3x3": {
+              "with_highres": {
+                "F1": 0.6983269699104095,
+                "IoU": 0.5364841659678128,
+                "boundaryF1": 0.35358128258414934,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7318154583582984,
+                "IoU": 0.5770575451195313,
+                "boundaryF1": 0.2565582951443582,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.6975791725361298,
+                "IoU": 0.5356019788891782,
+                "boundaryF1": 0.4834900759675515,
+                "patches": 15
+              }
+            }
+          },
+          "scored_patches": {
+            "building": 38,
+            "road": 186,
+            "water": 80
+          },
+          "scored_cities": {
+            "building": 14,
+            "road": 16,
+            "water": 16
+          }
+        },
+        "multisource_s42": {
+          "semantic_score": 0.6760319805059511,
+          "fine_score": 0.3791198065426119,
+          "joint_score": 0.5275758935242816,
+          "metrics": {
+            "water_F1": 0.8594785116353587,
+            "landcover_mIoU": 0.4925854493765436,
+            "road_F1": 0.21786932484852273,
+            "road_boundary_F1": 0.3197726213427002,
+            "building_F1": 0.2572184989328584,
+            "water5m_F1": 0.7216187810463662
+          },
+          "semantic_strata": {
+            "water": {
+              "pretraining_seen": {
+                "F1": 0.8738569984965371,
+                "IoU": 0.7759733864437197,
+                "OA": 0.9796724879556115,
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "F1": 0.29781771501925547,
+                "IoU": 0.17496229260935142,
+                "OA": 0.9760970973486132,
+                "patches": 14
+              }
+            },
+            "landcover": {
+              "pretraining_seen": {
+                "mIoU": 0.49598171962692683,
+                "macroF1": 0.5831566415496278,
+                "OA": 0.8384085917299833,
+                "per_class_IoU": {
+                  "tree": 0.8457148301885871,
+                  "shrub": 0.005938956547887536,
+                  "grass": 0.5861861075352772,
+                  "crop": 0.707185392937555,
+                  "built": 0.6520252532366915,
+                  "bare": 0.8153277036944149,
+                  "snow": 0.4667521524088661,
+                  "water": 0.8245299205843231,
+                  "wetland": 0.047557771701249266,
+                  "moss": 0.0085991074344182
+                },
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "mIoU": 0.5257280805686715,
+                "macroF1": 0.6426045043185367,
+                "OA": 0.8158722702295247,
+                "per_class_IoU": {
+                  "tree": 0.9046200662772556,
+                  "grass": 0.5258784107228339,
+                  "crop": 0.6131205597184133,
+                  "built": 0.666613621896881,
+                  "bare": 0.5968797823499404,
+                  "water": 0.3642121931908155,
+                  "wetland": 0.008771929824561403
+                },
+                "patches": 14
+              }
+            }
+          },
+          "fine_strata": {
+            "building:linear": {
+              "with_highres": {
+                "F1": 0.21814615948128316,
+                "IoU": 0.12242651699074177,
+                "boundaryF1": 0.24280166718764346,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.29497214709201314,
+                "IoU": 0.17300136568967328,
+                "boundaryF1": 0.3496177047269832,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.22865707546726557,
+                "IoU": 0.1290868483456321,
+                "boundaryF1": 0.23530092265339078,
+                "patches": 8
+              }
+            },
+            "building:conv3x3": {
+              "with_highres": {
+                "F1": 0.2341568517290411,
+                "IoU": 0.13260342627731,
+                "boundaryF1": 0.2705497935554012,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.28996508773300544,
+                "IoU": 0.16956676477943863,
+                "boundaryF1": 0.39212250301568957,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.22843687637671853,
+                "IoU": 0.12894650680553174,
+                "boundaryF1": 0.25071036955597537,
+                "patches": 8
+              }
+            },
+            "road:linear": {
+              "with_highres": {
+                "F1": 0.1837752805271765,
+                "IoU": 0.10118532060312395,
+                "boundaryF1": 0.3043254775037628,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.19187805823315024,
+                "IoU": 0.1061200872578605,
+                "boundaryF1": 0.2951280941773716,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.19022201716635775,
+                "IoU": 0.10510792979618389,
+                "boundaryF1": 0.32660639006006953,
+                "patches": 30
+              }
+            },
+            "road:conv3x3": {
+              "with_highres": {
+                "F1": 0.23653873428879202,
+                "IoU": 0.13413321794363053,
+                "boundaryF1": 0.3460399044154735,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.19742220396426005,
+                "IoU": 0.10952215454913199,
+                "boundaryF1": 0.28851277966820715,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.24258692592253353,
+                "IoU": 0.13803637260971027,
+                "boundaryF1": 0.3711757862166658,
+                "patches": 30
+              }
+            },
+            "water:linear": {
+              "with_highres": {
+                "F1": 0.7147390661805898,
+                "IoU": 0.5561042488520985,
+                "boundaryF1": 0.3524043586741365,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7339205318637573,
+                "IoU": 0.5796796728282305,
+                "boundaryF1": 0.2709182646589795,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.7205102265229821,
+                "IoU": 0.5631230834811545,
+                "boundaryF1": 0.5053134035434912,
+                "patches": 15
+              }
+            },
+            "water:conv3x3": {
+              "with_highres": {
+                "F1": 0.7148302911667618,
+                "IoU": 0.5562147055393423,
+                "boundaryF1": 0.3643424128418199,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.732355948565912,
+                "IoU": 0.5777299611333295,
+                "boundaryF1": 0.2724582500628194,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.7285540909708588,
+                "IoU": 0.5730122577744363,
+                "boundaryF1": 0.533901431647553,
+                "patches": 15
+              }
+            }
+          },
+          "scored_patches": {
+            "building": 38,
+            "road": 186,
+            "water": 80
+          },
+          "scored_cities": {
+            "building": 14,
+            "road": 16,
+            "water": 16
+          }
+        },
+        "multisource_s17": {
+          "semantic_score": 0.6860774247583402,
+          "fine_score": 0.37206134528449397,
+          "joint_score": 0.5290693850214171,
+          "metrics": {
+            "water_F1": 0.8794704020886462,
+            "landcover_mIoU": 0.49268444742803413,
+            "road_F1": 0.21561422723190482,
+            "road_boundary_F1": 0.32269968877523963,
+            "building_F1": 0.22940931919829952,
+            "water5m_F1": 0.7205221459325318
+          },
+          "semantic_strata": {
+            "water": {
+              "pretraining_seen": {
+                "F1": 0.8911996235309658,
+                "IoU": 0.8037511913271385,
+                "OA": 0.9825526822015779,
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "F1": 0.3311462755692783,
+                "IoU": 0.198427382053654,
+                "OA": 0.9810677649475076,
+                "patches": 14
+              }
+            },
+            "landcover": {
+              "pretraining_seen": {
+                "mIoU": 0.49808952634675874,
+                "macroF1": 0.5874672649807314,
+                "OA": 0.8348002398948275,
+                "per_class_IoU": {
+                  "tree": 0.8360048210959471,
+                  "shrub": 0.0037341299477221808,
+                  "grass": 0.5804840644594779,
+                  "crop": 0.6897240522910684,
+                  "built": 0.6663753065803892,
+                  "bare": 0.8134421788838114,
+                  "snow": 0.4636617749825297,
+                  "water": 0.8388852138852139,
+                  "wetland": 0.08858372134142747,
+                  "moss": 0.0
+                },
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "mIoU": 0.5026274989288725,
+                "macroF1": 0.6226567679685093,
+                "OA": 0.7974371019369216,
+                "per_class_IoU": {
+                  "tree": 0.9002611438618264,
+                  "grass": 0.4679077946404679,
+                  "crop": 0.6070465237846314,
+                  "built": 0.6457697425060656,
+                  "bare": 0.5364220255345813,
+                  "water": 0.3559390048154093,
+                  "wetland": 0.005046257359125316
+                },
+                "patches": 14
+              }
+            }
+          },
+          "fine_strata": {
+            "building:linear": {
+              "with_highres": {
+                "F1": 0.21618281642761777,
+                "IoU": 0.1211911278905144,
+                "boundaryF1": 0.2502011671350743,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.3016950476722768,
+                "IoU": 0.17764480240063413,
+                "boundaryF1": 0.35662593404773596,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.2263006687429082,
+                "IoU": 0.1275868264451111,
+                "boundaryF1": 0.2370680837037976,
+                "patches": 8
+              }
+            },
+            "building:conv3x3": {
+              "with_highres": {
+                "F1": 0.20717019457530253,
+                "IoU": 0.11555485855291583,
+                "boundaryF1": 0.22597202475126482,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.26066828508980633,
+                "IoU": 0.14986691891791634,
+                "boundaryF1": 0.3702442801205866,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.18488442007200656,
+                "IoU": 0.10185820788301592,
+                "boundaryF1": 0.17823979808786425,
+                "patches": 8
+              }
+            },
+            "road:linear": {
+              "with_highres": {
+                "F1": 0.1835212443544517,
+                "IoU": 0.1010313188547207,
+                "boundaryF1": 0.3034986897084325,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.18964338808570513,
+                "IoU": 0.10475471342918108,
+                "boundaryF1": 0.2900182453616048,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.1842005862939482,
+                "IoU": 0.10144324582526121,
+                "boundaryF1": 0.3161974322214599,
+                "patches": 30
+              }
+            },
+            "road:conv3x3": {
+              "with_highres": {
+                "F1": 0.2293557900099097,
+                "IoU": 0.1295323977091893,
+                "boundaryF1": 0.3495381472440823,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.19958687961486304,
+                "IoU": 0.11085615704253936,
+                "boundaryF1": 0.28949831718092284,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.24947855160038648,
+                "IoU": 0.14251670656675947,
+                "boundaryF1": 0.37939146083647374,
+                "patches": 30
+              }
+            },
+            "water:linear": {
+              "with_highres": {
+                "F1": 0.7099032643342258,
+                "IoU": 0.5502713437747514,
+                "boundaryF1": 0.3411316681731389,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7181275167425376,
+                "IoU": 0.5602175927184659,
+                "boundaryF1": 0.242747301541895,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.7293116533658379,
+                "IoU": 0.5739500604516133,
+                "boundaryF1": 0.5283454273862233,
+                "patches": 15
+              }
+            },
+            "water:conv3x3": {
+              "with_highres": {
+                "F1": 0.7131737050187157,
+                "IoU": 0.5542113242479927,
+                "boundaryF1": 0.3384867325547682,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7322436858379012,
+                "IoU": 0.57759024952825,
+                "boundaryF1": 0.2602203252383603,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.6940935178642216,
+                "IoU": 0.531503233469711,
+                "boundaryF1": 0.47692019616588727,
+                "patches": 15
+              }
+            }
+          },
+          "scored_patches": {
+            "building": 38,
+            "road": 186,
+            "water": 80
+          },
+          "scored_cities": {
+            "building": 14,
+            "road": 16,
+            "water": 16
+          }
+        },
+        "control_s17": {
+          "semantic_score": 0.6458150760015244,
+          "fine_score": 0.3750580815999054,
+          "joint_score": 0.5104365788007149,
+          "metrics": {
+            "water_F1": 0.8482757798434948,
+            "landcover_mIoU": 0.4433543721595541,
+            "road_F1": 0.21672181272113214,
+            "road_boundary_F1": 0.321654848430766,
+            "building_F1": 0.238706908057296,
+            "water5m_F1": 0.7231487571904273
+          },
+          "semantic_strata": {
+            "water": {
+              "pretraining_seen": {
+                "F1": 0.8621581023484537,
+                "IoU": 0.7577134434299779,
+                "OA": 0.9775853235204168,
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "F1": 0.27705192629815745,
+                "IoU": 0.1608010888586428,
+                "OA": 0.9764248336738149,
+                "patches": 14
+              }
+            },
+            "landcover": {
+              "pretraining_seen": {
+                "mIoU": 0.4490028161589037,
+                "macroF1": 0.5401421447826317,
+                "OA": 0.8154074174103804,
+                "per_class_IoU": {
+                  "tree": 0.8166014911893004,
+                  "shrub": 0.0038378107792424497,
+                  "grass": 0.5662273075970402,
+                  "crop": 0.6447699454702895,
+                  "built": 0.6442998972954468,
+                  "bare": 0.7694472250027805,
+                  "snow": 0.15182035213369144,
+                  "water": 0.7905950456715408,
+                  "wetland": 0.09711155378486055,
+                  "moss": 0.0053175326648435125
+                },
+                "patches": 110
+              },
+              "pretraining_unseen": {
+                "mIoU": 0.4763708001397018,
+                "macroF1": 0.6013942091960284,
+                "OA": 0.7732228497765931,
+                "per_class_IoU": {
+                  "tree": 0.8810298867073358,
+                  "grass": 0.4300856407696148,
+                  "crop": 0.582735010717779,
+                  "built": 0.626927686775869,
+                  "bare": 0.4584575198419343,
+                  "water": 0.3423244744149147,
+                  "wetland": 0.01303538175046555
+                },
+                "patches": 14
+              }
+            }
+          },
+          "fine_strata": {
+            "building:linear": {
+              "with_highres": {
+                "F1": 0.21358913605743066,
+                "IoU": 0.11956327649398871,
+                "boundaryF1": 0.24933109292059022,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.30319969563797694,
+                "IoU": 0.17868908607484985,
+                "boundaryF1": 0.3509474110061642,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.22565953847061831,
+                "IoU": 0.1271793905190622,
+                "boundaryF1": 0.23160334605390945,
+                "patches": 8
+              }
+            },
+            "building:conv3x3": {
+              "with_highres": {
+                "F1": 0.23063204825596642,
+                "IoU": 0.13034713781756738,
+                "boundaryF1": 0.2639849652124936,
+                "patches": 24
+              },
+              "no_highres": {
+                "F1": 0.25182219193123945,
+                "IoU": 0.14404838613609414,
+                "boundaryF1": 0.34283235625196007,
+                "patches": 14
+              },
+              "pretraining_unseen": {
+                "F1": 0.2165430954587581,
+                "IoU": 0.12141762153454413,
+                "boundaryF1": 0.23446162398164386,
+                "patches": 8
+              }
+            },
+            "road:linear": {
+              "with_highres": {
+                "F1": 0.17658901929938528,
+                "IoU": 0.09684542934557405,
+                "boundaryF1": 0.29799449369354364,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.1843456428854749,
+                "IoU": 0.10153124253144787,
+                "boundaryF1": 0.29268680653552376,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.17207935392689427,
+                "IoU": 0.09413940057877773,
+                "boundaryF1": 0.3051722019519855,
+                "patches": 30
+              }
+            },
+            "road:conv3x3": {
+              "with_highres": {
+                "F1": 0.22629564100645158,
+                "IoU": 0.12758363019125596,
+                "boundaryF1": 0.34308328517694503,
+                "patches": 97
+              },
+              "no_highres": {
+                "F1": 0.20523272913500162,
+                "IoU": 0.11435060827473666,
+                "boundaryF1": 0.29544864655028363,
+                "patches": 89
+              },
+              "pretraining_unseen": {
+                "F1": 0.24489184308602605,
+                "IoU": 0.13953091273680937,
+                "boundaryF1": 0.3721830012431305,
+                "patches": 30
+              }
+            },
+            "water:linear": {
+              "with_highres": {
+                "F1": 0.7010354477459901,
+                "IoU": 0.5396878972020663,
+                "boundaryF1": 0.3360382787354838,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7366714424721882,
+                "IoU": 0.5831194411640382,
+                "boundaryF1": 0.2554166381241946,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.7261586514170226,
+                "IoU": 0.5700542318121502,
+                "boundaryF1": 0.5256531803637685,
+                "patches": 15
+              }
+            },
+            "water:conv3x3": {
+              "with_highres": {
+                "F1": 0.7127418480747169,
+                "IoU": 0.5536899082819612,
+                "boundaryF1": 0.36278168636192043,
+                "patches": 49
+              },
+              "no_highres": {
+                "F1": 0.7397269105122495,
+                "IoU": 0.5869576337719933,
+                "boundaryF1": 0.2734845715507652,
+                "patches": 31
+              },
+              "pretraining_unseen": {
+                "F1": 0.7295332840605602,
+                "IoU": 0.5742246332845569,
+                "boundaryF1": 0.52519011128077,
+                "patches": 15
+              }
+            }
+          },
+          "scored_patches": {
+            "building": 38,
+            "road": 186,
+            "water": 80
+          },
+          "scored_cities": {
+            "building": 14,
+            "road": 16,
+            "water": 16
+          }
+        }
+      },
+      "paired_seed_comparisons": {
+        "42": {
+          "primary_delta": {
+            "semantic_score": 0.014899578153549697,
+            "fine_score": 0.00813777259467352,
+            "joint_score": 0.011518675374111664
+          },
+          "primary_metric_delta": {
+            "water_F1": 0.01909304114966437,
+            "landcover_mIoU": 0.010706115157435026,
+            "road_F1": 0.004993940136318931,
+            "road_boundary_F1": 0.002408155167096915,
+            "building_F1": 0.014510452090654102,
+            "water5m_F1": 0.010638542984624078
+          },
+          "semantic_composite_bootstrap": {
+            "difference": 0.014899578153549697,
+            "CI95": [
+              -0.0032268504785212147,
+              0.03475153018226189
+            ],
+            "groups": 124,
+            "patches": 124,
+            "draws": 2000
+          },
+          "fine_composite_bootstrap": {
+            "difference": 0.00813777259467352,
+            "CI95": [
+              -0.0026482974438108513,
+              0.016750950742268816
+            ],
+            "groups": 16,
+            "patches": 203,
+            "draws": 2000
+          },
+          "second_head_seed_delta": {
+            "semantic_score": 0.014899578153549697,
+            "fine_score": 0.0071757600124552345,
+            "joint_score": 0.01103766908300241
+          },
+          "guardrails_vs_control": {
+            "semantic_score": true,
+            "fine_score": true,
+            "water_F1": true,
+            "landcover_mIoU": true,
+            "road_F1": true
+          },
+          "guardrails_vs_original": {
+            "semantic_score": true,
+            "fine_score": false,
+            "water_F1": true,
+            "landcover_mIoU": true,
+            "road_F1": false
+          },
+          "native_minus_pooled_fine": {
+            "control_s42": 0.0039941752269968545,
+            "multisource_s42": 0.0013177244777791697
+          },
+          "fine_gain_sign_retained_in_second_head_seed": true
+        },
+        "17": {
+          "primary_delta": {
+            "semantic_score": 0.04026234875681578,
+            "fine_score": -0.002996736315411419,
+            "joint_score": 0.01863280622070218
+          },
+          "primary_metric_delta": {
+            "water_F1": 0.03119462224515146,
+            "landcover_mIoU": 0.049330075268480045,
+            "road_F1": -0.0011075854892273196,
+            "road_boundary_F1": 0.0010448403444736076,
+            "building_F1": -0.00929758885899648,
+            "water5m_F1": -0.002626611257895428
+          },
+          "semantic_composite_bootstrap": {
+            "difference": 0.04026234875681578,
+            "CI95": [
+              0.008327327212654981,
+              0.0726943802352375
+            ],
+            "groups": 124,
+            "patches": 124,
+            "draws": 2000
+          },
+          "fine_composite_bootstrap": {
+            "difference": -0.002996736315411419,
+            "CI95": [
+              -0.014669184392340174,
+              0.007943514037685848
+            ],
+            "groups": 16,
+            "patches": 203,
+            "draws": 2000
+          },
+          "second_head_seed_delta": {
+            "semantic_score": 0.04026234875681578,
+            "fine_score": -0.0020125153728481893,
+            "joint_score": 0.019124916691983795
+          },
+          "guardrails_vs_control": {
+            "semantic_score": true,
+            "fine_score": false,
+            "water_F1": true,
+            "landcover_mIoU": true,
+            "road_F1": true
+          },
+          "guardrails_vs_original": {
+            "semantic_score": true,
+            "fine_score": false,
+            "water_F1": true,
+            "landcover_mIoU": true,
+            "road_F1": false
+          },
+          "native_minus_pooled_fine": {
+            "control_s17": -3.630145945010543e-05,
+            "multisource_s17": 0.005667611559564301
+          },
+          "fine_gain_sign_retained_in_second_head_seed": false
+        }
+      },
+      "two_seed_mean_paired_bootstrap": {
+        "semantic": {
+          "difference": 0.027580963455182683,
+          "CI95": [
+            0.004881471838400289,
+            0.05215349353885289
+          ],
+          "groups": 124,
+          "patches": 124,
+          "draws": 2000
+        },
+        "fine": {
+          "difference": 0.0025705181396310506,
+          "CI95": [
+            -0.006210479947490383,
+            0.009153715369288358
+          ],
+          "groups": 16,
+          "patches": 203,
+          "draws": 2000
+        },
+        "scope": "Conditional on the fixed two continuation seeds and one pretrained artifact; not uncertainty across independent pretraining."
+      },
+      "reference_reproducibility_delta": {
+        "water_F1": 0.0,
+        "landcover_mIoU": 0.0,
+        "road_F1": -1.507021300028999e-05,
+        "road_boundary_F1": -1.396137886089388e-05,
+        "building_F1": -0.002518567121330001,
+        "water5m_F1": -0.0002522320086348895
+      },
+      "decision": {
+        "recommend_longer_seven_target_training": false,
+        "production_model_promoted": false,
+        "rule": "Recommend longer supervised training only for positive semantic and fine deltas in both continuation seeds, with guardrails versus paired control and original_exact; fine gain must retain its sign in the second head seed. Otherwise retain control/original and diagnose before spending more.",
+        "confirmation_roles_opened": false
+      },
+      "units": "Scores and differences are fractions; multiply by100 for percentage points.",
+      "independent_manual_accuracy_claim": false,
+      "all_original_scientific_metrics_preserved": true
     }
   },
   "current_source_sha256": {
     "configs/production/annual5m_v1.yaml": "04e1fe066625a31e6e86497b0c58850835ae0db5ed2cafbac767a060d1a3e77f",
-    "docs/xuannv_annual5m_report.tex": "bfac56de52481904628458dc9850f8da787e94ecd7fa7c53ff1e15141bdd7f16",
+    "docs/xuannv_annual5m_report.tex": "b3839d096c0f9700fce2614e8c7e100fac8cc265282bcf3a3b2255ae60c6bed2",
     "src/xuannv_embedding/__init__.py": "6d0af358c736e931c7fc052318b50279e2a1b4751c99e3353ce6ddd276b4eb61",
     "src/xuannv_embedding/cli/__init__.py": "f254389ad1b425643b2a1efb9e71be2a6f1963c30e704ef1e1ab482c309af61b",
     "src/xuannv_embedding/cli/__main__.py": "df3e5a28c8aee974d2fc802c48372c015ba8558bc97768122d82822dee95405f",
-    "src/xuannv_embedding/config.py": "f39eac165479ff520126a0cdd5ac39cd99767ae4942595047ec4dbd8bba3e694",
+    "src/xuannv_embedding/config.py": "eaf99f121a3a1e5e0b09b2e2c0b755402957bd1a285c32cf6224118e74b82902",
     "src/xuannv_embedding/data/__init__.py": "6645bed6d50e1f1c27c08ac6565dba22ac11f016db71ddebc893c5e9461766fe",
     "src/xuannv_embedding/data/annual_dataset.py": "5a448a11e7f0bf435cb467ba939a46de5ff86f30642ddc4af90ba30a1900c523",
     "src/xuannv_embedding/data/contracts.py": "ad184ac6ec41926a75eb780c1db994618300f6d1ce31e7968193a5e4afb4a163",
@@ -2534,10 +5076,10 @@
     "src/xuannv_embedding/models/time_encoding.py": "b3f40c5102722f50091633f375d5a45f09d0a635fa03a4df4d4611f0722de40d",
     "src/xuannv_embedding/training/__init__.py": "3490f464594e1d0f98f86b4c69bb83baaa9d6b4efbca8b6db088b340c3b7eade",
     "src/xuannv_embedding/training/annual.py": "96a81f13c8eef97172bca96057dcdaac42723f07bdc71d70e71844651b0a88c9",
-    "src/xuannv_embedding/training/annual_data.py": "9095a2d69a0224bc0d54bf1337636163f2f175fefb09c2825f049845dc562aa7",
-    "src/xuannv_embedding/training/annual_experiments.py": "a6a18aa28ff8cca33ac617a984b9b4ca79f19bb49d295daed5c235fd8eb1236d",
+    "src/xuannv_embedding/training/annual_data.py": "2463e0627d5dcaa14279a14c1f6a1881098be4540d9d679416e4a7239d104cb3",
+    "src/xuannv_embedding/training/annual_experiments.py": "14355a5d432120db630b5a1c9e8a6fe893465beb31474ca71876d04856174036",
     "src/xuannv_embedding/training/checkpoint.py": "fcd54ab17fe8501fc751fd17dffbbd57ce9e1cde2902b6b24d853aea9d49e12b",
-    "src/xuannv_embedding/training/cli.py": "8edcaa88b4abc31c874573097793ddfe8fceec9f446f1b9f0cc0600f4716ecbd",
+    "src/xuannv_embedding/training/cli.py": "2e2b3f1140eebd87af426d55a121141a47189c89254d2383dd44b74d54bdf1f2",
     "src/xuannv_embedding/training/compatibility.py": "0e6814910e79f7f62718e877741f3f4e7e53bef043e6fbe4c69486bf0e63b0c9",
     "src/xuannv_embedding/training/distillation.py": "0a1ae177df36855867b5fe7fc386c1cea46425ccb85d96c8465676b282d0fa9c",
     "src/xuannv_embedding/training/losses.py": "aa28b99f23e45d79e8a031dc92231e9a2f6ad20810eaa66e2c434421d74c2b4c",
@@ -2545,8 +5087,9 @@
     "src/xuannv_embedding/training/optimizer.py": "e0ab60198ee00f9e84c72003cd23ab914c605287582b513efae178c83f756b7d",
     "src/xuannv_embedding/training/p0_diagnostics.py": "d533bda30c5cf5f03c70855d816e3f9876cbb8bb42ba1fedb9275d1ec15c979d",
     "src/xuannv_embedding/training/runtime.py": "6469a80109d6a8a12fdeef8c934388669dc21ee7985494fc99e7398bdea81b15",
+    "src/xuannv_embedding/training/target_comparison.py": "b7a453b6ad4033ad13babd058162e9aef6fe9744a23fe85f101d04d50c89a809",
     "src/xuannv_embedding/training/target_experiments.py": "02a96ebb0cf97316d3b9d7d91dda69baebecb74eea8e0afecc1025b5e021b76e",
-    "src/xuannv_embedding/training/target_supervision.py": "a65e990e025b3d0f10c5690fa136d4c36a70437ff424594d7bb98923f1562b3f",
+    "src/xuannv_embedding/training/target_supervision.py": "4d70ddae6a9ff63cd02602f01b79bd26736c26fd7b538f2fceedfa578ab00b42",
     "src/xuannv_embedding/utils/__init__.py": "2a3fe8b3b059aa5f2ba46912dec19c9198facf61a3c6c28c7cd6def37691d085",
     "src/xuannv_embedding/utils/geo.py": "058b947625c725da99c93045c66634ca23c25733759bbba6658286d1582ecfbf",
     "src/xuannv_embedding/utils/manifest.py": "69d84a9f982a4627ae53e58b13c05d2adce4cdfd60afe0dfdcf9daa51782d2b6",
@@ -2560,10 +5103,10 @@
     "tex_bundle": "tlextras-2022.0r0",
     "fonts": "Fandol via TeX bundle; embedded in PDF",
     "binary_path": "/home/heyuhang/.local/bin/tectonic",
-    "last_build_log": "outputs/annual_targets/local_supervision_checks_20261016/report_v1_13_build.log",
-    "quality_receipt": "outputs/annual_targets/local_supervision_checks_20261016/pdf_verification.json"
+    "last_build_log": "outputs/annual_targets/comparison_checks_20261017/report_v1_14_build.log",
+    "quality_receipt": "outputs/annual_targets/comparison_checks_20261017/pdf_verification.json"
   },
-  "report_source_sha256": "bfac56de52481904628458dc9850f8da787e94ecd7fa7c53ff1e15141bdd7f16",
+  "report_source_sha256": "b3839d096c0f9700fce2614e8c7e100fac8cc265282bcf3a3b2255ae60c6bed2",
   "runtime_status": {
     "annual_model_runtime_completed": true,
     "two_200_epoch_runs_completed": true,
@@ -2582,23 +5125,25 @@
     "local_multisource_interface_implemented": true,
     "local_multisource_cache_completed": true,
     "local_multisource_engineering_completed": true,
-    "local_multisource_effectiveness_comparison_started": false,
+    "local_multisource_effectiveness_comparison_started": true,
     "local_multisource_long_training_started": false,
-    "no_new_model_promotion": true
+    "no_new_model_promotion": true,
+    "local_multisource_effectiveness_comparison_completed": true,
+    "new_confirmation_roles_opened": false
   },
   "rendered_report": {
     "path": "docs/xuannv_annual5m_report.pdf",
-    "sha256": "824d41ed8ce0ddb4201edb02ef5dfcde356cd226c1869714fd4acae60d72a833",
-    "bytes": 8531412
+    "sha256": "5f5339c79f93356e0cb00545c7b70ee3de74f1be30ab3fa4d5e9bfe15d04c482",
+    "bytes": 8565694
   },
   "full_test_suite": {
-    "passed": 436,
+    "passed": 443,
     "skipped": 2,
     "warnings": 234,
-    "seconds": 326.48,
-    "git_sha": "9f05b9c4a1571db4aaae1a8412f03112bf75b57f",
-    "source_code_sha256": "7531a7a9f025bf87055cda54f45991db202eb0528ff96b917f7a5bc82434b0c3",
-    "log": "outputs/annual_targets/local_supervision_checks_20261016/pytest_full.log",
+    "seconds": 312.1,
+    "git_sha": "8b2ec8dfda856a8930999b9e22ab430bde523b76",
+    "source_code_sha256": "08f76f6a73e78a8157ffd176956654664e7bbc5bc0d04806fb283e3ed2eace95",
+    "log": "outputs/annual_targets/comparison_checks_20261017/pytest_full.log",
     "skip_reasons": [
       "local legacy production checkpoint unavailable",
       "omnicloudmask unavailable"
@@ -2606,120 +5151,153 @@
   },
   "verified_timezone": "Asia/Shanghai",
   "planned_next_stage": {
-    "status": "Seven-head engineering completed; next is one matched short control-versus-multisource comparison before longer training.",
-    "section": "14.12",
-    "derived_excerpt": "outputs/annual_targets/local_supervision_checks_20261016/current_progress_excerpt.pdf",
+    "status": "Bounded paired comparison completed; next action is determined by the preregistered result.",
+    "section": "14.13",
+    "derived_excerpt": "outputs/annual_targets/comparison_checks_20261017/result_excerpt.pdf",
     "excerpt_physical_pages_in_main_report": [
-      47,
-      48
+      49,
+      51
     ],
+    "decision": {
+      "recommend_longer_seven_target_training": false,
+      "production_model_promoted": false,
+      "rule": "Recommend longer supervised training only for positive semantic and fine deltas in both continuation seeds, with guardrails versus paired control and original_exact; fine gain must retain its sign in the second head seed. Otherwise retain control/original and diagnose before spending more.",
+      "confirmation_roles_opened": false
+    },
+    "next_action": {
+      "status": "proposed_not_started",
+      "proposal_plan": "outputs/annual_targets/comparison_20261017/next_low_lr_proposal/plan.json",
+      "recommendation": "Retain the original100M production artifact. Test only a smaller learning rate for the existing model parameters before longer training; keep all7targets and their0.2total coefficient.",
+      "base_model_lr": 1e-05,
+      "previous_base_model_lr": 3e-05,
+      "auxiliary_head_absolute_lr": 0.0003,
+      "head_lr_multiplier": 30,
+      "budget": "Same8192paired positions,1024updates per recipe per continuation seed42/17; no larger dataset or model architecture change.",
+      "hypothesis": "Both controls lose road accuracy under the current continued-training recipe. A smaller model update may retain fine features while new readouts keep their previous absolute learning rate. This is a hypothesis, not an established causal attribution to learning rate.",
+      "scope": "Posthoc next-experiment proposal; no additional optimizer updates or primary-rule changes in this turn."
+    },
     "teacher_default": false,
     "EMA_default": false,
     "primary_artifact_seed": 42,
-    "target_sources": [
-      "dem_elevation",
-      "dem_slope",
-      "worldcover",
-      "clcd",
-      "nightlights",
-      "osm_semantic",
-      "osm_structure"
-    ],
-    "arms": {
-      "control": "Corrected exactPAN and context pooling, original reconstruction and uniformity; no auxiliary labels.",
-      "multisource": "Identical corrected base plus7local target heads, total auxiliary coefficient0.2."
-    },
-    "prepared_configs": {
-      "multisource": {
-        "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_20261016/multisource.yaml",
-        "sha256": "77e8a6c74a18b73df99a8933cffa0c61744d448503fa3a3f3b915e4d79536687"
-      },
-      "control": {
-        "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_20261016/control.yaml",
-        "sha256": "d382f8aac431aeb969e632d2416944b616d94d41b5e4f17088c3156aeb7c701e"
-      }
-    },
-    "manifest_scope": "Same frozen2048positions per year engineering manifests in both prepared configs; these are short-comparison templates, not a queued4096update screen.",
-    "matching_requirements": [
-      "Same original100M initialization",
-      "Same positions, seed, update count and masking",
-      "Same frozen evaluation protocol"
-    ],
-    "clcd_and_osm_evaluation_role": "Product-related development diagnostics after upstream supervision; cannot alone support an independent improvement claim.",
-    "historical_five_arm_plan": {
-      "status": "P1 engineering completed; P2/P3 held for remaining input provenance and independent evaluation requirements",
-      "section": 14,
-      "derived_excerpt": "outputs/annual_targets/prepare_20261016/next_stage_excerpt.pdf",
+    "historical_previous_two_arm_proposal": {
+      "status": "Seven-head engineering completed; next is one matched short control-versus-multisource comparison before longer training.",
+      "section": "14.12",
+      "derived_excerpt": "outputs/annual_targets/local_supervision_checks_20261016/current_progress_excerpt.pdf",
       "excerpt_physical_pages_in_main_report": [
-        38,
-        46
+        47,
+        48
       ],
       "teacher_default": false,
       "EMA_default": false,
       "primary_artifact_seed": 42,
-      "robustness_seed": 17,
-      "first_target_sources": [
+      "target_sources": [
         "dem_elevation",
-        "worldcover"
-      ],
-      "deferred_targets": [
         "dem_slope",
+        "worldcover",
         "clcd",
         "nightlights",
-        "osm"
+        "osm_semantic",
+        "osm_structure"
       ],
-      "clcd_initial_role": "Cross-product diagnostic only, not independent manual truth.",
       "arms": {
-        "R0": "ExactPAN coverage; legacy context; no auxiliary targets.",
-        "R1": "R0 plus corrected context pooling; no auxiliary targets.",
-        "D1": "R1 plus DEM elevation.",
-        "D2": "R1 plus WorldCover.",
-        "D3": "R1 plus DEM elevation and WorldCover."
+        "control": "Corrected exactPAN and context pooling, original reconstruction and uniformity; no auxiliary labels.",
+        "multisource": "Identical corrected base plus7local target heads, total auxiliary coefficient0.2."
       },
-      "screen": {
-        "annual_records": 16384,
-        "updates_per_run": 4096,
-        "global_batch": 32,
-        "exposures_per_run": 131072,
-        "seeds": [
-          17,
-          42
-        ],
-        "training_runs": 10
+      "prepared_configs": {
+        "multisource": {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_20261016/multisource.yaml",
+          "sha256": "77e8a6c74a18b73df99a8933cffa0c61744d448503fa3a3f3b915e4d79536687"
+        },
+        "control": {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_20261016/control.yaml",
+          "sha256": "d382f8aac431aeb969e632d2416944b616d94d41b5e4f17088c3156aeb7c701e"
+        }
       },
-      "expanded_validation": {
-        "annual_records": 32768,
-        "updates_per_run": 8192,
-        "global_batch": 32,
-        "exposures_per_run": 262144,
-        "seeds": [
-          17,
-          42
-        ],
-        "training_runs": 4,
-        "arms": "R1 and one selected recipe, fresh initialization from the original checkpoint."
-      },
-      "rough_training_loop_GPU_hour_range": [
-        106,
-        120
+      "manifest_scope": "Same frozen2048positions per year engineering manifests in both prepared configs; these are short-comparison templates, not a queued4096update screen.",
+      "matching_requirements": [
+        "Same original100M initialization",
+        "Same positions, seed, update count and masking",
+        "Same frozen evaluation protocol"
       ],
-      "budget_limitation": "Linear extrapolation from prior22-25min/2048updates on8GPUs. Excludes added targetIO/compute,dataacceptance,initialization,smoke,evaluation,and original pretraining. Re-estimate after real128stepengineeringrun.",
-      "product_promotion_requires_new_spatial_confirmation": true,
-      "p0_acceptance_excerpt": "outputs/annual_targets/p0_20261016_verified/p0_acceptance_excerpt.pdf",
-      "final_experiment_plan": "outputs/annual_targets/experiments_20261016_final/plan.json",
-      "updated_training_loop_GPU_hour_estimate": {
-        "P2": 105.15531661113103,
-        "P3": 84.12425328890482,
-        "scope": "Linear estimate from one short D3 run; excludes initialization, prior failed run, diagnostics and evaluation. Not an upper bound for different data caches or target mixes."
+      "clcd_and_osm_evaluation_role": "Product-related development diagnostics after upstream supervision; cannot alone support an independent improvement claim.",
+      "historical_five_arm_plan": {
+        "status": "P1 engineering completed; P2/P3 held for remaining input provenance and independent evaluation requirements",
+        "section": 14,
+        "derived_excerpt": "outputs/annual_targets/prepare_20261016/next_stage_excerpt.pdf",
+        "excerpt_physical_pages_in_main_report": [
+          38,
+          46
+        ],
+        "teacher_default": false,
+        "EMA_default": false,
+        "primary_artifact_seed": 42,
+        "robustness_seed": 17,
+        "first_target_sources": [
+          "dem_elevation",
+          "worldcover"
+        ],
+        "deferred_targets": [
+          "dem_slope",
+          "clcd",
+          "nightlights",
+          "osm"
+        ],
+        "clcd_initial_role": "Cross-product diagnostic only, not independent manual truth.",
+        "arms": {
+          "R0": "ExactPAN coverage; legacy context; no auxiliary targets.",
+          "R1": "R0 plus corrected context pooling; no auxiliary targets.",
+          "D1": "R1 plus DEM elevation.",
+          "D2": "R1 plus WorldCover.",
+          "D3": "R1 plus DEM elevation and WorldCover."
+        },
+        "screen": {
+          "annual_records": 16384,
+          "updates_per_run": 4096,
+          "global_batch": 32,
+          "exposures_per_run": 131072,
+          "seeds": [
+            17,
+            42
+          ],
+          "training_runs": 10
+        },
+        "expanded_validation": {
+          "annual_records": 32768,
+          "updates_per_run": 8192,
+          "global_batch": 32,
+          "exposures_per_run": 262144,
+          "seeds": [
+            17,
+            42
+          ],
+          "training_runs": 4,
+          "arms": "R1 and one selected recipe, fresh initialization from the original checkpoint."
+        },
+        "rough_training_loop_GPU_hour_range": [
+          106,
+          120
+        ],
+        "budget_limitation": "Linear extrapolation from prior22-25min/2048updates on8GPUs. Excludes added targetIO/compute,dataacceptance,initialization,smoke,evaluation,and original pretraining. Re-estimate after real128stepengineeringrun.",
+        "product_promotion_requires_new_spatial_confirmation": true,
+        "p0_acceptance_excerpt": "outputs/annual_targets/p0_20261016_verified/p0_acceptance_excerpt.pdf",
+        "final_experiment_plan": "outputs/annual_targets/experiments_20261016_final/plan.json",
+        "updated_training_loop_GPU_hour_estimate": {
+          "P2": 105.15531661113103,
+          "P3": 84.12425328890482,
+          "scope": "Linear estimate from one short D3 run; excludes initialization, prior failed run, diagnostics and evaluation. Not an upper bound for different data caches or target mixes."
+        },
+        "engineering_model_not_a_selected_upgrade": true
       },
-      "engineering_model_not_a_selected_upgrade": true
+      "budget_note": "Historical five-arm P2/P3 budgets belong only to that archived proposal; no such queue started or budget assigned to the current two-arm quick comparison.",
+      "engineering_model_not_a_selected_upgrade": true,
+      "comparison_started": false,
+      "long_training_started": false
     },
-    "budget_note": "Historical five-arm P2/P3 budgets belong only to that archived proposal; no such queue started or budget assigned to the current two-arm quick comparison.",
-    "engineering_model_not_a_selected_upgrade": true,
-    "comparison_started": false,
-    "long_training_started": false
+    "comparison_plan": "outputs/annual_targets/comparison_20261017/plan.json",
+    "long_training_started": false,
+    "production_model_replaced": false
   },
-  "source_provenance_note": "E1-E16 and all prior verified observations retain historical byte identities. Current source9f05b9c adds local7task schema, transformations, row-verified cache and weighted losses. Legacy2task strict model/criterion/optimizer/scheduler restoration was exercised on the actual E16 checkpoint. New engineering source digest7531a7a9 is separate from this documentation update; all new arrays, logs and checkpoints remain ignored local outputs.",
+  "source_provenance_note": "E1-E18 and every prior scientific metric retain their historical byte identities. Training and evaluation used source commit8b2ec8d, package digest08f76f6a. Current source adds an explicit bounded-research contract and common reconstruction evaluation that excludes auxiliary labels. Four models were freshly initialized from the same original100M artifact; no teacher,EMA or new confirmation scoring. This later documentation commit does not change the recorded runtime package bytes.",
   "historical_full_test_suite": {
     "passed": 393,
     "skipped": 2,
@@ -2760,6 +5338,19 @@
         "local legacy production checkpoint unavailable",
         "omnicloudmask unavailable"
       ]
+    },
+    {
+      "passed": 436,
+      "skipped": 2,
+      "warnings": 234,
+      "seconds": 326.48,
+      "git_sha": "9f05b9c4a1571db4aaae1a8412f03112bf75b57f",
+      "source_code_sha256": "7531a7a9f025bf87055cda54f45991db202eb0528ff96b917f7a5bc82434b0c3",
+      "log": "outputs/annual_targets/local_supervision_checks_20261016/pytest_full.log",
+      "skip_reasons": [
+        "local legacy production checkpoint unavailable",
+        "omnicloudmask unavailable"
+      ]
     }
   ],
   "historical_report_copies": [
@@ -2769,6 +5360,13 @@
       "archive_path": "outputs/annual_targets/local_supervision_checks_20261016/prior_v1_12.pdf",
       "sha256": "a8195e03737dc73716aedd4563606d0da00c23ffbe5157db97798dcbc173684c",
       "note": "Historical E16 PDF receipt retains the original byte identity; the canonical path now contains v1.13."
+    },
+    {
+      "version": "1.13",
+      "original_path": "docs/xuannv_annual5m_report.pdf",
+      "archive_path": "outputs/annual_targets/comparison_checks_20261017/prior_v1_13.pdf",
+      "sha256": "824d41ed8ce0ddb4201edb02ef5dfcde356cd226c1869714fd4acae60d72a833",
+      "note": "Historical E18 receipt retains its original byte identity; the canonical path now contains v1.14."
     }
   ]
 }
