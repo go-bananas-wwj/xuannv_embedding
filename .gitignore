@@ -29,3 +29,7 @@ dist/
 *.log
 /runtime/
 /artifacts/
+
+# Transient Ascend compiler outputs are not experiment source.
+/kernel_meta
+/fusion_result.json

@@ -18,6 +18,14 @@ full-region sample exposures), with seed 41. Each model is trained once. Checkpo
 selection and readout tuning must not use test scores. Preserve a temporary matched
 checkpoint near 200 sample exposures for an early preview.
 
+Portable, self-contained copies of both configurations are in
+`configs/examples/auckland_2024_public.yaml` and `configs/examples/auckland_2024_linz.yaml`.
+They preserve runtime model and loss settings while replacing private filesystem paths.
+The registered runtime specification controls the optimizer: 200 warmup updates, cosine
+decay, micro batch 8 for public and 4 for LINZ on three devices each, with accumulation
+2 and 4 respectively. The preview checkpoint is update 1,334. Source commit and exact
+configuration hashes are recorded in the local training artifacts.
+
 ## Downstream evaluation
 
 Freeze five spatial folds before model scoring. A 2x2-tile block stays in one group.
