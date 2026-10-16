@@ -30,6 +30,7 @@ xuannv data cloud-highres         按波长识别 5m 光学波段并生成云影
 xuannv data pan-annual            审计 2m 全色观测并接入年度候选清单
 xuannv data release-quality       完成云影、配准、重复和放行门禁
 xuannv data check-annual          抽样读取年度原生网格数据
+xuannv data targets-audit         核验独立目标包、年度关联、覆盖及候选训练统计量
 xuannv data p0                    从观测 pilot 准备真实 P0 训练数据
 ```
 
@@ -37,6 +38,25 @@ xuannv data p0                    从观测 pilot 准备真实 P0 训练数据
 位置，再原子发布。物化失败保留可识别的 partial 状态和 fingerprint，重跑必须匹配同一输入。
 fingerprint 覆盖 patch 身份与两套坐标边界、月份、物化策略、像元/尺寸合同、source/QA schema，
 以及每个冻结 STAC catalog JSONL 的大小和 SHA-256；任一项变化都拒绝复用旧 partial。
+
+`targets-audit` 对已发布的独立监督包执行只读验收；输出必须为数据根以外的新目录：
+
+```bash
+xuannv data targets-audit \
+  --target-root /path/to/targets \
+  --annual-root /path/to/annual_manifests \
+  --data-root /path/to/image_root \
+  --output /path/to/new_audit_directory --workers 2
+```
+
+它重算所有归档的 SHA-256，核对数组合同及静态行号顺序，全量读取静态目标和掩膜，
+按当前年度划分、高分支持及 macro 地理块统计覆盖，抽检影像头几何，并检查跨年位置与地理块交叉。
+OSM 只检查全部归档哈希和数组元数据，暂不全量扫描其语义状态。
+产物包含 `target_contract.json`、`coverage_by_split.json`、`coverage_by_macro.parquet`、
+`geometry_audit.json`、`spatial_split_audit.json` 及 `train_statistics.json`。
+静态训练统计量按唯一 train 位置计数，排除所有 validation/test 位置；在最终评测排除名单冻结前
+仅为候选值。退出码 0 表示本命令的数据检查通过；仍须查看 `training_ready` 和 `open_gates`，
+它不认证原生标签尺度、物理标定、地物配准或训练效果。失败保留已生成证据，重新执行需使用新目录。
 
 ## 全国不变量
 

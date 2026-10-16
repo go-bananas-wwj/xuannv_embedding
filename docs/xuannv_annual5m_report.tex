@@ -15,7 +15,7 @@
  pdftitle={玄女：全国年度5米地理嵌入技术报告},pdfauthor={heyuhang},bookmarksnumbered=true}
 \pagestyle{fancy}\fancyhf{}
 \fancyhead[L]{\small\color{muted}玄女 / 年度 5m 地理嵌入}
-\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.10}
+\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.11}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \ctexset{section={format=\Large\bfseries\color{ink}},subsection={format=\large\bfseries\color{ink}}}
@@ -63,7 +63,7 @@
 \vfill
 {\color{ink!20}\rule{\linewidth}{.4pt}\par}
 \vspace{3mm}
-{\small\color{muted}v1.10\hfill 2026-10-16\par}
+{\small\color{muted}v1.11\hfill 2026-10-16\par}
 \end{titlepage}
 
 \pagenumbering{roman}
@@ -107,10 +107,10 @@
 低分年度主干、原生网格高分编码、面积对齐、联合解码、年度遮挡训练和8卡真实数据短跑均已实现；
 4M与104M两个版本均已完成200轮训练。本版十一组训练对照后，选定保留原参数的PAN输入修复版，
 额外空间确认尚未证明通用语义与5m细节稳定双提升；独立真值验证与全国生产推理仍未闭环。
-本版另核实本地已有DEM、WorldCover等目标包，数据盘点与待实施计划见第14节；
+本版完成已有DEM、WorldCover等目标包的全量文件/静态数值审计，结果与未关闭条件见第14节；
 这些目标尚未接入现有年度模型。具体训练、种子复核与留出结果见第11节。}
 \source{仓库模型与数据实现 [E5]；数据摘要 [E1--E3]；实际训练与升级评测 [E9、E11--E12]；
-独立目标资产盘点 [E13]。证据编号见附录。}
+独立目标资产盘点及P0审计 [E13--E14]。证据编号见附录。}
 
 \reportpage
 \section{现有数据与质量状态}
@@ -1250,7 +1250,8 @@ AEF论文v2的生产修订说明同样值得参考：其v2.1放宽必须具备�
 \section{独立目标监督与问题修复：下一阶段执行计划}
 \label{sec:targets-next-plan}
 \note{\status{状态与范围}：本节为2026-10-16制定的执行计划，日期与新增里程碑采用北京时间。
-已完成的是本地目标资产盘点与抽样读取；目标接口开发、全量接入验收及下述训练均未执行。
+已完成目标资产盘点、P0全量文件/静态数值审计和当前v6关联；下文登记本次实测结果。
+原生尺度、物理标定与新评测隔离仍有未关闭条件；训练目标接口及下述模型训练尚未执行。
 主线是在约100M年度模型中加入训练期独立目标，并保留已确认的PAN与上下文梯度修复。
 冻结4M教师、EMA一致性、Landsat扩源和高分结构扩容不进入首轮对照。
 原\texttt{v2.0}标签、原始权重与第11节实验结果保持不变。}
@@ -1287,9 +1288,9 @@ OSM & 2020/2021历史快照 & 30个10m语义通道、4个2.5m结构通道及状�
 \end{tabularx}
 
 八份静态数组均登记为$62{,}000\times128\times128$，有逐像元有效mask。
-盘点对每份文件抽查行0、31{,}000、61{,}999，成功读取且有效连续值有限；部分样本含NoData。
-OSM本次只核对文件与清单，没有重新抽读全部通道。
-旧发布附带完整性及几何检查记录，但本次未重算大档SHA、全量有效覆盖或当前v6几何一致性。
+最初盘点抽查每份文件的行0、31{,}000、61{,}999，随后执行下文的全量静态数组审计。
+OSM本次重算全部归档SHA并检查数组元数据，未全量扫描其语义状态与置信度。
+旧发布的完整性及几何记录仅作来源证据，不能代替本次审计或独立地物配准认证。
 原始DEM分卷、WorldCover与CLCD镜像也在本地保留，供追溯或重新物化。
 \source{[E13] \texttt{outputs/target\_inventory/20261016/summary.json}、目标包清单、索引与README。
 八份静态大档的SHA在盘点中仅引用原清单，不能登记为本次重新验证通过。}
@@ -1323,6 +1324,60 @@ DEM须追溯GLO-30原始像元覆盖、高程基准与重采样；它是包含�
 P0交付\path{target_contract.json}、\path{coverage_by_split.json}、
 \path{geometry_audit.json}、\path{train_statistics.json}和冻结的划分/采样摘要。
 几何或数值不明的来源暂不启用；不得通过删掉困难评分像元来使候选看起来更好。
+
+\subsection{P0首轮执行结果：文件与覆盖已核验，训练放行条件尚未关闭}
+本次新增包内命令\texttt{xuannv data targets-audit}，证据保存在：
+\begin{quote}\small
+\path{outputs/annual_targets/p0_20261016_verified/}
+\end{quote}
+审计只读原始数据，冻结目标清单、索引、年度关联和执行源码快照。
+11个归档的大小及SHA-256全部与发布清单一致；8份静态目标及mask均逐存储块全量读取，
+行号--位置顺序与索引一致。OSM核对288个声明数组的形状、dtype和chunk，未检验全部弱标签状态。
+在有效mask内未发现非有限连续值、非法覆盖类别码或越界坡度。
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{3.6cm}rrY@{}}
+\toprule 目标 & 完全无有效值的位置 & 有效像元比例 & 审计解释\\\midrule
+DEM高程 & 98 & 99.8383\% & 高程范围$-153.35$至$8{,}327.23$米；缺测不作零高程\\
+DEM坡度 & 98 & 99.8383\% & 有效范围$0$至$87.32$度；不增加独立测量数量\\
+WorldCover 2020 & 0 & 88.1504\% & 保留11个原始码和逐像元mask\\
+WorldCover 2021 & 0 & 88.1680\% & 对应本年目标，不能跨年替代\\
+CLCD 2020 / 2021 & 各790 & 91.9298\% / 91.8916\% & 继续保留为跨产品诊断\\
+夜间灯光2020 / 2021 & 各704 & 均98.6636\% & 保留已有预处理值；含负值，不能擅自截零或再次取对数\\\bottomrule
+\end{tabularx}
+分母为完整62{,}000位置及各自$128\times128$像元，不是当前训练子集。
+位置登记覆盖与像元监督覆盖不同：WorldCover每个位置均有可用值，仍有约12\%像元被屏蔽。
+红树林类在2020/2021分别仅18/20位置出现；当前validation/test两年均无该类支持，
+必须登记分母及缺类，不能据现有留出集声称验证了全部11类。
+
+六份v6年度清单的SHA和记录数全部匹配sidecar。
+两个年份合并后，train/validation/test分别为50{,}562/4{,}940/6{,}230个唯一位置，
+跨split位置交集为零。按目标索引macro分块，train与validation共享23块、与test共享15块；
+按既有空间component分组也分别共享23/15块；validation与test也共享1块。
+这些共享块不等于位置重复，却不能计入严格的新空间确认。
+当前统计量只使用train且排除全部validation/test位置；静态DEM按唯一位置计数一次，
+候选高程均值为$1{,}796.53$米、总体标准差$1{,}742.90$米。
+在新开发/确认排除表冻结前，\texttt{normalization\_ready\_for\_training=false}。
+
+全部62{,}000个索引的EPSG及1{,}280米边界与父格整数坐标一致，
+240个确定性分层影像头样本通过CRS、边界及像元方向检查；这是头信息一致性，
+不能认证地物配准、标签内容方向或5m定位精度。
+补充追溯核对24份S2缓存与原ZIP成员，字节全部一致；原归档README声明
+\texttt{B02,B03,B04,B05,B06,B07,B08,B8A,B11,B12}及L2A产品，
+但TIFF无逐波段说明，归档物理缩放/偏移与月合成处理仍需证明。
+另一个便携数据包的归一化转换不能直接套用到当前原始缓存。
+DEM分卷以虚拟拼接只读打开，含1{,}982个TIFF；抽查原生瓦片为EPSG:4326、
+$3{,}600\times3{,}600$、角度间距$1/3{,}600$度，标记\texttt{AREA\_OR\_POINT=Point}。
+该头信息没有给出完整垂直基准和当前目标重采样链，不能据此把现有10m值当作原生细尺度监督。
+
+\note{本次状态为\texttt{completed\_with\_open\_gates}，
+\texttt{data\_checks\_passed=true}，\texttt{training\_ready=false}。
+下一项工作是关闭DEM原生覆盖/高程基准/重采样、S2物理数值合同、
+高分地物配准及新增评测隔离条件，再定稿训练统计量。
+P1读取器和损失可以继续开发；正式效果筛选与模型训练尚未开始。
+没有变更原权重、原数据或\texttt{v2.0}标签。}
+\source{[E14] 全量归档、静态数值及年度关联审计；
+\texttt{source\_provenance\_audit.json}与\texttt{native\_dem\_header\_audit.json}为补充抽样来源证据。
+原大档本次仅对已发布目标包重算完整SHA；原生影像/DEM镜像未全量重算SHA。}
 
 \subsection{P1：目标只进入监督分支的实现合同}
 现有年度schema要求\texttt{target\_heads}引用连续时序输入，且年度损失没有消费静态语义标签。
@@ -1477,6 +1532,7 @@ P1必须实测吞吐、峰值分配/保留显存、数据等待与有效目标�
 优化起点和预算由第11节已完成实验推导，不是新配方的实测结果。}
 
 \reportpage
+\phantomsection
 \addcontentsline{toc}{section}{参考文献}
 \begin{thebibliography}{99}\small
 \bibitem{aef} Christopher F. Brown et al. AlphaEarth Foundations: An embedding field model for accurate and efficient global mapping from sparse label data. 2025. \url{https://arxiv.org/abs/2507.22291}. 本轮升级核对v2的S15、S16、S21与S22.3；历史实现并非完整复现。
@@ -1496,9 +1552,9 @@ P1必须实测吞吐、峰值分配/保留显存、数据等待与有效目标�
 \bibitem{landsatqa} USGS. Landsat Collection 2 Quality Assessment Bands. \url{https://www.usgs.gov/landsat-missions/landsat-collection-2-quality-assessment-bands}. 核验于2026-10-15。
 \bibitem{copdem} Copernicus Data Space Ecosystem. Copernicus DEM: Global and European Digital Elevation Model.
 \url{https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM}.
-产品定义与DSM范围核验于2026-10-16；本地派生数据的实际处理以[E13]及后续P0合同为准。
+产品定义与DSM范围核验于2026-10-16；本地派生数据以[E13--E14]为准，原生重采样链尚未完成验收。
 \bibitem{worldcover} ESA WorldCover. Data access: WorldCover 2020 and 2021.
-\url{https://esa-worldcover.org/en/data-access}. 核验于2026-10-16；本地类别与有效mask以[E13]登记为准。
+\url{https://esa-worldcover.org/en/data-access}. 核验于2026-10-16；本地类别、覆盖及有效mask以[E13--E14]登记为准。
 \bibitem{salt} Xianhang Li et al. Rethinking JEPA: Compute-Efficient Video SSL with Frozen Teachers. 2025. \url{https://arxiv.org/abs/2509.24317}.
 \bibitem{presto} Gabriel Tseng et al. Lightweight, Pre-trained Transformers for Remote Sensing Timeseries. 2023. \url{https://arxiv.org/abs/2304.14065}.
 \bibitem{ocm} Nick Wright. OmniCloudMask, 作者实现及模型。\url{https://github.com/DPIRD-DMA/OmniCloudMask}. 本地运行版本及权重摘要以[E2]为准，不以仓库最新状态反推已运行版本。
@@ -1533,7 +1589,8 @@ E9 & \path{outputs/annual5m/run_200ep_20260921_092149/}（\texttt{train.log}、\
 E10 & \path{outputs/eval/quick\_rapid124/}、\path{outputs/eval/city5m/} 结果与脚本 & 历史4M冻结探针、外部基线对照与逐层测量；弱标签，非独立真值。\\
 E11 & \path{outputs/annual5m/run_100m_20261009_024811/} 配置、日志与权重 & 原100M参数、200轮训练、632{,}000次更新及来源核验。\\
 E12 & \path{outputs/annual_abc/20261015_exact/}；诊断原件位于\path{20261015_screen/} & 梯度/PAN修复、十一组候选与三组种子复验、30份主/参考头结果、空间确认及真实8卡EMA恢复；共同重建目标不混用旧掩膜损失。\\
-E13 & \path{outputs/target_inventory/20261016/summary.json}；\path{/data/wwj/xuannv_china_ai_ready_dataset/targets/} & 独立目标资产、位置匹配与静态数组抽样；不代表全量有效性、当前几何或新增训练已验收。\\\bottomrule
+E13 & \path{outputs/target_inventory/20261016/summary.json}；\path{/data/wwj/xuannv_china_ai_ready_dataset/targets/} & 初次独立目标资产、位置匹配与静态数组抽样；保留原盘点范围。\\
+E14 & \path{outputs/annual_targets/p0_20261016_verified/} & 本次11归档SHA、8静态目标全量数值/mask、年度位置关联、240影像头样本、空间块交叉与候选训练统计；原生尺度、地物配准和评测隔离尚未放行。\\\bottomrule
 \end{tabularx}
 \endgroup
 
@@ -1557,6 +1614,7 @@ v1.4 & 2026-09-18 & 同步最终来源计数与代码边界，明确数据已放
 v1.7 & 2026-09-20 & 接入年度原生尺度三分支、2m到5m面积聚合、留出遮挡训练、年度导出与8卡真实数据短跑；更新实现边界。\\
 v1.8 & 2026-10-02 & 加入200轮正式训练结果、冻结嵌入探针评测、外部年度嵌入基线的同协议对照与5m原生协议评测；记录高分融合稀释细节等已知问题与后续动作。\\
 v1.9 & 2026-10-15 & 核验两个长训版本；完成十一组候选、三个第二种子复验、30份主/参考头结果与空间确认；登记梯度/PAN修复、真实EMA恢复及文献投入顺序，未确认稳定双提升。\\
-v1.10 & 2026-10-16 & 登记已有62{,}000位置目标包与当前v6匹配；新增第14节，明确独立监督、问题修复、五组对照、分阶段预算和评测隔离，新增训练尚未执行。\\\bottomrule
+v1.10 & 2026-10-16 & 登记已有62{,}000位置目标包与当前v6匹配；新增第14节，明确独立监督、问题修复、五组对照、分阶段预算和评测隔离，新增训练尚未执行。\\
+v1.11 & 2026-10-16 & 执行P0全量目标完整性/静态数值审计、年度关联与抽样影像几何核验；登记真实覆盖、罕见类缺测和地理块交叉，保留原生尺度及训练放行条件。\\\bottomrule
 \end{tabularx}
 \end{document}

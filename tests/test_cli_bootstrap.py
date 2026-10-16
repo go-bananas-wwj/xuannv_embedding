@@ -29,6 +29,32 @@ def test_module_help_is_available_without_optional_dependencies() -> None:
     assert "region-agnostic monthly geospatial embeddings" in result.stdout
 
 
+def test_target_audit_help_does_not_import_optional_data_stack() -> None:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
+    code = """
+import builtins
+original_import = builtins.__import__
+def guarded_import(name, *args, **kwargs):
+    if name.split('.')[0] in {'rasterio', 'zarr', 'pyarrow'}:
+        raise ImportError('optional data stack intentionally unavailable')
+    return original_import(name, *args, **kwargs)
+builtins.__import__ = guarded_import
+from xuannv_embedding.cli import main
+main(['data', 'targets-audit', '--help'])
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--target-root" in result.stdout
+
+
 @pytest.mark.parametrize(
     "module",
     [

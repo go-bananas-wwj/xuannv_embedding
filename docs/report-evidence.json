@@ -1,8 +1,8 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.10",
+  "report_version": "1.11",
   "verified_date": "2026-10-16",
-  "scope": "Existingv6data and completed4M/100M/ABC evidence remain unchanged. Adds an audited local62000-position target inventory and a prospective target-supervision/defect-repair plan. New target interfaces, acceptance and training have not started.",
+  "scope": "Historic model/ABC evidence is preserved. Adds a read-only current target acceptance run: all11archive hashes,8full static value/mask scans,currentv6joins,240sampledimageheaders and block-overlap audit. Native target processing, physical calibration, feature registration and new evaluation isolation remain open. No target-supervised model training started.",
   "evidence": {
     "E1": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
@@ -989,6 +989,186 @@
           "verified_date": "2026-10-16"
         }
       ]
+    },
+    "E14": {
+      "scope": "Read-only acceptance with explicit open gates; not a new model accuracy result.",
+      "completed_at": "2026-10-16T14:42:19.146421+08:00",
+      "source_code_sha256": "3b3734c9f9187f1e8d7fd9a477160563cf05b9d09532ab2fbcbb431444ec996f",
+      "executed_module_snapshot": {
+        "path": "outputs/annual_targets/p0_20261016_verified/audit_source.snapshot.py",
+        "sha256": "3093177e98913fb57d97e632dc85fef1d358c17736602b94de58e7f403626c2b"
+      },
+      "source_snapshot_AST_matches_current": true,
+      "files": [
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/annual_manifest_integrity.json",
+          "sha256": "66748ca4584b89342cf5691626c7de16b4bd9e0af8d7c710027fabf21159fb29"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/archive_integrity.json",
+          "sha256": "e85123ae2adb5ef47a5facd1d09bf34ad3549fafb206b05bc188881cb2b4ebaa"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/artifacts.sha256.json",
+          "sha256": "aa2d955c70039046d927dd92700e7e01c8d684bf18b97a1f4f0f153744bdf764"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/audit_source.snapshot.py",
+          "sha256": "3093177e98913fb57d97e632dc85fef1d358c17736602b94de58e7f403626c2b"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/audit_verification.json",
+          "sha256": "f020aadf0b716065ad295cfd4761468e90d02a0b059d0a05b9732bc83ec4a230"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/clcd_2020.row_statistics.npz",
+          "sha256": "9dafc70a675308acc66c1cc309a755b15e27950afd5eb60e35451641ea6ce5af"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/clcd_2021.row_statistics.npz",
+          "sha256": "85aa2a14cb5da96ff9d8dd06d370e295b14ba5a23aae9c50263e90e252f9cf4b"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/code_provenance.json",
+          "sha256": "451da391173b746e306a2b65f7e1941106b587a055c51f933389ea7ef8231adf"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/coverage_by_macro.parquet",
+          "sha256": "8ad0d97cf3d4299fb9aa111a1cb80e0a140adb1057c1c0e17bf43235dfd038df"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/coverage_by_split.json",
+          "sha256": "06742d36188553651e3f4586b6bca2323860ca11d62c243b98e25cfc0871e640"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/dem_elevation.row_statistics.npz",
+          "sha256": "5a1be54710cf3ad4d258e58111d2ab7fd17a18d067757763677476fc304a09af"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/dem_slope.row_statistics.npz",
+          "sha256": "9e1ffb4a4e7e036d500b221f1f574bb44f936f212856618b83a9cf83d7fc56f6"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/excerpt_derivation.json",
+          "sha256": "36a1a8ead9233e21d8ab0ac56526150b7425e294b3ca010e07a6e6cf8d66ff0d"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/full_pytest.log",
+          "sha256": "09ff836434779cf46e33c75747cd8a60422720c8037ffedc5e3652e2d9da123d"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/geometry_audit.json",
+          "sha256": "a58840154230168079b1fb9ac7fac3c81e434dc87d4d49605afa63c7fb3a0f7c"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/global_value_audit.json",
+          "sha256": "bb47de12822c0054c699cf1b9b5c7008cbfeab13db0a0cfabd4e17a1142d8c1f"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/memberships.parquet",
+          "sha256": "a48f9c2dbdc55437b3be96e2dfe40d10a30191c9c9f931804a4965bb0bec5a07"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/native_dem_header_audit.json",
+          "sha256": "dbb47b132178a31b9cd3c2cba1974a80eac51ab3cf796c596fbe0f75dcc27e76"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/next_stage_plan_excerpt.pdf",
+          "sha256": "9a4170d26be10d75b947795e5a86d7fb277e35efb656e0c73fb6a3a87f62bac8"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/nightlights_2020.row_statistics.npz",
+          "sha256": "9e7b4f743608cb8c2daccd06ed5d630efb68fdf52b674d7d5c50332722f36fa4"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/nightlights_2021.row_statistics.npz",
+          "sha256": "06d3dd5125e8cfe36b39bd9cffa899d0188fd7375cc284cf93c28bece450247f"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/p0_acceptance_excerpt.pdf",
+          "sha256": "839f202059705121c0d036b3c40db51c264d363864c6c3bb37f3452006c0d62c"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/report_v1_11_build.log",
+          "sha256": "e607045e6baed001bb1fc95f12285fc5191e2677ce5152b43c12bf51c1376c9a"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/source_provenance_audit.json",
+          "sha256": "8cbacee77158700e18a0e69ab0ed9b307f5ab2612285f39c2f66087c5337ca45"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/source_snapshot_verification.json",
+          "sha256": "b5740aeed19b610da1f14ad8c54604996d41db55c862dfd9dfe803687f3beb30"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/spatial_split_audit.json",
+          "sha256": "c76edd2256f1ed2be2cab803593418eaa129fd48d94883caff468d9cceb01493"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/split_audit.json",
+          "sha256": "18a4cd32117165646feedbda64128eb6806bbe8a8dc770876a0152eb139c327f"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/target_contract.json",
+          "sha256": "32bf6bd287a1bff7def588152c0d8041cf95f9f5754cf1eb71f95567e07973f8"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/target_index.snapshot.parquet",
+          "sha256": "10cc255617de432abb7299ff33b6f9250771a8a91914333cd5af8f1edb12a483"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/target_manifest.snapshot.json",
+          "sha256": "17be2d12b36e0fc05f741c571e8d9a2a0e4a51ccb8fe714e6c92c22eb58e5a2b"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/target_missing_positions.json",
+          "sha256": "2b3ea8389a1058f42a270686676aad73487ca7dbc00586b951238281d9df121e"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/train_statistics.json",
+          "sha256": "7fce1b0ed669ca2dd3de66828a352c14ea6a91a0630bc506e96412f8bc411564"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/update_evidence.py",
+          "sha256": "f0606daadaebde56bf8032c455a65fefcdbf78a048350c8dd6e605fc072039a5"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/wheel_build.log",
+          "sha256": "55d2aeed0f3b53503998fa27db69e4b43b83b867f54e981799fd3042b58ba6cd"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/wheel_help.log",
+          "sha256": "67866aa0888313ac8719a9f088100d703bafd78679c2085110338a4d1b5e12a9"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/wheel_install.log",
+          "sha256": "440ee8122262bc9ce152cbfa464ed606f82fda89465c6f2cfaae8ad621f27027"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/wheel_verification.json",
+          "sha256": "ea3f8dca450316fdb04fa6069e6ef1ccd5502ca65680e3d75035626c97691ad5"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/worldcover_2020.row_statistics.npz",
+          "sha256": "0c321766f47fd587806ae11238ec3390d41d533255f3e6c7ed7b0014e2baa5a2"
+        },
+        {
+          "path": "outputs/annual_targets/p0_20261016_verified/worldcover_2021.row_statistics.npz",
+          "sha256": "58b087eb0ad2b9293b6e640fd827f684be88e7e35cc5423b6ea3fffa1c263a73"
+        }
+      ],
+      "all_published_archive_checksums_recomputed": true,
+      "all_static_value_masks_scanned": true,
+      "native_source_mirror_full_checksums_recomputed": false,
+      "OSM_semantic_values_fully_scanned": false,
+      "training_ready": false,
+      "open_gates": [
+        "Recover native DEM footprint, vertical datum and target resampling contract",
+        "Prove archived S2 ten-band order, physical units and processing level",
+        "Validate high-resolution feature registration, beyond raster header alignment",
+        "Freeze new spatial evaluation/confirmation sets and exclusion-aware train statistics",
+        "Implement target-only training reader/losses after data acceptance"
+      ]
     }
   },
   "verified_metrics": {
@@ -1185,6 +1365,222 @@
       "full_coverage_or_geometry_certification": false,
       "old_target_split_matches_current_v6": false,
       "current_annual_models_used_these_static_training_targets": false
+    },
+    "target_acceptance_20261016": {
+      "registered_positions": 62000,
+      "v6_unique_positions": 61732,
+      "split_unique_positions": {
+        "test": 6230,
+        "train": 50562,
+        "validation": 4940
+      },
+      "global_static_target_coverage": {
+        "clcd_2020": {
+          "positions": 62000,
+          "positions_with_valid_pixels": 61210,
+          "positions_without_valid_pixels": 790,
+          "valid_pixels": 933829820,
+          "valid_fraction": 0.9192975641066028,
+          "nonfinite_valid_pixels": 0,
+          "illegal_valid_pixels": 0,
+          "mean": 3.6474456084514415,
+          "population_std": 2.2140801312601215,
+          "min": 1.0,
+          "max": 9.0,
+          "class_pixels": {
+            "1": 179676010,
+            "2": 239844450,
+            "3": 1799223,
+            "4": 277268869,
+            "5": 14211785,
+            "6": 6980515,
+            "7": 193185612,
+            "8": 20756082,
+            "9": 107274
+          },
+          "class_positions": {
+            "1": 30339,
+            "2": 27160,
+            "3": 6116,
+            "4": 34231,
+            "5": 8640,
+            "6": 2034,
+            "7": 20299,
+            "8": 15861,
+            "9": 513
+          }
+        },
+        "clcd_2021": {
+          "positions": 62000,
+          "positions_with_valid_pixels": 61210,
+          "positions_without_valid_pixels": 790,
+          "valid_pixels": 933442012,
+          "valid_fraction": 0.918915791173135,
+          "nonfinite_valid_pixels": 0,
+          "illegal_valid_pixels": 0,
+          "mean": 3.6465658640185565,
+          "population_std": 2.2146047053890503,
+          "min": 1.0,
+          "max": 9.0,
+          "class_pixels": {
+            "1": 179589342,
+            "2": 240244014,
+            "3": 1738568,
+            "4": 276783043,
+            "5": 14156791,
+            "6": 6965152,
+            "7": 192967133,
+            "8": 20893988,
+            "9": 103981
+          },
+          "class_positions": {
+            "1": 30365,
+            "2": 27198,
+            "3": 6057,
+            "4": 34231,
+            "5": 8587,
+            "6": 2005,
+            "7": 20314,
+            "8": 15910,
+            "9": 511
+          }
+        },
+        "dem_elevation": {
+          "positions": 62000,
+          "positions_with_valid_pixels": 61902,
+          "positions_without_valid_pixels": 98,
+          "valid_pixels": 1014165573,
+          "valid_fraction": 0.9983831324423513,
+          "nonfinite_valid_pixels": 0,
+          "illegal_valid_pixels": 0,
+          "mean": 1820.5813936597967,
+          "population_std": 1743.6782021210634,
+          "min": -153.34776306152344,
+          "max": 8327.234375
+        },
+        "dem_slope": {
+          "positions": 62000,
+          "positions_with_valid_pixels": 61902,
+          "positions_without_valid_pixels": 98,
+          "valid_pixels": 1014164933,
+          "valid_fraction": 0.9983825024020287,
+          "nonfinite_valid_pixels": 0,
+          "illegal_valid_pixels": 0,
+          "mean": 12.31174204833923,
+          "population_std": 12.746114129928658,
+          "min": 0.0,
+          "max": 87.3166275024414
+        },
+        "nightlights_2020": {
+          "positions": 62000,
+          "positions_with_valid_pixels": 61296,
+          "positions_without_valid_pixels": 704,
+          "valid_pixels": 1002232570,
+          "valid_fraction": 0.9866358307869204,
+          "nonfinite_valid_pixels": 0,
+          "illegal_valid_pixels": 0,
+          "mean": 0.7564693673512873,
+          "population_std": 3.010494121022306,
+          "min": -0.12369243055582047,
+          "max": 411.01715087890625
+        },
+        "nightlights_2021": {
+          "positions": 62000,
+          "positions_with_valid_pixels": 61296,
+          "positions_without_valid_pixels": 704,
+          "valid_pixels": 1002232570,
+          "valid_fraction": 0.9866358307869204,
+          "nonfinite_valid_pixels": 0,
+          "illegal_valid_pixels": 0,
+          "mean": 0.8535741358140562,
+          "population_std": 3.3459457544102986,
+          "min": -1.4832391738891602,
+          "max": 586.9048461914062
+        },
+        "worldcover_2020": {
+          "positions": 62000,
+          "positions_with_valid_pixels": 62000,
+          "positions_without_valid_pixels": 0,
+          "valid_pixels": 895439261,
+          "valid_fraction": 0.8815044388309602,
+          "nonfinite_valid_pixels": 0,
+          "illegal_valid_pixels": 0,
+          "mean": 38.40154349117824,
+          "population_std": 22.157821996681154,
+          "min": 10.0,
+          "max": 100.0,
+          "class_pixels": {
+            "10": 238405117,
+            "20": 1060127,
+            "30": 191657539,
+            "40": 131126800,
+            "50": 13297542,
+            "60": 274964702,
+            "70": 6059011,
+            "80": 23504224,
+            "90": 1732129,
+            "95": 25735,
+            "100": 13606335
+          },
+          "class_positions": {
+            "10": 31046,
+            "20": 6076,
+            "30": 43823,
+            "40": 28340,
+            "50": 18540,
+            "60": 51392,
+            "70": 1665,
+            "80": 8016,
+            "90": 2695,
+            "95": 18,
+            "100": 6661
+          }
+        },
+        "worldcover_2021": {
+          "positions": 62000,
+          "positions_with_valid_pixels": 62000,
+          "positions_without_valid_pixels": 0,
+          "valid_pixels": 895617846,
+          "valid_fraction": 0.8816802446919103,
+          "nonfinite_valid_pixels": 0,
+          "illegal_valid_pixels": 0,
+          "mean": 37.49266222191825,
+          "population_std": 21.698355007284746,
+          "min": 10.0,
+          "max": 100.0,
+          "class_pixels": {
+            "10": 245592979,
+            "20": 1080227,
+            "30": 202707009,
+            "40": 126339410,
+            "50": 15734807,
+            "60": 263502890,
+            "70": 6729312,
+            "80": 23794226,
+            "90": 1832884,
+            "95": 19410,
+            "100": 8284692
+          },
+          "class_positions": {
+            "10": 32821,
+            "20": 3311,
+            "30": 48663,
+            "40": 28414,
+            "50": 18461,
+            "60": 39188,
+            "70": 1772,
+            "80": 11090,
+            "90": 2561,
+            "95": 20,
+            "100": 6272
+          }
+        }
+      },
+      "spatial_shared_train_validation_blocks": 23,
+      "spatial_shared_train_test_blocks": 15,
+      "spatial_shared_validation_test_blocks": 1,
+      "geometry_header_samples": 240,
+      "full_target_training_acceptance": false
     }
   },
   "current_source_sha256": {
@@ -1193,10 +1589,10 @@
     "src/xuannv_embedding/training/annual_data.py": "c863804e126b9b49e064ee4153befc73ee90a063a4a435fda717be28b4f19932",
     "src/xuannv_embedding/export/annual.py": "cdd35df9cc16b9f922c175422a63458c09abcf98ad22c848916d0d27e263849b",
     "configs/production/annual5m_v1.yaml": "04e1fe066625a31e6e86497b0c58850835ae0db5ed2cafbac767a060d1a3e77f",
-    "docs/xuannv_annual5m_report.tex": "da8af66e14f2789ac11b3e7f094540940a3d5d37ef80057eb0191427a90450d3",
+    "docs/xuannv_annual5m_report.tex": "d5b14ef9960411e3859debf41a0e7cfd939fad5cf18a4afe0cd73471b9b53c0b",
     "src/xuannv_embedding/__init__.py": "6d0af358c736e931c7fc052318b50279e2a1b4751c99e3353ce6ddd276b4eb61",
     "src/xuannv_embedding/config.py": "833b601ce42b984ecb1425da07f70afb44cedbdaf71228b545e42483448cdd98",
-    "src/xuannv_embedding/cli/__init__.py": "c67dbc764a7c61514a855bf4e86b9a1895dcdb113f44c6c556afcb1b7ad6bc2e",
+    "src/xuannv_embedding/cli/__init__.py": "f12ccb09e095ca603a37a9ed28bf266be85071a910621038b7616d462c279d84",
     "src/xuannv_embedding/cli/__main__.py": "df3e5a28c8aee974d2fc802c48372c015ba8558bc97768122d82822dee95405f",
     "src/xuannv_embedding/data/__init__.py": "6645bed6d50e1f1c27c08ac6565dba22ac11f016db71ddebc893c5e9461766fe",
     "src/xuannv_embedding/data/annual_dataset.py": "265abfe0256188581baa6959c819ef13a2d30f9e2ff0c7e5a3dde8a6c3a510f0",
@@ -1204,7 +1600,7 @@
     "src/xuannv_embedding/data/raster_dataset.py": "a943af01678981dece3b53533cca00285fdcfae88d1579af981e84af8802e15f",
     "src/xuannv_embedding/data_process/__init__.py": "90dfbf6a8ab2c82ab3f2ca3b541ffdca4c683fd98b7d0f16de8e94f1400037aa",
     "src/xuannv_embedding/data_process/annual_quality.py": "c0d1a0e039455dd9dd554097712db5647b6e02b5cd4a1e796fe27fa1fd2e949d",
-    "src/xuannv_embedding/data_process/cli.py": "ebd0053c26dd247cb143f49269f7144b77644417dae444ef1f6ce9b27e4f4dc0",
+    "src/xuannv_embedding/data_process/cli.py": "e1062a73bf28fc2c0275ede7c5ea85c46d4dc7cc46ad228e834e4c89007f8f11",
     "src/xuannv_embedding/data_process/cloud_quality.py": "24f3a9e381ffcee93fcaf773993dc09a2bba130ebb73bad6cba74364df499b94",
     "src/xuannv_embedding/data_process/confirmation_osm.py": "22b39997d08fed2ad4badab7f1b43fb1ee9b766b8b1e6da63d6831c94d873579",
     "src/xuannv_embedding/data_process/finalize_catalog.py": "bbcf536e028edce52beb1ded03e779a3dae19764bafd05b290dd032fbbe40329",
@@ -1264,7 +1660,8 @@
     "src/xuannv_embedding/utils/__init__.py": "2a3fe8b3b059aa5f2ba46912dec19c9198facf61a3c6c28c7cd6def37691d085",
     "src/xuannv_embedding/utils/geo.py": "058b947625c725da99c93045c66634ca23c25733759bbba6658286d1582ecfbf",
     "src/xuannv_embedding/utils/manifest.py": "69d84a9f982a4627ae53e58b13c05d2adce4cdfd60afe0dfdcf9daa51782d2b6",
-    "src/xuannv_embedding/utils/repository_policy.py": "c600fb5b48f511970137d7bdf5fc3367b94023d3690b57a7539cb1ed6545012f"
+    "src/xuannv_embedding/utils/repository_policy.py": "c600fb5b48f511970137d7bdf5fc3367b94023d3690b57a7539cb1ed6545012f",
+    "src/xuannv_embedding/data_process/target_audit.py": "3977d81a80c4818dc3e11448258cb1c28d95bc408143aee6f4372f69642b08bf"
   },
   "loader_samples_read": 600,
   "build": {
@@ -1274,9 +1671,9 @@
     "tex_bundle": "tlextras-2022.0r0",
     "fonts": "Fandol via TeX bundle; embedded in PDF",
     "binary_path": "/home/heyuhang/.local/bin/tectonic",
-    "last_build_log": "outputs/target_inventory/20261016/report_v1_10_build.log"
+    "last_build_log": "outputs/annual_targets/p0_20261016_verified/report_v1_11_build.log"
   },
-  "report_source_sha256": "da8af66e14f2789ac11b3e7f094540940a3d5d37ef80057eb0191427a90450d3",
+  "report_source_sha256": "d5b14ef9960411e3859debf41a0e7cfd939fad5cf18a4afe0cd73471b9b53c0b",
   "runtime_status": {
     "annual_model_runtime_completed": true,
     "two_200_epoch_runs_completed": true,
@@ -1286,28 +1683,35 @@
     "independent_target_plan_documented": true,
     "independent_target_interface_implemented": false,
     "independent_target_training_started": false,
-    "independent_target_dataset_current_full_acceptance": false
+    "independent_target_dataset_current_full_acceptance": false,
+    "independent_target_p0_readonly_scan_completed": true
   },
   "rendered_report": {
     "path": "docs/xuannv_annual5m_report.pdf",
-    "sha256": "3007f7cddc1566b9a821a9a1a7690ba5860086e7156d3ec7dbe38a8b9ffd8452",
-    "bytes": 8476839
+    "sha256": "fffab3cd7a2c955279a0ae1a1f17abebc2fc6e7e0f7530f468a33274a4edc5fb",
+    "bytes": 8488251
   },
   "full_test_suite": {
-    "passed": 393,
+    "passed": 402,
     "skipped": 2,
-    "seconds": 261.81,
-    "git_sha": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
-    "source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50"
+    "seconds": 245.97,
+    "git_parent": "cf629ab79e0ba76be3c21b238e179511dfe3652d",
+    "working_tree_modified": true,
+    "source_code_sha256": "3b3734c9f9187f1e8d7fd9a477160563cf05b9d09532ab2fbcbb431444ec996f",
+    "log": "outputs/annual_targets/p0_20261016_verified/full_pytest.log",
+    "skip_reasons": [
+      "local legacy production checkpoint unavailable",
+      "omnicloudmask unavailable"
+    ]
   },
   "verified_timezone": "Asia/Shanghai",
   "planned_next_stage": {
-    "status": "documented_not_started",
+    "status": "p0_readonly_audit_completed_with_open_gates",
     "section": 14,
-    "derived_excerpt": "outputs/target_inventory/20261016/next_stage_plan_excerpt.pdf",
+    "derived_excerpt": "outputs/annual_targets/p0_20261016_verified/next_stage_plan_excerpt.pdf",
     "excerpt_physical_pages_in_main_report": [
       38,
-      43
+      44
     ],
     "teacher_default": false,
     "EMA_default": false,
@@ -1359,6 +1763,15 @@
       120
     ],
     "budget_limitation": "Linear extrapolation from prior22-25min/2048updates on8GPUs. Excludes added targetIO/compute,dataacceptance,initialization,smoke,evaluation,and original pretraining. Re-estimate after real128stepengineeringrun.",
-    "product_promotion_requires_new_spatial_confirmation": true
+    "product_promotion_requires_new_spatial_confirmation": true,
+    "p0_acceptance_excerpt": "outputs/annual_targets/p0_20261016_verified/p0_acceptance_excerpt.pdf"
+  },
+  "source_provenance_note": "E5 and E1-E13 retain historical byte identities. Current source adds only the target audit and two CLI registrations; model/training/annual reader source is unchanged from cf629ab. The two E5 CLI file digests describe the historical baseline; current CLI digests are in current_source_sha256. Audit runtime module snapshot matches the current AST; one long string was reformatted during execution.",
+  "historical_full_test_suite": {
+    "passed": 393,
+    "skipped": 2,
+    "seconds": 261.81,
+    "git_sha": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
+    "source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50"
   }
 }
