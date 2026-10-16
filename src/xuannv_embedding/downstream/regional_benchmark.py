@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import time
 from pathlib import Path
@@ -539,8 +540,56 @@ def score_regression(spec: dict, feature: str) -> dict:
         "supervised_points_per_fold": 5000,
         "folds": results,
         "height_definition": "DSM minus DEM includes vegetation and buildings",
+        "historical_buildings": historical_buildings(spec, features, metadata["folds"]),
     }
     (root / "regression").mkdir(exist_ok=True)
     np.savez_compressed(root / "regression" / f"{feature}_predictions.npz", values=maps)
     dump(root / "regression" / f"{feature}.json", report)
     return report
+
+
+def historical_buildings(spec: dict, features: np.ndarray, folds: list[dict]) -> dict:
+    """Keep historical footprint coverage/density separate from current-year accuracy."""
+    path = Path(spec["data"]) / "evaluation/building_legacy_patch_targets.csv"
+    with path.open(newline="") as handle:
+        reference = {row["patch_id"]: row for row in csv.DictReader(handle)}
+    cache = json.loads((Path(spec["trial"]) / "cache/highres/cache.json").read_text())
+    fields = ["coverage_fraction", "density_per_km2"]
+    target = np.array(
+        [[float(reference[r["patch_id"]][key]) for key in fields] for r in cache["records"]]
+    )
+    scenes = np.stack([np.asarray(tile, np.float32).mean((-2, -1)) for tile in features])
+    reports = []
+    for fold in folds:
+        train, validation, test = [fold[key] for key in ["train", "validation", "test"]]
+        scaler = StandardScaler().fit(scenes[train])
+        mean, scale = target[train].mean(0), np.maximum(target[train].std(0), 1e-6)
+        best = None
+        for alpha in [0.1, 1, 10, 100]:
+            model = Ridge(alpha=alpha).fit(
+                scaler.transform(scenes[train]), (target[train] - mean) / scale
+            )
+            prediction = model.predict(scaler.transform(scenes[validation])) * scale + mean
+            error = np.abs((prediction - target[validation]) / scale).mean()
+            if best is None or error < best[0]:
+                best = error, model
+        prediction = best[1].predict(scaler.transform(scenes[test])) * scale + mean
+        error = prediction - target[test]
+        reports.append(
+            {
+                "fold": fold["fold"],
+                "metrics": {
+                    field: {
+                        "mae": float(np.abs(error[:, i]).mean()),
+                        "rmse": float(np.sqrt((error[:, i] ** 2).mean())),
+                    }
+                    for i, field in enumerate(fields)
+                },
+            }
+        )
+    return {
+        "reference_years": [2017, 2022],
+        "role": "historical patch diagnostic only",
+        "eligible_for_claims_about_2024_building_accuracy": False,
+        "folds": reports,
+    }
