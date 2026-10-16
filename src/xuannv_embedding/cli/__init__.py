@@ -66,6 +66,7 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
         "validate": "审计 manifest 或父网格包",
         "storage": "管理 raw、processed 和版本化存储布局",
         "acquire": "按冻结清单下载区域数据并保留缺失标记",
+        "reference": "按区域窗口准备官方年度嵌入对照",
     }
     for command, help_text in descriptions.items():
         action = actions.add_parser(command, help=help_text, add_help=False)
