@@ -15,7 +15,7 @@
  pdftitle={玄女：全国年度5米地理嵌入技术报告},pdfauthor={heyuhang},bookmarksnumbered=true}
 \pagestyle{fancy}\fancyhf{}
 \fancyhead[L]{\small\color{muted}玄女 / 年度 5m 地理嵌入}
-\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.12}
+\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.13}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \ctexset{section={format=\Large\bfseries\color{ink}},subsection={format=\large\bfseries\color{ink}}}
@@ -63,7 +63,7 @@
 \vfill
 {\color{ink!20}\rule{\linewidth}{.4pt}\par}
 \vspace{3mm}
-{\small\color{muted}v1.12\hfill 2026-10-16\par}
+{\small\color{muted}v1.13\hfill 2026-10-16\par}
 \end{titlepage}
 
 \pagenumbering{roman}
@@ -1250,6 +1250,8 @@ AEF论文v2的生产修订说明同样值得参考：其v2.1放宽必须具备�
 \section{独立目标监督与问题修复：下一阶段执行计划}
 \label{sec:targets-next-plan}
 \note{\status{状态与范围}：本节为2026-10-16制定的执行计划，日期与新增里程碑采用北京时间。
+最新执行范围见第14.12节：按本轮快速验证要求追加坡度、CLCD、夜光及OSM，
+下一次效果比较采用修复基线与多监督联合版两组，原五组方案保留为历史计划。
 已完成目标资产盘点、P0全量审计、原生DEM缓存、空间实验冻结及P1监督接口；下文区分历史与新增证据。
 S2物理偏移/来源、独立地物配准和人工5m真值仍有未关闭条件；正式P2/P3效果筛选尚未执行。
 主线是在约100M年度模型中加入训练期独立目标，并保留已确认的PAN与上下文梯度修复。
@@ -1648,6 +1650,92 @@ screen按第4/8轮保存2{,}048/4{,}096步制品；扩大数据身份已冻结�
 测试覆盖标签隔离、年份/类别映射、缺测、篡改拒绝、跨rank有效计数和计划预算。
 工程源提交\texttt{a50c587}，原生数据和显存/额外预算修订另见[E15]及工程修订记录。}
 
+\subsection{多源监督快速路线：本地接入与短跑检查}
+本小节更新此前“先接DEM与WorldCover、其余后续”的执行范围。
+根据本轮优先快速验证的要求，保留影像重建、PAN精确mask和上下文修复，
+将本地可用监督组合为四类信息、七个训练头；不追加教师、EMA或模型容量。
+此前[E15--E16]的两目标工程证据保留原身份，新增数据与运行另登记为[E17--E18]。
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{2.3cm}p{2.0cm}p{1.3cm}Y@{}}
+\toprule 目标头 & 监督网格 & 权重 & 具体合同\\\midrule
+DEM高程 & 40m & 0.040 & 原生DSM及screen训练均值/标准差，沿用原合同\\
+DEM坡度 & 40m & 0.010 & 从40m DSM中心差分派生，单位度；损失除以90\\
+WorldCover & 10m & 0.035 & 对应年份11类，未知屏蔽\\
+CLCD & 40m & 0.015 & 9类有效面积比例，独立预测头，保留类别体系\\
+夜间灯光 & 640m & 0.050 & 有效面积均值，保留发布值及负值，不再取对数或标准化\\
+OSM语义 & 10m & 0.025 & 建筑、全部道路、水面、水道；历史正例及规则负例\\
+OSM结构 & 5m & 0.025 & 建筑、全部道路、水道；2.5m已知支持聚合到5m\\\bottomrule
+\end{tabularx}
+
+辅助损失总权重仍为0.2，地形、覆盖、夜光和OSM各0.05。
+相同信息的多个头共享该类权重，增加任务不会自动抬高总系数；
+不同目标的实际损失与梯度量级仍需在对照中验证。
+这是一组固定的未调参起点，不保证优于此前D3。
+新头共1{,}950个参数，原100M模型参数合同不变；所有目标仅在公开64维embedding之后读出。
+新配置schema为\path{annual-local-multisource-v2}，原两目标schema继续可用。
+
+\textbf{尺度与缺测。} 本地CLCD来源凭据登记30m Albers网格，
+夜光为年度VNL平均值、15角秒经纬度网格；公开来源背景见\cite{clcd,vnl}。
+当前使用已发布的10m保存数组，在更粗的40m和640m上计算损失，
+不把插值出来的细网格当新增测量。CLCD保留9类的面积比例，避免多数类别替代混合地物；
+CLCD与夜光的粗单元要求至少一半有效支持，以有效比例加权。
+坡度从已核验的40m DSM直接计算，要求中心及上下左右相邻像元均有效，父格边缘忽略；
+没有读取旧10m坡度数组作为细尺度真值，静态坡度的唯一位置统计只计一次。
+
+\textbf{OSM语义。} 使用快照中有历史来源证据的状态1/2正例，以及独立叠加文件的状态3规则负例。
+状态0继续未知，仅有当前来源位的像元不自动变为历史正例。
+历史正例优先于规则负例，目标与置信度分别除以255。
+5m结构按2.5m已知支持和置信度聚合；10m腐蚀内部的规则负例可提供相应的5m背景约束，
+这继承的是规则的覆盖范围，不是新增5m人工真值。
+首轮选择四个具有负例规则的语义通道及其中三个结构通道；
+铁路及其余OSM通道未补齐相应负例合同，不能仅靠正例拟合就声称完成结构学习。
+二元损失按跨rank的各通道正/负软目标量分别归一化，再平均有支持的极性与通道，
+避免大面积规则背景或标签密集通道自动占据更多损失。
+
+\textbf{准备与运行边界。} 新命令\texttt{xuannv experiment prepare-multisource}
+复用已冻结screen的8{,}192位置及原工程2{,}048位置的双年清单，未重新选样。
+实际使用的七个CLCD/夜光/OSM归档重新核对大小及SHA，原WorldCover仍由读取器核验，
+原生DSM在坡度派生前逐行核对原摘要。新缓存按任务、年份记录值、mask、置信度及逐行摘要，
+目标根目录和旧准备目录只读。所有新统计都来自冻结train位置，确认集未参与。
+本轮输出位于\path{outputs/annual_targets/local_supervision_20261016/}，
+包内实现源提交为\texttt{9f05b9c}，数据及权重不进入Git。
+
+短跑采用8卡、全局batch32，从原100M权重开始，前32批将辅助损失从0渐入至满权重，
+训练128步覆盖两年共4{,}096条年度记录，随后另存恢复2步。
+本次检查重点为七个目标的有效支持、损失与梯度有限性、共享STP反传、
+缺测rank、头/优化器/渐入计数恢复及无目标依赖导出；不运行控制组效果筛选或确认集评分。
+正式的“修复基线／多监督联合版”两组对照留给下一步，控制配置已生成。
+CLCD、OSM加入上游后，它们的评分属于产品相关的开发检查，最终提升需保留未参与训练的标签。
+\textbf{本轮实测。} 双年缓存共16{,}384行、15{,}404个文件，逐文件SHA复核全部一致。
+在工程训练子集内按历史OSM支持选取3个位置、双年6条记录做机制检查，
+七个目标均产生有限梯度并到达共享STP输入投影及遮挡内部；改变目标值不改变编码前向。
+该检查未构造优化器、不产生更新，也未使用评测位置或模型分数选样。
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{3.3cm}Y@{}}
+\toprule 检查项 & 结果\\\midrule
+真实CUDA DDP & 8卡128步，4{,}096条年度样本；训练及恢复进程均退出0\\
+训练时间与吞吐 & 训练循环150.28秒、27.26样本/秒；含初始化/保存的进程195.46秒\\
+显存峰值 & 128步分配14.79 GiB/卡、保留17.25 GiB/卡；恢复保留峰值18.82 GiB/卡\\
+恢复连续性 & 新文件另存2步；辅助批计数及14个头参数Adam步数均128至130，头参数均改变\\
+数值与兼容 & 两段运行全部rank非有限梯度步数为0；保存参数有限；旧两目标checkpoint严格恢复通过\\
+无标签导出 & 将训练目标读取器替换为调用即报错后成功导出1个父格；\(64\times256\times256\)、5m、值有限\\
+回归与打包 & 436通过、2跳过；wheel包内源文件一致，隔离导入的准备/训练/导出help通过\\\bottomrule
+\end{tabularx}
+
+恢复2步仅遍历下一epoch的一小段，不是再次完成双年数据遍历；
+严格恢复验证模型、辅助头、优化器、调度器及计数，不主张未保存RNG的逐位轨迹复现。
+两个测试跳过项为本地旧月度生产权重不可用和可选omnicloudmask缺失，
+不影响本次实际使用的年度100M权重及两目标工程权重检查。
+wheel检查复用现有解释器依赖，不等同全新依赖环境安装。
+首次独立梯度检查脚本因SQLite/PyArrow动态库导入顺序在建模前失败，
+调整检查脚本导入顺序后通过，未修改生产环境或产生额外训练更新。
+当前两组配置只冻结工程清单与起点；下一步先做相同清单、更新数和评测协议的
+“修复基线／七目标联合版”两组短对照，再决定长训。
+原五组多种子和扩展预算保留为历史方案，本轮不追加该队列。
+\source{[E17] 冻结screen本地监督缓存、派生/统计/行号与归档指纹；
+[E18] 2026-10-16的工程运行、真实梯度与恢复/导出证据。
+当前新模型共130次工程更新，没有新增开发/确认集精度分数，不据接入成功声明精度提升。}
+
 \reportpage
 \phantomsection
 \addcontentsline{toc}{section}{参考文献}
@@ -1676,6 +1764,12 @@ screen按第4/8轮保存2{,}048/4{,}096步制品；扩大数据身份已冻结�
 \url{https://sentiwiki.copernicus.eu/web/s2-products}. 核验于2026-10-16；物理表面反射率须结合产品元数据中的BOA偏移和量化因子。
 \bibitem{s2processing} ESA / Copernicus. S2 Processing, historical archive reprocessing, SentiWiki.
 \url{https://sentiwiki.copernicus.eu/web/s2-processing}. 核验于2026-10-16；历史成像年份不能替代实际处理基线证明。
+\bibitem{clcd} Jie Yang and Xin Huang. The 30m annual land cover dataset and its dynamics in China from 1990 to 2019.
+Earth System Science Data, 2021. \url{https://doi.org/10.5194/essd-13-3907-2021}.
+核验于2026-10-16；作为CLCD方法与30m来源背景，2020/2021本地文件身份另见[E17]。
+\bibitem{vnl} Earth Observation Group. VIIRS Nighttime Light: Annual VNL.
+\url{https://eogdata.mines.edu/products/vnl/}. 核验于2026-10-16；本地为已发布年度平均值派生标签，
+源文件名、15角秒网格及转换范围以[E17]登记为准。
 \bibitem{salt} Xianhang Li et al. Rethinking JEPA: Compute-Efficient Video SSL with Frozen Teachers. 2025. \url{https://arxiv.org/abs/2509.24317}.
 \bibitem{presto} Gabriel Tseng et al. Lightweight, Pre-trained Transformers for Remote Sensing Timeseries. 2023. \url{https://arxiv.org/abs/2304.14065}.
 \bibitem{ocm} Nick Wright. OmniCloudMask, 作者实现及模型。\url{https://github.com/DPIRD-DMA/OmniCloudMask}. 本地运行版本及权重摘要以[E2]为准，不以仓库最新状态反推已运行版本。
@@ -1713,7 +1807,9 @@ E12 & \path{outputs/annual_abc/20261015_exact/}；诊断原件位于\path{202610
 E13 & \path{outputs/target_inventory/20261016/summary.json}；\path{/data/wwj/xuannv_china_ai_ready_dataset/targets/} & 初次独立目标资产、位置匹配与静态数组抽样；保留原盘点范围。\\
 E14 & \path{outputs/annual_targets/p0_20261016_verified/} & 首轮11归档SHA、8静态目标全量数值/mask、年度位置关联、240影像头样本和空间块交叉；保留该次审计的未放行状态。\\
 E15 & \path{outputs/annual_targets/ready_20261016/}、\path{prepare_20261016/} & 原生DEM分卷SHA/CRC、40m缓存、冻结评测及嵌套训练清单、scope训练统计与S2追溯；未认证独立5m精度。\\
-E16 & \path{outputs/annual_targets/engineering_20261016_v2/}、\path{experiments_20261016_final/} & 真实8卡128步、2步严格恢复、单父格无目标依赖导出、测试和最终五组配置；保留首次NCCL退出失败及预算修订，未作效果选优。\\\bottomrule
+E16 & \path{outputs/annual_targets/engineering_20261016_v2/}、\path{experiments_20261016_final/} & 两目标真实8卡128步、2步严格恢复、单父格导出和历史五组配置；保留首次退出失败及预算修订，未作效果选优。\\
+E17 & \path{outputs/annual_targets/local_supervision_20261016/ready/} & screen双年多源缓存，坡度/CLCD/夜光与四语义、三结构OSM通道；不认证独立地物精度。\\
+E18 & \path{outputs/annual_targets/local_supervision_checks_20261016/} & 七头真实梯度、8卡短跑、恢复、导出、测试及配置身份；工程检查不作为精度结果。\\\bottomrule
 \end{tabularx}
 \endgroup
 
@@ -1739,6 +1835,7 @@ v1.8 & 2026-10-02 & 加入200轮正式训练结果、冻结嵌入探针评测、
 v1.9 & 2026-10-15 & 核验两个长训版本；完成十一组候选、三个第二种子复验、30份主/参考头结果与空间确认；登记梯度/PAN修复、真实EMA恢复及文献投入顺序，未确认稳定双提升。\\
 v1.10 & 2026-10-16 & 登记已有62{,}000位置目标包与当前v6匹配；新增第14节，明确独立监督、问题修复、五组对照、分阶段预算和评测隔离，新增训练尚未执行。\\
 v1.11 & 2026-10-16 & 执行P0全量目标完整性/静态数值审计、年度关联与抽样影像几何核验；登记真实覆盖、罕见类缺测和地理块交叉，保留原生尺度及训练放行条件。\\
-v1.12 & 2026-10-16 & 完成原生40m DSM、新空间实验冻结与独立监督接入；实跑8卡128步及恢复2步，修复NCCL退出显存和中途保存，记录额外预算与S2来源缺口；正式效果筛选未开始。\\\bottomrule
+v1.12 & 2026-10-16 & 完成原生40m DSM、新空间实验冻结与独立监督接入；实跑8卡128步及恢复2步，修复NCCL退出显存和中途保存，记录额外预算与S2来源缺口；正式效果筛选未开始。\\
+v1.13 & 2026-10-16 & 按快速验证要求接入坡度、CLCD、夜光及有可靠负例的OSM，冻结七头联合监督及两组后续对照；工程检查与精度评测分开登记。\\\bottomrule
 \end{tabularx}
 \end{document}
