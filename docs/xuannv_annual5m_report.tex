@@ -15,7 +15,7 @@
  pdftitle={玄女：全国年度5米地理嵌入技术报告},pdfauthor={heyuhang},bookmarksnumbered=true}
 \pagestyle{fancy}\fancyhf{}
 \fancyhead[L]{\small\color{muted}玄女 / 年度 5m 地理嵌入}
-\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.11}
+\fancyhead[R]{\small\color{muted}技术方案与实施依据 · v1.12}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \ctexset{section={format=\Large\bfseries\color{ink}},subsection={format=\large\bfseries\color{ink}}}
@@ -63,7 +63,7 @@
 \vfill
 {\color{ink!20}\rule{\linewidth}{.4pt}\par}
 \vspace{3mm}
-{\small\color{muted}v1.11\hfill 2026-10-16\par}
+{\small\color{muted}v1.12\hfill 2026-10-16\par}
 \end{titlepage}
 
 \pagenumbering{roman}
@@ -73,7 +73,7 @@
 \vfill
 \note{阅读顺序：第1节了解决策；第2--3节确认数据事实；第4--8节审阅方法与训练；
 第9节评测协议，第10节历史训练与评测，第11节100M升级实验，第12节生产交付与风险，
-第13节讨论投入依据，第14节给出独立目标监督与问题修复的下一阶段执行计划；附录用于追溯证据和维护文档。
+第13节讨论投入依据，第14节给出独立目标监督计划及P0/P1实测；附录用于追溯证据和维护文档。
 标注为实测样例的质量检查图来自实际数据，其余架构与网格图为原理图。}
 \reportpage
 \pagenumbering{arabic}
@@ -1244,14 +1244,14 @@ AEF论文v2的生产修订说明同样值得参考：其v2.1放宽必须具备�
 再给高分路径容量 & 固定现有低分STP，对高分编码或多尺度解码作单项扩容 & 实测吞吐、显存与有高分位置的边界收益，排除仅5m输出网格带来的错觉\\
 最后扩大长训 & 只延长已通过对照的配方，记录新增数据与计算量 & 多个继续训练种子和空间确认支持结论；正式收益仍需独立预训练重复与真实5m验证\\\bottomrule
 \end{tabularx}
-本表是后续实验的优先级，不表示这些新数据、损失或结构已实施，也不保证其效果。
+本表是实验的优先级；独立目标的数据准备、接口及工程验证进展见第14节，不保证其效果。
 
 \reportpage
 \section{独立目标监督与问题修复：下一阶段执行计划}
 \label{sec:targets-next-plan}
 \note{\status{状态与范围}：本节为2026-10-16制定的执行计划，日期与新增里程碑采用北京时间。
-已完成目标资产盘点、P0全量文件/静态数值审计和当前v6关联；下文登记本次实测结果。
-原生尺度、物理标定与新评测隔离仍有未关闭条件；训练目标接口及下述模型训练尚未执行。
+已完成目标资产盘点、P0全量审计、原生DEM缓存、空间实验冻结及P1监督接口；下文区分历史与新增证据。
+S2物理偏移/来源、独立地物配准和人工5m真值仍有未关闭条件；正式P2/P3效果筛选尚未执行。
 主线是在约100M年度模型中加入训练期独立目标，并保留已确认的PAN与上下文梯度修复。
 冻结4M教师、EMA一致性、Landsat扩源和高分结构扩容不进入首轮对照。
 原\texttt{v2.0}标签、原始权重与第11节实验结果保持不变。}
@@ -1363,7 +1363,7 @@ CLCD 2020 / 2021 & 各790 & 91.9298\% / 91.8916\% & 继续保留为跨产品诊�
 不能认证地物配准、标签内容方向或5m定位精度。
 补充追溯核对24份S2缓存与原ZIP成员，字节全部一致；原归档README声明
 \texttt{B02,B03,B04,B05,B06,B07,B08,B8A,B11,B12}及L2A产品，
-但TIFF无逐波段说明，归档物理缩放/偏移与月合成处理仍需证明。
+但TIFF无逐波段说明，归档物理缩放/偏移与月度选景或合成处理仍需证明。
 另一个便携数据包的归一化转换不能直接套用到当前原始缓存。
 DEM分卷以虚拟拼接只读打开，含1{,}982个TIFF；抽查原生瓦片为EPSG:4326、
 $3{,}600\times3{,}600$、角度间距$1/3{,}600$度，标记\texttt{AREA\_OR\_POINT=Point}。
@@ -1371,17 +1371,74 @@ $3{,}600\times3{,}600$、角度间距$1/3{,}600$度，标记\texttt{AREA\_OR\_PO
 
 \note{本次状态为\texttt{completed\_with\_open\_gates}，
 \texttt{data\_checks\_passed=true}，\texttt{training\_ready=false}。
-下一项工作是关闭DEM原生覆盖/高程基准/重采样、S2物理数值合同、
-高分地物配准及新增评测隔离条件，再定稿训练统计量。
-P1读取器和损失可以继续开发；正式效果筛选与模型训练尚未开始。
+这是该次审计结束时的状态；后续原生DEM处理、评测身份冻结及P1进展见下文。
+S2物理数值合同、高分地物配准和独立真值仍待补足；正式效果筛选尚未开始。
 没有变更原权重、原数据或\texttt{v2.0}标签。}
 \source{[E14] 全量归档、静态数值及年度关联审计；
 \texttt{source\_provenance\_audit.json}与\texttt{native\_dem\_header\_audit.json}为补充抽样来源证据。
 原大档本次仅对已发布目标包重算完整SHA；原生影像/DEM镜像未全量重算SHA。}
 
+\subsection{P0后续执行：原生DSM与新空间实验已冻结}
+本次通过\texttt{xuannv data targets-prepare}生成
+\path{outputs/annual_targets/ready_20261016/}，与原始数据分开保存。
+原生DEM两个分卷共72{,}946{,}994{,}407字节，重新计算完整SHA-256，
+全部1{,}982个ZIP成员CRC通过；这些是本地完整性指纹，不是与供应商签名或外部官方摘要比对。
+先在173个固定位置比较原生重建与旧10m目标，包含98个旧缺测、11个既有高程修正位置和64个哈希对照。
+双线性重建与旧值的逐位置MAE中位数为0、最大0.0554米，mask一致；98个缺测仍无原生覆盖。
+这支持抽样数值一致性，不能代替完整旧生产流程的来源证明。
+
+正式新缓存不经过旧10m数组：按原生地理瓦片拼接，必要时以最近邻统一不同原生格距，
+再以GDAL面积平均投影到父格的$32\times32$、40m UTM网格。
+像元中心为$x_{\min}+20+40c$、$y_{\max}-20-40r$；不截断高程、不作垂直转换。
+使用GLO-30的DSM定义和EGM2008米制垂直基准\cite{copdem}，原始头信息本身未单独编码完整垂直CRS。
+40m是监督聚合尺度，不是新增测量精度，也不把DSM解释为裸地DTM。
+62{,}000行全部完成，3{,}880个Zarr文件摘要全部匹配，另保存逐行值/mask摘要。
+有效像元占99.8384\%，完全缺测仍为98个位置。缓存和准备凭据均明确未放行正式效果训练。
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{3.5cm}rrY@{}}
+\toprule 冻结角色 & 唯一位置 & 两年记录 & 与原预训练及旧候选池的最小父格边界间距\\\midrule
+development & 256 & 512 & 2{,}862.17米\\
+validation & 128 & 256 & 6{,}893.01米\\
+confirmation & 256 & 512 & 4{,}615.11米\\
+P2 screen训练 & 8{,}192 & 16{,}384 & 从允许训练池分层抽取\\
+P3 expanded训练 & 16{,}384 & 32{,}768 & 包含screen，新增8{,}192位置\\\bottomrule
+\end{tabularx}
+
+全部新评测位置在原100M两个年份预训练manifest之外；原配置与完整manifest摘要已绑定。
+同时保守排除既往124语义、203城市及487空间候选位置的814位置并集；
+487是旧候选池规模，不能说成487个均已评分，旧正式确认评分仍为80位置。
+排除原训练/旧候选的macro和component，所有新角色彼此不共享macro/component，
+并按每个候选的UTM计算完整父格多边形边界及中心距离，将相邻UTM参考也转换后检查。
+边界缓冲为1{,}280米加10米投影余量，角色间实测最小间距2{,}862.17米。
+新开发/验证/确认分别有128/63/128个位置具有高分支持；选择不使用标签类别、值或模型分数。
+这是身份与几何隔离，不能断言环境统计独立或已经具备合格人工标签。
+确认集仅冻结身份，未导出嵌入或计算任务分数，不能用确认支持不足更换困难样本。
+P0全量质量扫描已经读取所有静态数组；本节封存指不用于训练统计、调参和模型评分，
+不表示这些目标字节从未被质量检查读取。
+
+允许的双年训练池为49{,}868个位置，P2/P3以地理区和高分支持作比例分层。
+分别计算allowed/screen/expanded训练统计，静态DSM每位置只计一次。
+P2的8{,}192位置中8{,}178个有有效DSM，14个完全缺测；
+有效40m像元为8{,}373{,}440个，均值1{,}826.9491米、总体标准差1{,}750.1689米。
+这替代仅作候选的P0全train统计用于本轮screen辅助监督，不改原模型的输入归一化。
+
+\textbf{S2来源的自行查找结果。} 已检索用户目录、下载镜像、当前/旧仓源码和已知便携包，
+找到旧SAFE定标与单景补采代码，但没有找到原月度导出生产者及场景--父格对应清单。
+旧审计声称每月选一景，现有镜像README只说明月度L2A，且其文件名说明与实际父格TIFF不同；
+不能据二手说明认定当前数据为单景或月合成。
+24个原始样本中22个可与便携包的来源SHA及值对应，
+便携值符合$\operatorname{clip}((\log(1+DN/10000)/10-\mu)/\sigma,-6,6)$的float16存储，
+最大标准化误差0.000977，最低逐值精确匹配比例99.9127\%。
+这证明便携变换实现和原始字节关系，不能证明原始DN的BOA偏移已校准。
+官方说明2015--2021档案存在带辐射偏移的重处理版本\cite{s2processing,s2products}，
+所以不能按2020/2021成像年份直接假设offset为0。
+当前继续训练保留原始输入变换；补齐来源前不静默改为反射率或宣布该门禁关闭。
+\source{[E15] 原生分卷SHA/CRC、173位置对比、完整缓存凭据、空间划分、三套训练统计和S2追溯记录。
+准备凭据SHA为\texttt{02539197...21e8738d}；完整摘要见机器索引。}
+
 \subsection{P1：目标只进入监督分支的实现合同}
-现有年度schema要求\texttt{target\_heads}引用连续时序输入，且年度损失没有消费静态语义标签。
-本阶段须显式扩展当前包内实现，不能把DEM伪装成输入源来绕过校验。
+原年度schema的\texttt{target\_heads}仅引用连续时序输入；本次新增严格的
+\path{training.independent_targets}，显式扩展监督路径，没有把DEM伪装成输入源。
 
 \begin{figure}[ht]
 \centering
@@ -1396,17 +1453,17 @@ P1读取器和损失可以继续开发；正式效果筛选与模型训练尚未
 \draw[arr] (heads)--(loss);\draw[arr] (labels)--(loss);
 \draw[arr] (embed.south west)--(export.north east);
 \end{tikzpicture}
-\caption{拟实现的输入与监督分离。目标值不能进入编码器、融合、观测选择或公开embedding的前向路径。
+\caption{已实现的输入与监督分离。目标值不能进入编码器、融合、观测选择或公开embedding的前向路径。
 目标数据可改变训练梯度，推理输入合同保持原定义。}
 \end{figure}
 
 \noindent\begin{tabularx}{\linewidth}{@{}p{3.1cm}Y@{}}
-\toprule 代码边界 & 拟实施内容与验收\\\midrule
+\toprule 代码边界 & 已实施内容与验收合同\\\midrule
 \texttt{config.py} & 新增严格的目标注册、目标数据集与辅助损失配置；旧配置默认关闭。
-字段名在实现时冻结，当前不提供可直接运行的伪配置；拒绝未知字段和\texttt{\_base\_}。\\
+字段及准备摘要已冻结，拒绝未知字段和\texttt{\_base\_}；工程配置显式限步，正式训练依准备凭据放行。\\
 \texttt{data/} & 独立目标读取器，按位置、年份、版本取值；路径限制在目标根下，保留mask、单位、
 尺度与来源，禁止URL或路径逃逸；不直接导入旧项目训练代码。\\
-\texttt{models/} & 从公开64维瓶颈之后读出高程与11类覆盖，保留现有观测重建头；
+\texttt{training/}监督头 & 从公开64维瓶颈之后面积池化到40m/10m，使用$1\times1$头读出高程与11类覆盖；
 不增加第二个归一化瓶颈，不给目标头传入真实目标值或绕过embedding的特征。\\
 \texttt{training/} & 按有效支持量计算辅助损失；没有目标的batch/rank贡献有限的零项，
 支持DDP未用头、AMP、保存与恢复。人工输入遮挡不能再次截断被预测区域的监督梯度。\\
@@ -1432,7 +1489,8 @@ $L_{\rm WC}$使用11类交叉熵，原始0/未知码忽略，不能混同映射�
 首次不额外搜索类别重加权。各项按自身有效支持量归一化，再按来源组合，
 不能让标签多的来源或同源的高度/坡度自动获得更多总权重。
 
-起始候选为$\alpha=0.1$、$\beta=0.1$，只在对应组启用；$r(s)$在首个epoch内从0升至1。
+起始候选为$\alpha=0.1$、$\beta=0.1$，只在对应组启用；P2的$r(s)$在首个epoch的512批内从0升至1，
+P1工程短跑采用128批，首批为0、第129批为1。该计数随criterion保存和恢复。
 这些是待工程pilot检查的起点，不是文献最优值或已验证参数。
 已训练参数峰值学习率从$3\times10^{-5}$开始，新增监督头从$3\times10^{-4}$开始，
 使用AdamW、相同的一轮warmup及cosine规则；不默认冻结主干或单独增加未计费的头预训练。
@@ -1528,8 +1586,67 @@ P1必须实测吞吐、峰值分配/保留显存、数据等待与有效目标�
 本轮产物拟存\path{outputs/annual_targets/<run_id>/}：保存数据及代码摘要、目标有效计数、
 采样顺序、辅助头初值、全部检查点和选择记录，数据/权重/日志不进入Git。
 正式200轮训练、全国导出及发布在阶段证据充分后另行决定，本节不启动这些操作。
-\source{[E13]是现有资产盘点与计划依据；P0--P3均为待实施工作。
-优化起点和预算由第11节已完成实验推导，不是新配方的实测结果。}
+\source{[E13]为最初计划依据；P0及P1的本次进展见[E14--E16]，P2/P3仍待实施。
+上述106--120 GPU小时保留为初始估算，新增工程实测后的预算见下文。}
+
+\subsection{P1本次实测：独立监督已跑通，效果尚待检验}
+目标读取、监督头和损失已进入当前包；两类$1\times1$头共新增780个可训练参数，
+原104{,}216{,}905参数编码/观测模型的参数合同不变。
+DSM在40m上按训练标准差计算有效L1，另报米制MAE；覆盖在对应年份10m上计算11类交叉熵。
+全缺测位置只贡献有限零项，保留每个头的梯度图；跨rank使用全局有效目标总量归一化。
+辅助头使用与目标名称绑定的隔离CPU随机初始化，D1/D3或D2/D3的对应头逐值一致，
+不消耗主模型CPU/CUDA噪声流。目标值不参与编码器前向，导出不调用目标读取器。
+
+在原100M权重上，固定同一个父格的2020/2021两个年度输入，
+仅施加训练遮挡、以FP32 eval模式检查梯度，未构造优化器。
+改变覆盖标签不改变公开embedding；DEM和WorldCover梯度均能到达
+\texttt{temporal\_encoder.input\_projection.weight}及5120个遮挡内部像元。
+加权DEM的该STP参数梯度范数分别为0.06078/0.06112，覆盖为0.03215/0.03228，
+原观测与均匀性为2.5060/1.6893。
+这是单位置、单共享参数的机制诊断，不是整个主干的梯度平衡认证或空间精度结论。
+
+\textbf{显存与退出纠正。} 首次关闭梯度检查点的8卡运行完成128步并保存权重，
+但在销毁NCCL通信组时CUDA显存不足，进程退出码1，因此不登记为干净通过。
+其最大分配显存36.91GiB，保留显存最高38.05GiB。
+随后单独提交退出前释放CUDA分配器缓存的修复，所有新对照统一开启梯度检查点，
+从原100M权重重新跑同一2048位置、两年4096条记录。
+失败日志与权重保留，补跑预算单独登记，不作为辅助监督效果搜索。
+
+\noindent\begin{tabularx}{\linewidth}{@{}p{4.4cm}YY@{}}
+\toprule 项目 & 修复后的128步 & 严格恢复后的额外2步\\\midrule
+设备 / 全局batch & 8张A100 40GB / 32 & 同一8卡 / 32\\
+样本曝光 & 4{,}096，两年各2{,}048 & 64，第二轮有限步读取\\
+训练循环墙钟 & 147.875秒 & 5.697秒\\
+非有限梯度步 & 0 & 0\\
+最大分配显存 & 14.780GiB & 14.762GiB\\
+最大保留显存 & 17.238GiB & 18.807GiB\\
+进程退出码 & 0 & 0\\
+监督渐入批次计数 & 128 & 130\\
+四个辅助参数的Adam步数 & 均128 & 均130\\\bottomrule
+\end{tabularx}
+
+128步全局吞吐为27.70条年度记录/秒，各rank数据等待8.91--9.77秒。
+训练日志中的有效DSM支持通常为每批32{,}768个40m单元，覆盖支持约45--48万个10m单元，
+它们是训练分母，不是独立验证样本数。
+保存及恢复目标头、渐入计数、两组optimizer和scheduler状态均需严格核对；
+checkpoint记录准备SHA、目标类别表、单位/网格、原权重及当前源代码身份。
+恢复不保存RNG状态，额外2步也不是完整第二轮，不能声称逐位随机轨迹重现。
+包含失败尝试共消耗258个工程更新；保留的新工程制品为130更新，不进入P2/P3选优。
+
+以该短程D3循环线性外推，P2十次训练约105.2 GPU小时、P3四次约84.1 GPU小时，
+合计约189.3 GPU小时，单节点8卡约23.7小时。
+这不包含初始化、目标摘要核验、失败/诊断、评测、全国导出，也不构成长训上界；
+其他配方与缓存状态会改变耗时。所有新组统一使用同一显存策略，仍按固定样本/更新比较，
+另报实际算力，不能因新增目标更慢就悄悄减少其训练步数。
+
+\textbf{当前交付与下一门禁。} 已生成种子17/42的五组screen配置和工程配置，
+screen按第4/8轮保存2{,}048/4{,}096步制品；扩大数据身份已冻结，未提前选定D3为候选。
+原生DEM与空间身份条件已落实，S2原始定标/选景来源、独立高分定位和足够人工5m真值仍待补足，
+正式P2/P3未启动，准备凭据\texttt{formal\_training\_released=false}。
+本次不声称通用语义或5m细节已提升，原\texttt{v2.0}和两份长训模型保持原身份。
+\source{[E16] \path{engineering_20261016_v2/}中的真实训练、恢复、逐状态核验及单父格导出；
+测试覆盖标签隔离、年份/类别映射、缺测、篡改拒绝、跨rank有效计数和计划预算。
+工程源提交\texttt{a50c587}，原生数据和显存/额外预算修订另见[E15]及工程修订记录。}
 
 \reportpage
 \phantomsection
@@ -1552,9 +1669,13 @@ P1必须实测吞吐、峰值分配/保留显存、数据等待与有效目标�
 \bibitem{landsatqa} USGS. Landsat Collection 2 Quality Assessment Bands. \url{https://www.usgs.gov/landsat-missions/landsat-collection-2-quality-assessment-bands}. 核验于2026-10-15。
 \bibitem{copdem} Copernicus Data Space Ecosystem. Copernicus DEM: Global and European Digital Elevation Model.
 \url{https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM}.
-产品定义与DSM范围核验于2026-10-16；本地派生数据以[E13--E14]为准，原生重采样链尚未完成验收。
+产品定义、DSM范围及EGM2008米制基准核验于2026-10-16；本地原生派生链以[E15]为准，不作独立测量精度认证。
 \bibitem{worldcover} ESA WorldCover. Data access: WorldCover 2020 and 2021.
 \url{https://esa-worldcover.org/en/data-access}. 核验于2026-10-16；本地类别、覆盖及有效mask以[E13--E14]登记为准。
+\bibitem{s2products} ESA / Copernicus. S2 Products, SentiWiki.
+\url{https://sentiwiki.copernicus.eu/web/s2-products}. 核验于2026-10-16；物理表面反射率须结合产品元数据中的BOA偏移和量化因子。
+\bibitem{s2processing} ESA / Copernicus. S2 Processing, historical archive reprocessing, SentiWiki.
+\url{https://sentiwiki.copernicus.eu/web/s2-processing}. 核验于2026-10-16；历史成像年份不能替代实际处理基线证明。
 \bibitem{salt} Xianhang Li et al. Rethinking JEPA: Compute-Efficient Video SSL with Frozen Teachers. 2025. \url{https://arxiv.org/abs/2509.24317}.
 \bibitem{presto} Gabriel Tseng et al. Lightweight, Pre-trained Transformers for Remote Sensing Timeseries. 2023. \url{https://arxiv.org/abs/2304.14065}.
 \bibitem{ocm} Nick Wright. OmniCloudMask, 作者实现及模型。\url{https://github.com/DPIRD-DMA/OmniCloudMask}. 本地运行版本及权重摘要以[E2]为准，不以仓库最新状态反推已运行版本。
@@ -1581,7 +1702,7 @@ E1 & \path{national_annual5m_quality_v6/summary.json} & 三路年度规模、支
 E2 & \path{national_annual5m_quality_v3/run.json} & S2处理完成状态、总数、模型版本及处理规则。\\
 E3 & \path{national_annual5m_quality_v6/loader-check.json} & 六份清单各100次读取、逐来源原生尺寸；不推及未检查样本。\\
 E4 & \path{national_training_v1/summary.json} & 原catalog与父格背景；状态字段不替代后续年度放行。\\
-E5 & 仓库实际模型、年度读取器、质检代码 & 逐模块实现边界；源码摘要优先于仅Git基线。\\
+E5 & 历史基线模型、年度读取器、质检代码 & 保留原源码身份；当前新增监督实现另见\texttt{current\_source\_sha256}。\\
 E6 & \path{national_annual5m_quality_v6/pan-screening-summary.json} & 同景MUX关联、云影传播、面积阈值和PAN筛选计数。\\
 E7 & \path{national_annual5m_quality_v6/run.json} 及合并核验记录 & 5m波段映射、模型与处理器摘要、合并输入版本及最终合同核验。\\
 E8 & \path{national_annual5m_quality_v6/registration-full-summary.json}、\path{pan-screening-summary.json}、\path{visual-review.json} & 全量相对配准、PAN筛选和目视诊断；用于说明隔离边界，不替代独立精度验证。\\
@@ -1590,7 +1711,9 @@ E10 & \path{outputs/eval/quick\_rapid124/}、\path{outputs/eval/city5m/} 结果�
 E11 & \path{outputs/annual5m/run_100m_20261009_024811/} 配置、日志与权重 & 原100M参数、200轮训练、632{,}000次更新及来源核验。\\
 E12 & \path{outputs/annual_abc/20261015_exact/}；诊断原件位于\path{20261015_screen/} & 梯度/PAN修复、十一组候选与三组种子复验、30份主/参考头结果、空间确认及真实8卡EMA恢复；共同重建目标不混用旧掩膜损失。\\
 E13 & \path{outputs/target_inventory/20261016/summary.json}；\path{/data/wwj/xuannv_china_ai_ready_dataset/targets/} & 初次独立目标资产、位置匹配与静态数组抽样；保留原盘点范围。\\
-E14 & \path{outputs/annual_targets/p0_20261016_verified/} & 本次11归档SHA、8静态目标全量数值/mask、年度位置关联、240影像头样本、空间块交叉与候选训练统计；原生尺度、地物配准和评测隔离尚未放行。\\\bottomrule
+E14 & \path{outputs/annual_targets/p0_20261016_verified/} & 首轮11归档SHA、8静态目标全量数值/mask、年度位置关联、240影像头样本和空间块交叉；保留该次审计的未放行状态。\\
+E15 & \path{outputs/annual_targets/ready_20261016/}、\path{prepare_20261016/} & 原生DEM分卷SHA/CRC、40m缓存、冻结评测及嵌套训练清单、scope训练统计与S2追溯；未认证独立5m精度。\\
+E16 & \path{outputs/annual_targets/engineering_20261016_v2/}、\path{experiments_20261016_final/} & 真实8卡128步、2步严格恢复、单父格无目标依赖导出、测试和最终五组配置；保留首次NCCL退出失败及预算修订，未作效果选优。\\\bottomrule
 \end{tabularx}
 \endgroup
 
@@ -1615,6 +1738,7 @@ v1.7 & 2026-09-20 & 接入年度原生尺度三分支、2m到5m面积聚合、�
 v1.8 & 2026-10-02 & 加入200轮正式训练结果、冻结嵌入探针评测、外部年度嵌入基线的同协议对照与5m原生协议评测；记录高分融合稀释细节等已知问题与后续动作。\\
 v1.9 & 2026-10-15 & 核验两个长训版本；完成十一组候选、三个第二种子复验、30份主/参考头结果与空间确认；登记梯度/PAN修复、真实EMA恢复及文献投入顺序，未确认稳定双提升。\\
 v1.10 & 2026-10-16 & 登记已有62{,}000位置目标包与当前v6匹配；新增第14节，明确独立监督、问题修复、五组对照、分阶段预算和评测隔离，新增训练尚未执行。\\
-v1.11 & 2026-10-16 & 执行P0全量目标完整性/静态数值审计、年度关联与抽样影像几何核验；登记真实覆盖、罕见类缺测和地理块交叉，保留原生尺度及训练放行条件。\\\bottomrule
+v1.11 & 2026-10-16 & 执行P0全量目标完整性/静态数值审计、年度关联与抽样影像几何核验；登记真实覆盖、罕见类缺测和地理块交叉，保留原生尺度及训练放行条件。\\
+v1.12 & 2026-10-16 & 完成原生40m DSM、新空间实验冻结与独立监督接入；实跑8卡128步及恢复2步，修复NCCL退出显存和中途保存，记录额外预算与S2来源缺口；正式效果筛选未开始。\\\bottomrule
 \end{tabularx}
 \end{document}

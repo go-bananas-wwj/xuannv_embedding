@@ -1,8 +1,8 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.11",
+  "report_version": "1.12",
   "verified_date": "2026-10-16",
-  "scope": "Historic model/ABC evidence is preserved. Adds a read-only current target acceptance run: all11archive hashes,8full static value/mask scans,currentv6joins,240sampledimageheaders and block-overlap audit. Native target processing, physical calibration, feature registration and new evaluation isolation remain open. No target-supervised model training started.",
+  "scope": "Preserves E1-E14 and prior model/ABC scientific observations. Adds native DSM40m derivation, spatial experiment freezing, independent supervision, real8GPU128+2engineering checks and explicit initial failure/memory/budget corrections. Formal effectiveness screening remains unreleased.",
   "evidence": {
     "E1": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
@@ -1169,6 +1169,247 @@
         "Freeze new spatial evaluation/confirmation sets and exclusion-aware train statistics",
         "Implement target-only training reader/losses after data acceptance"
       ]
+    },
+    "E15": {
+      "scope": "Native DSM derivation, frozen spatial experiment identities, scoped training statistics and S2 provenance checks; no independent measurement-accuracy certification.",
+      "verified_at": "2026-10-16T15:59:16.701555+08:00",
+      "preparation_sha256": "02539197efea3020dfafac22dba5501c2f71c0518361d94d9e2202bd21e8738d",
+      "files": [
+        {
+          "path": "outputs/annual_targets/prepare_20261016/raw_dem_source_integrity.json",
+          "sha256": "bbabfe7de5dc0e49bdc161d9d8c17f31cf2b8acedce7a7867603f221f4672668"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/native_pilot_selection.json",
+          "sha256": "2f76ee28272bcdedd4c0a27c5fab19474d4cb333c1c28e7a98ae9c89b01200d9"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/native_pilot_comparison.json",
+          "sha256": "56d69aae83193d725189bc8f56f6b89c70793718bd572f5279f839fca4c1abb9"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/s2_numeric_probe.json",
+          "sha256": "9540dc0d270c150575e7ce93d081590a8d9c3c5245570cfa2d146c228fd52507"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/s2_source_search.json",
+          "sha256": "9cd9bdb018499a8d95e4cbd59fdf4e7ed23f28651986598c2acb7c0bb95f68a6"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/prepared_cache_verification.json",
+          "sha256": "84542295e59c8a0aa50321f8cf75fe7e91f6fb1a0cff4a6433a0756d7598f2b0"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/preparation.json",
+          "sha256": "02539197efea3020dfafac22dba5501c2f71c0518361d94d9e2202bd21e8738d"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/experiment_splits.json",
+          "sha256": "06d8ab86126c6c05a5fa4962f5d085d9c8c0b1cfb40b048998308147ea599cab"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/pretraining_split_binding.json",
+          "sha256": "c98acc2a65bb67b72d4f2b23a42cde4fd54494b085b5ca107f6f7c85405f5a14"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/train_statistics.allowed.json",
+          "sha256": "cbbfc872ff711e9ef2aa177a4f5c6343c80fae17e1463cd9c4e32724cda9452c"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/train_statistics.screen.json",
+          "sha256": "478da054fedb0764561225c29bf2a0116323e257ef4c92ed1d053a2cf606e24b"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/train_statistics.expanded.json",
+          "sha256": "143c2bd6ddc68ed115998617d00ecb4cb7525ff53e55ee47d70b906141e1c93b"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/native_dem/manifest.json",
+          "sha256": "5924d85b828117d37df13d03906f7b7a69a05ece632906afd881c2414548aa64"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/native_dem/index.parquet",
+          "sha256": "aef28f317381905f7dc3e7595bdf8eb4591501d352b9e11130208b609cd28222"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/native_dem/checksums.json",
+          "sha256": "c68cfd396d8e0ab57f0a878c91e1ad457ac290cbe1896659759556a662e9ee46"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/native_dem/row_statistics.npz",
+          "sha256": "b78953ea27fd8ffd31d26cc84202c1a9e42555ce054cba879f4317bcd39369f2"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/source/native_dem.py",
+          "sha256": "040fa92c1c6a99a8b1a649b9b177c51aa76500f3346ff1ffe54784706b565afe"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/source/target_prepare.py",
+          "sha256": "c99f7ae8c3b68d03c917cf24e7b7a94c7623eb4188f06236b88c9f870222a868"
+        },
+        {
+          "path": "outputs/annual_targets/ready_20261016/source/target_splits.py",
+          "sha256": "2a72177f419395dc929009f5bbd91ab17048cf0d66263304c659ef16f8162ebc"
+        }
+      ],
+      "raw_source_checks": "Both local split-file SHA256 fingerprints and all1982ZIP-member CRC checks; no external published hash trust anchor.",
+      "native_array_files_verified": 3880,
+      "formal_training_released": false,
+      "source_snapshots_exact": {
+        "native_dem.py": true,
+        "target_prepare.py": true,
+        "target_splits.py": true
+      }
+    },
+    "E16": {
+      "scope": "Real8GPU target-supervision engineering only: clean128updates,2strict-resumeupdates, target-free inference dependency check, regression and frozen final experiment configs. No accuracy selection.",
+      "verified_at": "2026-10-16T15:59:16.701555+08:00",
+      "training_git_sha": "a50c58742a16980b6680c57d76e80d99a5fba26b",
+      "training_source_code_sha256": "acbd4a8e1c79ad2dc46f7aebe0ba1d5ec85d869fa39237d1f20b9e4364da34a8",
+      "final_plan_git_sha": "bb4823ab6fe809ba581bd9d1aa137a6979a25ccd",
+      "final_plan_source_code_sha256": "0bc9fa55ca3b29a0f386aba0fd43fca9016cf812f3cbae528efc8c502de5f35c",
+      "files": [
+        {
+          "path": "outputs/annual_targets/engineering_20261016_v2/train.log",
+          "sha256": "55f2e6a9fdc414f9523240d54b8f9b068a4b43bb231d598c9c21cd6cbcc6732d"
+        },
+        {
+          "path": "outputs/annual_targets/engineering_20261016_v2/resume.log",
+          "sha256": "fb74b8c18323685c3d18f5c3064a393b588e51dae8da1ec5244752c2a3bd3823"
+        },
+        {
+          "path": "outputs/annual_targets/engineering_20261016_v2/training_process.json",
+          "sha256": "7088a2c74f7fa741765451f12d30a943f45a581aeb60def6c67c9a1340f09d9c"
+        },
+        {
+          "path": "outputs/annual_targets/engineering_20261016_v2/verification.json",
+          "sha256": "71f3bbbafc99bebad05e8eee04526eb90c91a3bfec5b85903c695deb50fc4756"
+        },
+        {
+          "path": "outputs/annual_targets/engineering_20261016_v2/verification.log",
+          "sha256": "f55c98f5ab81e154715f3b0250c05a00645fca721000508dd5bffb53dd8b9123"
+        },
+        {
+          "path": "outputs/annual_targets/engineering_20261016_v2/export.log",
+          "sha256": "9808e4883b89de5f3f7f67cbced8ee5477debb3aba6a6e80e0e8f191175967bf"
+        },
+        {
+          "path": "outputs/annual_targets/engineering_20261016_v2/export_verification.json",
+          "sha256": "bf5d80cc7a5208199b034c063a3cf38ab714acbb6315ec25cad033e26a9cee60"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/real_target_gradients.json",
+          "sha256": "34912534b37aeb29e5a79cefe40269caa2aa2963d874ee0accd9c6c839b39671"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/real_target_gradients.log",
+          "sha256": "53024f50275af03876c9bef0d7ab8418af8157b592e6320e438e759a91bd3afc"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/engineering_amendment.json",
+          "sha256": "a75f425dcb615514e53e73daf439a7f93b16763cac91408765aa2fcdc4925bdd"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/verify_real_gradients.py",
+          "sha256": "1daa46325f119738a753e952a911ba4459ebc5193a45b531499d2d71c9c16d57"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/verify_engineering.py",
+          "sha256": "5151089e9486bacb0ef2474dbd382819ce5b555e1f06f017b8af31a33d52b470"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/pytest_final.log",
+          "sha256": "c1251061c883b9fdaff0227b51ad21466c84b8b26346e0d2a521c033bd0e8b0b"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/build_final.log",
+          "sha256": "cbd396013c98013e4c54df12e806b2bbc8cdf969b1c99686a052376ed72eb863"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/wheel_verification.json",
+          "sha256": "8958893dc46676cd3ee7b86a7e734c95f5a85bbef79eabf052090afdf8979939"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/report_v1_12_build.log",
+          "sha256": "8ccf08e699abcf495261d4d4963a61283c3da7dc5ce77a8f51047ef9e7c375d2"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/pdf_verification.json",
+          "sha256": "cb01ddc0aafeffe9ee876f6465abcbfb7056db17b367de42920048ec14ea5e98"
+        },
+        {
+          "path": "outputs/annual_targets/prepare_20261016/excerpt_derivation.json",
+          "sha256": "1b42a8c36cb29b354df4827a11fec5be3e6df6287fb46979d43780d5b9f80338"
+        },
+        {
+          "path": "outputs/annual_targets/experiments_20261016_final/plan.json",
+          "sha256": "79d4cac9bad851143e3cee524d296a0f8e58ea5b8b63c5bf52e6532f37c0edab"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/engineering/seed42/D3.yaml",
+          "sha256": "cf123de65e86d386bbc1e5cca82efdebdbab94c3e9532923d21ee63df6a3586f"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed17/R0.yaml",
+          "sha256": "bc758a1d56c7fb928370a6de8c50df006a6a003391cf0dfbda17d74a61c7de81"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed17/R1.yaml",
+          "sha256": "0d72a1345854d9f39790faef518b9bd75d05b272d5076664b2e8a7dd56e6307a"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed17/D1.yaml",
+          "sha256": "482f46c939d5e433311a43275283c78c60c6183b1c6227eee11079aa87b28c5e"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed17/D2.yaml",
+          "sha256": "3eb2658b04af996fdccb839b50eb5ee6085e871cb250e20ed0ff3855bc57966f"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed17/D3.yaml",
+          "sha256": "d160602f0282e6add5d48479529993c486229a38eb3d70d3f72b357528ccd1f8"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed42/R0.yaml",
+          "sha256": "5e35a03d8b1817a3d2bda65dd4b98b0be1cdd5bb9ddc336a804b002c898a1710"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed42/R1.yaml",
+          "sha256": "9ed60475cf06e4e1e666b67b510f9b5e865727f7d2b76ba6a03e291761fed36c"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed42/D1.yaml",
+          "sha256": "04fdeebdeaf53d097958f1a4905b23c443d790a0058c8e76a5de46b23c0974df"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed42/D2.yaml",
+          "sha256": "a30919b53560cffe678bb27f22bca9b37b3907c95433da9a6bde1ce7696949a0"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/experiments_20261016_final/configs/screen/seed42/D3.yaml",
+          "sha256": "6bf3709a403e3bd2f880d5325d20aa5917e4153fb8160e1cf2cc1ab3ece4ac60"
+        }
+      ],
+      "checkpoints": {
+        "model.pt": {
+          "path": "outputs/annual_targets/engineering_20261016_v2/model.pt",
+          "sha256": "70ced8ba54a511fdc943bb2b3e10e489594d2f3e901c3d1f452b0dbc8ec3e903"
+        },
+        "resumed.pt": {
+          "path": "outputs/annual_targets/engineering_20261016_v2/resumed.pt",
+          "sha256": "5ae3e989a5fccb5580f6f329268663be20de302bd176a9f7b90146d4c07dd202"
+        }
+      },
+      "failed_initial_attempt": {
+        "path": "outputs/annual_targets/engineering_20261016/train.log",
+        "sha256": "6391fba3dd95f6cdc62ef997122a8764342f61cfbadc355eec119b85652d2e1d"
+      },
+      "failed_initial_updates": 128,
+      "clean_new_model_updates": 130,
+      "total_engineering_updates_across_attempts": 258,
+      "no_new_development_or_confirmation_scores": true,
+      "final_manifest_contents_match_the_engineering_plan": true,
+      "plan_revision": "Final screen save_every4 preserves2048/4096checkpoints; training behavior of the tested engineering config is unchanged. Config paths differ and remain separately identified."
     }
   },
   "verified_metrics": {
@@ -1581,26 +1822,93 @@
       "spatial_shared_validation_test_blocks": 1,
       "geometry_header_samples": 240,
       "full_target_training_acceptance": false
+    },
+    "target_preparation_20261016": {
+      "native_positions": 62000,
+      "native_spacing_m": 40,
+      "native_valid_fraction": 0.9983841513356855,
+      "native_fully_missing_positions": 98,
+      "roles": {
+        "development": 256,
+        "validation": 128,
+        "confirmation": 256
+      },
+      "eligible_paired_train_positions": 49868,
+      "screen_positions": 8192,
+      "expanded_positions": 16384,
+      "screen_dem_statistics": {
+        "positions": 8192,
+        "positions_with_valid_pixels": 8178,
+        "positions_without_valid_pixels": 14,
+        "valid_pixels": 8373440,
+        "valid_fraction": 0.9981918334960938,
+        "nonfinite_valid_pixels": 0,
+        "illegal_valid_pixels": 0,
+        "mean": 1826.9491216475824,
+        "population_std": 1750.168941827304,
+        "min": -150.93350219726562,
+        "max": 7005.9619140625
+      },
+      "prior_seen_candidate_union": 814,
+      "role_minimum_boundary_gaps_m": {
+        "development": 2862.167011199731,
+        "validation": 6893.010953132165,
+        "confirmation": 4615.105632593906
+      },
+      "target_class_or_value_based_sampling": false,
+      "formal_training_released": false
+    },
+    "target_engineering_20261016": {
+      "model_parameters": 104216905,
+      "auxiliary_parameters": 780,
+      "target_batch_counters": [
+        128,
+        130
+      ],
+      "head_Adam_steps": [
+        [
+          128,
+          128,
+          128,
+          128
+        ],
+        [
+          130,
+          130,
+          130,
+          130
+        ]
+      ],
+      "strict_restored_optimizer_groups": 2,
+      "all_model_and_criterion_tensors_finite": true,
+      "projected_training_loop_GPU_hours": {
+        "P2": 105.15531661113103,
+        "P3": 84.12425328890482,
+        "scope": "Linear estimate from one short D3 run; excludes initialization, prior failed run, diagnostics and evaluation. Not an upper bound for different data caches or target mixes."
+      },
+      "updates": 130,
+      "global_samples": 4160,
+      "training_process_exit_code": 0,
+      "resume_process_exit_code": 0,
+      "no_effectiveness_claim": true,
+      "initial_failed_attempt_updates": 128
     }
   },
   "current_source_sha256": {
-    "src/xuannv_embedding/models/annual.py": "87ef1b2df04f748f404670ae7597998379853d6d09f0933f0f24afd735eeefa5",
-    "src/xuannv_embedding/training/annual.py": "b34cc54fb72e97e07fad142d7603caae216c310a8cf8f70ad940ef0ee458ac48",
-    "src/xuannv_embedding/training/annual_data.py": "c863804e126b9b49e064ee4153befc73ee90a063a4a435fda717be28b4f19932",
-    "src/xuannv_embedding/export/annual.py": "cdd35df9cc16b9f922c175422a63458c09abcf98ad22c848916d0d27e263849b",
     "configs/production/annual5m_v1.yaml": "04e1fe066625a31e6e86497b0c58850835ae0db5ed2cafbac767a060d1a3e77f",
-    "docs/xuannv_annual5m_report.tex": "d5b14ef9960411e3859debf41a0e7cfd939fad5cf18a4afe0cd73471b9b53c0b",
+    "docs/xuannv_annual5m_report.tex": "5e3f471ad4b99a90be7000f033cbc7f91aa96780a5d76541fb6cc11e10ded3e7",
     "src/xuannv_embedding/__init__.py": "6d0af358c736e931c7fc052318b50279e2a1b4751c99e3353ce6ddd276b4eb61",
-    "src/xuannv_embedding/config.py": "833b601ce42b984ecb1425da07f70afb44cedbdaf71228b545e42483448cdd98",
-    "src/xuannv_embedding/cli/__init__.py": "f12ccb09e095ca603a37a9ed28bf266be85071a910621038b7616d462c279d84",
+    "src/xuannv_embedding/cli/__init__.py": "f254389ad1b425643b2a1efb9e71be2a6f1963c30e704ef1e1ab482c309af61b",
     "src/xuannv_embedding/cli/__main__.py": "df3e5a28c8aee974d2fc802c48372c015ba8558bc97768122d82822dee95405f",
+    "src/xuannv_embedding/config.py": "c82b615beba99c6dd45bc50926fefc0130286f09ae6c319bc161a73d96c114b7",
     "src/xuannv_embedding/data/__init__.py": "6645bed6d50e1f1c27c08ac6565dba22ac11f016db71ddebc893c5e9461766fe",
-    "src/xuannv_embedding/data/annual_dataset.py": "265abfe0256188581baa6959c819ef13a2d30f9e2ff0c7e5a3dde8a6c3a510f0",
+    "src/xuannv_embedding/data/annual_dataset.py": "5a448a11e7f0bf435cb467ba939a46de5ff86f30642ddc4af90ba30a1900c523",
     "src/xuannv_embedding/data/contracts.py": "ad184ac6ec41926a75eb780c1db994618300f6d1ce31e7968193a5e4afb4a163",
     "src/xuannv_embedding/data/raster_dataset.py": "a943af01678981dece3b53533cca00285fdcfae88d1579af981e84af8802e15f",
+    "src/xuannv_embedding/data/targets.py": "c2711ea9e0c993e1cbcac4ac607c6e6878a0df76c572c85319d476d5725fc8f1",
     "src/xuannv_embedding/data_process/__init__.py": "90dfbf6a8ab2c82ab3f2ca3b541ffdca4c683fd98b7d0f16de8e94f1400037aa",
     "src/xuannv_embedding/data_process/annual_quality.py": "c0d1a0e039455dd9dd554097712db5647b6e02b5cd4a1e796fe27fa1fd2e949d",
-    "src/xuannv_embedding/data_process/cli.py": "e1062a73bf28fc2c0275ede7c5ea85c46d4dc7cc46ad228e834e4c89007f8f11",
+    "src/xuannv_embedding/data_process/cli.py": "a7abfe2cd6dc7a013b51ec9d87bb988e911d374e88ee1c69b1ba1f4d61d7ad7b",
     "src/xuannv_embedding/data_process/cloud_quality.py": "24f3a9e381ffcee93fcaf773993dc09a2bba130ebb73bad6cba74364df499b94",
     "src/xuannv_embedding/data_process/confirmation_osm.py": "22b39997d08fed2ad4badab7f1b43fb1ee9b766b8b1e6da63d6831c94d873579",
     "src/xuannv_embedding/data_process/finalize_catalog.py": "bbcf536e028edce52beb1ded03e779a3dae19764bafd05b290dd032fbbe40329",
@@ -1610,6 +1918,7 @@
     "src/xuannv_embedding/data_process/image_quality.py": "c23eb66238290a4ffb332ecd609683d78e821a56d153a4e4eba7a87ed0f01c7a",
     "src/xuannv_embedding/data_process/inventory.py": "77dfec103618c472a8446d6ed2f3d5b08d0b5c81c6c67bbe55901889510232b0",
     "src/xuannv_embedding/data_process/materialize.py": "d611edb52416031b24fa0b54eb6b749fa286b2e4c15b52c0efa78e31f333efc4",
+    "src/xuannv_embedding/data_process/native_dem.py": "040fa92c1c6a99a8b1a649b9b177c51aa76500f3346ff1ffe54784706b565afe",
     "src/xuannv_embedding/data_process/observation_raster.py": "c1d39f159b33269cfd12fa3f763a297f68f1d692ced7ca7dae6c45a56435adcf",
     "src/xuannv_embedding/data_process/osm.py": "4a159e6f1bf7866d805a6e3d32a02873fd9bd78a8471121c06cf0ceef94ac580",
     "src/xuannv_embedding/data_process/p0.py": "a414e1224a95d0930879ce6721246d88357d76d131a3357ce03535afb4ebad07",
@@ -1627,6 +1936,9 @@
     "src/xuannv_embedding/data_process/stac_cdse.py": "46f58b1921f7d77b84fe513041a7179dd2aad91a55afd86149bf89fad1278f51",
     "src/xuannv_embedding/data_process/stac_pc.py": "26c9d26f73426aa1b09c5bde84e39b52c2abe028a7b18286c30f097010956a79",
     "src/xuannv_embedding/data_process/statistics.py": "a260b48e57d1cfb81c6bb5479bdd78c79b065eedf697c86d95361f60348b0a78",
+    "src/xuannv_embedding/data_process/target_audit.py": "3977d81a80c4818dc3e11448258cb1c28d95bc408143aee6f4372f69642b08bf",
+    "src/xuannv_embedding/data_process/target_prepare.py": "c99f7ae8c3b68d03c917cf24e7b7a94c7623eb4188f06236b88c9f870222a868",
+    "src/xuannv_embedding/data_process/target_splits.py": "2a72177f419395dc929009f5bbd91ab17048cf0d66263304c659ef16f8162ebc",
     "src/xuannv_embedding/downstream/__init__.py": "bfff155a3dc6e09ed43261e7f0fee8c6e04cafd1ff673540177af75e7d42e48f",
     "src/xuannv_embedding/downstream/annual_ablation.py": "91d2671559a0c6ae31fa3526fa24ef3555bdd8e0bc92299c2ed27ab92ffd2832",
     "src/xuannv_embedding/downstream/heads.py": "8c19b771879268e19a90c63046134869a2782112dd4c0168d401642a5c330603",
@@ -1634,10 +1946,12 @@
     "src/xuannv_embedding/downstream/protocol.py": "9b7f97d763e6b2dbd797f100614fcfe7b20ec43d88ea063da2f84cd575ab186f",
     "src/xuannv_embedding/downstream/workflow.py": "45479760c848a6a0e54a6c7b4e6aad9f38b51624eaadcdd5f86f662a0a361544",
     "src/xuannv_embedding/export/__init__.py": "cf50afbc4c8c03b6921d0f10bccb67ec4e9cbc8a659b4aa0a7c14e2cf59b8a8e",
+    "src/xuannv_embedding/export/annual.py": "cdd35df9cc16b9f922c175422a63458c09abcf98ad22c848916d0d27e263849b",
     "src/xuannv_embedding/export/cli.py": "07a553de189aa27e972928de12663626f9c60507dd0ac38da52dd38d906e74a7",
     "src/xuannv_embedding/export/embedding.py": "eedd332943a456306808f497b7b7725d203696a8dccb4317139c6a84d0fefaa3",
     "src/xuannv_embedding/export/validation.py": "f14a4d3c813fb679d7bc01d19bc949b5f29448dbd7105673894f568e485f8ddb",
     "src/xuannv_embedding/models/__init__.py": "b13d70543094c4d706690717e51347369a0fa4d230941a19e22e3abee89e90cd",
+    "src/xuannv_embedding/models/annual.py": "87ef1b2df04f748f404670ae7597998379853d6d09f0933f0f24afd735eeefa5",
     "src/xuannv_embedding/models/blocks.py": "259077d3a8a07f0e34435df4b2caac92dad99b42994c672a040f2a1e97c590d6",
     "src/xuannv_embedding/models/bottleneck.py": "979ce898fff48ffaadd9bd952ea7f430ad3cabe2ac28d12a3646a2b3c536d2e1",
     "src/xuannv_embedding/models/decoders.py": "610d3440c065e66c422a787a4046b640d288a67b050e5338d74215b0b9564c51",
@@ -1647,21 +1961,24 @@
     "src/xuannv_embedding/models/sensor_encoders.py": "180d5768382c1485a47319db65734418eacaffc140c3de09b59154609e1f54aa",
     "src/xuannv_embedding/models/time_encoding.py": "b3f40c5102722f50091633f375d5a45f09d0a635fa03a4df4d4611f0722de40d",
     "src/xuannv_embedding/training/__init__.py": "3490f464594e1d0f98f86b4c69bb83baaa9d6b4efbca8b6db088b340c3b7eade",
-    "src/xuannv_embedding/training/annual_experiments.py": "f6916f829a4cf6342a0796dd4e0cf1ca4b74de2a294d775c4aa9c4f29381ee21",
+    "src/xuannv_embedding/training/annual.py": "96a81f13c8eef97172bca96057dcdaac42723f07bdc71d70e71844651b0a88c9",
+    "src/xuannv_embedding/training/annual_data.py": "18932f5e5d041c74027a90a738163fda1619c261d49ef2dbec4d051e4060b1f0",
+    "src/xuannv_embedding/training/annual_experiments.py": "c877a0cc3266e068e897d2b8a374078625676540c3a36579243a6d053428a549",
     "src/xuannv_embedding/training/checkpoint.py": "fcd54ab17fe8501fc751fd17dffbbd57ce9e1cde2902b6b24d853aea9d49e12b",
-    "src/xuannv_embedding/training/cli.py": "be221af44642e0848e68aaad10fade6ee0597747b3a0f044e60551823b018740",
+    "src/xuannv_embedding/training/cli.py": "df3c7898a2064ac5b5e90884de42a47a339252a495e0ce4e91861ae52cada6c5",
     "src/xuannv_embedding/training/compatibility.py": "0e6814910e79f7f62718e877741f3f4e7e53bef043e6fbe4c69486bf0e63b0c9",
     "src/xuannv_embedding/training/distillation.py": "0a1ae177df36855867b5fe7fc386c1cea46425ccb85d96c8465676b282d0fa9c",
     "src/xuannv_embedding/training/losses.py": "aa28b99f23e45d79e8a031dc92231e9a2f6ad20810eaa66e2c434421d74c2b4c",
     "src/xuannv_embedding/training/masking.py": "755e8eec7dbe625a4b43bd17668388928e360cdf2ff821c1966f15dabd0a33b6",
-    "src/xuannv_embedding/training/optimizer.py": "4eeeb6283bd4aec06f903a6d9de91ab3bca344a7f40ce7d784a820ca45073ded",
+    "src/xuannv_embedding/training/optimizer.py": "e0ab60198ee00f9e84c72003cd23ab914c605287582b513efae178c83f756b7d",
     "src/xuannv_embedding/training/p0_diagnostics.py": "d533bda30c5cf5f03c70855d816e3f9876cbb8bb42ba1fedb9275d1ec15c979d",
-    "src/xuannv_embedding/training/runtime.py": "0d571ccb05852220308a80431b6dd05074d02e046844fb964dffd8685cd97541",
+    "src/xuannv_embedding/training/runtime.py": "6469a80109d6a8a12fdeef8c934388669dc21ee7985494fc99e7398bdea81b15",
+    "src/xuannv_embedding/training/target_experiments.py": "f195cc59426f97f92847ee9398b827fe410c55d9f5a867a4f6667de8aab4faed",
+    "src/xuannv_embedding/training/target_supervision.py": "fa0f50e3a5eed35b7a6127d1866d7f7e5fc94137c4568b919099868c28bc4ba7",
     "src/xuannv_embedding/utils/__init__.py": "2a3fe8b3b059aa5f2ba46912dec19c9198facf61a3c6c28c7cd6def37691d085",
     "src/xuannv_embedding/utils/geo.py": "058b947625c725da99c93045c66634ca23c25733759bbba6658286d1582ecfbf",
     "src/xuannv_embedding/utils/manifest.py": "69d84a9f982a4627ae53e58b13c05d2adce4cdfd60afe0dfdcf9daa51782d2b6",
-    "src/xuannv_embedding/utils/repository_policy.py": "c600fb5b48f511970137d7bdf5fc3367b94023d3690b57a7539cb1ed6545012f",
-    "src/xuannv_embedding/data_process/target_audit.py": "3977d81a80c4818dc3e11448258cb1c28d95bc408143aee6f4372f69642b08bf"
+    "src/xuannv_embedding/utils/repository_policy.py": "c600fb5b48f511970137d7bdf5fc3367b94023d3690b57a7539cb1ed6545012f"
   },
   "loader_samples_read": 600,
   "build": {
@@ -1671,9 +1988,10 @@
     "tex_bundle": "tlextras-2022.0r0",
     "fonts": "Fandol via TeX bundle; embedded in PDF",
     "binary_path": "/home/heyuhang/.local/bin/tectonic",
-    "last_build_log": "outputs/annual_targets/p0_20261016_verified/report_v1_11_build.log"
+    "last_build_log": "outputs/annual_targets/prepare_20261016/report_v1_12_build.log",
+    "quality_receipt": "outputs/annual_targets/prepare_20261016/pdf_verification.json"
   },
-  "report_source_sha256": "d5b14ef9960411e3859debf41a0e7cfd939fad5cf18a4afe0cd73471b9b53c0b",
+  "report_source_sha256": "5e3f471ad4b99a90be7000f033cbc7f91aa96780a5d76541fb6cc11e10ded3e7",
   "runtime_status": {
     "annual_model_runtime_completed": true,
     "two_200_epoch_runs_completed": true,
@@ -1681,24 +1999,27 @@
     "annual_abc_completed": true,
     "actual_CUDA_EMA_state_resume_completed": true,
     "independent_target_plan_documented": true,
-    "independent_target_interface_implemented": false,
-    "independent_target_training_started": false,
+    "independent_target_interface_implemented": true,
+    "independent_target_training_started": true,
     "independent_target_dataset_current_full_acceptance": false,
-    "independent_target_p0_readonly_scan_completed": true
+    "independent_target_p0_readonly_scan_completed": true,
+    "independent_target_engineering_completed": true,
+    "independent_target_formal_training_started": false,
+    "independent_target_native_cache_completed": true,
+    "new_target_experiment_identities_frozen": true
   },
   "rendered_report": {
     "path": "docs/xuannv_annual5m_report.pdf",
-    "sha256": "fffab3cd7a2c955279a0ae1a1f17abebc2fc6e7e0f7530f468a33274a4edc5fb",
-    "bytes": 8488251
+    "sha256": "a8195e03737dc73716aedd4563606d0da00c23ffbe5157db97798dcbc173684c",
+    "bytes": 8515100
   },
   "full_test_suite": {
-    "passed": 402,
+    "passed": 424,
     "skipped": 2,
-    "seconds": 245.97,
-    "git_parent": "cf629ab79e0ba76be3c21b238e179511dfe3652d",
-    "working_tree_modified": true,
-    "source_code_sha256": "3b3734c9f9187f1e8d7fd9a477160563cf05b9d09532ab2fbcbb431444ec996f",
-    "log": "outputs/annual_targets/p0_20261016_verified/full_pytest.log",
+    "seconds": 276.82,
+    "git_sha": "bb4823ab6fe809ba581bd9d1aa137a6979a25ccd",
+    "source_code_sha256": "0bc9fa55ca3b29a0f386aba0fd43fca9016cf812f3cbae528efc8c502de5f35c",
+    "log": "outputs/annual_targets/prepare_20261016/pytest_final.log",
     "skip_reasons": [
       "local legacy production checkpoint unavailable",
       "omnicloudmask unavailable"
@@ -1706,12 +2027,12 @@
   },
   "verified_timezone": "Asia/Shanghai",
   "planned_next_stage": {
-    "status": "p0_readonly_audit_completed_with_open_gates",
+    "status": "P1 engineering completed; P2/P3 held for remaining input provenance and independent evaluation requirements",
     "section": 14,
-    "derived_excerpt": "outputs/annual_targets/p0_20261016_verified/next_stage_plan_excerpt.pdf",
+    "derived_excerpt": "outputs/annual_targets/prepare_20261016/next_stage_excerpt.pdf",
     "excerpt_physical_pages_in_main_report": [
       38,
-      44
+      46
     ],
     "teacher_default": false,
     "EMA_default": false,
@@ -1764,14 +2085,44 @@
     ],
     "budget_limitation": "Linear extrapolation from prior22-25min/2048updates on8GPUs. Excludes added targetIO/compute,dataacceptance,initialization,smoke,evaluation,and original pretraining. Re-estimate after real128stepengineeringrun.",
     "product_promotion_requires_new_spatial_confirmation": true,
-    "p0_acceptance_excerpt": "outputs/annual_targets/p0_20261016_verified/p0_acceptance_excerpt.pdf"
+    "p0_acceptance_excerpt": "outputs/annual_targets/p0_20261016_verified/p0_acceptance_excerpt.pdf",
+    "final_experiment_plan": "outputs/annual_targets/experiments_20261016_final/plan.json",
+    "updated_training_loop_GPU_hour_estimate": {
+      "P2": 105.15531661113103,
+      "P3": 84.12425328890482,
+      "scope": "Linear estimate from one short D3 run; excludes initialization, prior failed run, diagnostics and evaluation. Not an upper bound for different data caches or target mixes."
+    },
+    "engineering_model_not_a_selected_upgrade": true
   },
-  "source_provenance_note": "E5 and E1-E13 retain historical byte identities. Current source adds only the target audit and two CLI registrations; model/training/annual reader source is unchanged from cf629ab. The two E5 CLI file digests describe the historical baseline; current CLI digests are in current_source_sha256. Audit runtime module snapshot matches the current AST; one long string was reformatted during execution.",
+  "source_provenance_note": "E1-E14 and all prior verified observations retain historical byte identities. Current source adds independent-target data/training paths, with defaults disabled for old configs. Engineering used a50c587 and its recorded package digest; final plan changes only midpoint save frequency. Native cache executed source snapshots are exact current bytes. Source identities are separate from report prose and from immutable historical checkpoints.",
   "historical_full_test_suite": {
     "passed": 393,
     "skipped": 2,
     "seconds": 261.81,
     "git_sha": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
     "source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50"
-  }
+  },
+  "previous_full_test_suites": [
+    {
+      "passed": 402,
+      "skipped": 2,
+      "seconds": 245.97,
+      "git_parent": "cf629ab79e0ba76be3c21b238e179511dfe3652d",
+      "working_tree_modified": true,
+      "source_code_sha256": "3b3734c9f9187f1e8d7fd9a477160563cf05b9d09532ab2fbcbb431444ec996f",
+      "log": "outputs/annual_targets/p0_20261016_verified/full_pytest.log",
+      "skip_reasons": [
+        "local legacy production checkpoint unavailable",
+        "omnicloudmask unavailable"
+      ]
+    },
+    {
+      "passed": 423,
+      "skipped": 2,
+      "seconds": 290.29,
+      "git_sha": "a50c58742a16980b6680c57d76e80d99a5fba26b",
+      "source_code_sha256": "acbd4a8e1c79ad2dc46f7aebe0ba1d5ec85d869fa39237d1f20b9e4364da34a8",
+      "log": "outputs/annual_targets/prepare_20261016/pytest_full_v2.log"
+    }
+  ]
 }
