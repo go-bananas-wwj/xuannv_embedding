@@ -587,9 +587,17 @@ def historical_buildings(spec: dict, features: np.ndarray, folds: list[dict]) ->
                 },
             }
         )
+    years = sorted(
+        {
+            int(year)
+            for row in reference.values()
+            for year in row["reference_years"].split(";")
+            if year
+        }
+    )
     return {
-        "reference_years": [2017, 2022],
+        "reference_years": years,
         "role": "historical patch diagnostic only",
-        "eligible_for_claims_about_2024_building_accuracy": False,
+        "eligible_for_current_year_building_accuracy": False,
         "folds": reports,
     }

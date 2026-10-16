@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 import torch
@@ -27,6 +29,29 @@ def test_figure_scenes_are_determined_by_reference_labels():
 
     labels = np.array([[[1, 1], [1, 40]], [[1, 40], [40, 40]]])
     assert choose_scenes(labels, np.ones_like(labels, bool), [1, 40]) == [(1, 0), (40, 1)]
+
+
+def test_historical_diagnostics_join_by_patch_id_and_keep_actual_reference_years(tmp_path):
+    from xuannv_embedding.downstream.regional_benchmark import historical_buildings
+
+    (tmp_path / "evaluation").mkdir()
+    (tmp_path / "cache/highres").mkdir(parents=True)
+    (tmp_path / "evaluation/building_legacy_patch_targets.csv").write_text(
+        "patch_id,coverage_fraction,density_per_km2,reference_years\n"
+        + "".join(f"p{i},{i / 10},{i * 10},2018;2021\n" for i in reversed(range(9)))
+    )
+    (tmp_path / "cache/highres/cache.json").write_text(
+        json.dumps({"records": [{"patch_id": f"p{i}"} for i in range(9)]})
+    )
+    folds = [{"fold": 0, "train": [0, 1, 2], "validation": [3, 4, 5], "test": [6, 7, 8]}]
+    result = historical_buildings(
+        {"data": str(tmp_path), "trial": str(tmp_path)},
+        np.arange(9 * 2 * 2 * 2).reshape(9, 2, 2, 2),
+        folds,
+    )
+    assert result["reference_years"] == [2018, 2021]
+    assert result["eligible_for_current_year_building_accuracy"] is False
+    assert result["folds"][0]["metrics"]["coverage_fraction"]["mae"] < 0.1
 
 
 def test_dense_readout_standardization_keeps_float32_inputs():
