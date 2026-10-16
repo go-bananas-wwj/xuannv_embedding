@@ -345,8 +345,27 @@ def acquire_main(argv: Sequence[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--jobs", type=Path)
     mode.add_argument("--materialize", action="store_true")
+    mode.add_argument("--visualize", action="store_true")
+    parser.add_argument("--require-complete", action="store_true")
+    parser.add_argument("--label", default="研究区")
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args(argv)
+    if args.visualize:
+        from xuannv_embedding.data_process.regional_visualization import render_data_visualizations
+
+        report = render_data_visualizations(
+            json.loads(args.spec.read_text()),
+            require_complete=args.require_complete,
+            label=args.label,
+        )
+        print(
+            json.dumps(
+                {k: report[k] for k in ("state", "overview", "path_inventory")},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
     if args.materialize:
         from xuannv_embedding.data_process.regional_preparation import finalize_region
 

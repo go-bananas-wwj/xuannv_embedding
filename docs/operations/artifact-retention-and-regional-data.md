@@ -82,3 +82,27 @@ height. A building outline's capture year is not its last-modified year. Older
 outlines remain historical diagnostics and cannot substantiate current-year
 building accuracy. Optional tasks require a verified source, license, coverage and
 adequate samples before inclusion.
+
+## Source visualizations
+
+```bash
+xuannv data acquire --spec /data/task/acquisition.json --visualize
+xuannv data acquire --spec /data/task/acquisition.json --visualize --require-complete
+```
+
+The preview explicitly lists pending sources. Complete rendering refuses missing
+inputs and Landsat composites without the corrected QA_RADSAT handling. Zero in
+QA_RADSAT means unsaturated; reflectance/QA_PIXEL determine observation validity.
+Never fill a masked zero saturation flag with a positive saturation flag. Quality
+processing is versioned in crop and composite receipts, and finalization rejects
+unverified Landsat masks before publishing a dataset.
+
+Figures show actual observations/references, not embedding predictions. Aerial RGB
+uses bands 1/2/3; the public optical inputs use bands 3/2/1 for true color. Monthly
+coverage labels come from native-grid receipts. PNG figures, categorical legends,
+source paths and rendering provenance are written under `visualizations/`.
+
+For downsampled aerial preparation, `source_overviews: true` can select a COG
+internal overview finer than or equal to the requested output resolution before
+warping. Record the original pixel size, overview factor and effective read size;
+do not apply coarse overviews to high-resolution evaluation targets.
