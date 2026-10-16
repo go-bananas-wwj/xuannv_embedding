@@ -15,6 +15,23 @@ from xuannv_embedding.training.regional_resume import validate_resume_checkpoint
 from xuannv_embedding.training.runtime import TrainingSystem
 
 
+def test_completed_resume_recreates_final_without_an_additional_optimizer_update(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("XUANNV_GIT_SHA", "c" * 40)
+    config, cache = fixture(tmp_path)
+    output = tmp_path / "completed"
+    execute(tmp_path, output, config, cache)
+    original = torch.load(output / "final.pt", weights_only=True)
+    (output / "final.pt").unlink()
+    execute(tmp_path, output, config, cache, resume=output / "latest.pt")
+    restored = torch.load(output / "final.pt", weights_only=True)
+    assert restored["epoch"] == 3
+    for name, tensor in original["model"].items():
+        assert torch.equal(tensor, restored["model"][name])
+    assert all(v["step"].item() == 4 for v in restored["optimizer"]["state"].values())
+
+
 class SmallModel(nn.Module):
     def __init__(self):
         super().__init__()
