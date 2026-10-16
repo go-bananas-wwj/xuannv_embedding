@@ -1,14 +1,26 @@
 import copy
+import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 
 from xuannv_embedding.training.paired_region import (
+    cache_data,
     prepare_static_targets,
     public_control_config,
     spatial_five_folds,
 )
+
+
+def test_cache_data_serializes_nested_configuration_paths():
+    from xuannv_embedding.config import Config
+
+    config = Config.from_yaml(Path("configs/examples/china_p10c_pilot.yaml"))
+    restored = json.loads(json.dumps(cache_data(config)))
+    assert isinstance(restored["datasets"][0]["manifest_path"], str)
+    assert restored["months"] == config.data.months
 
 
 def test_spatial_folds_cover_all_tiles_once_and_keep_blocks_together():

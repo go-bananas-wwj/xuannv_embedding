@@ -101,6 +101,11 @@ _DATASET: RegionRasterDataset | None = None
 _CACHE_ROOT: Path | None = None
 
 
+def cache_data(config: Config) -> dict:
+    """Keep nested configuration paths portable in runtime JSON documents."""
+    return json.loads(json.dumps(asdict(config.data), default=str))
+
+
 def _worker_init(config: str, output: str) -> None:
     global _DATASET, _CACHE_ROOT
     torch.set_num_threads(1)
@@ -218,7 +223,7 @@ def prepare(args: argparse.Namespace) -> dict:
                 "months": cfg.data.months,
                 "records": records,
                 "split": folds[0],
-                "data": asdict(cfg.data),
+                "data": cache_data(cfg),
                 "domains": [
                     {
                         "region": records[0]["region"],
