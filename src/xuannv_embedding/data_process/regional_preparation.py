@@ -556,6 +556,17 @@ def finalize_region(spec: dict) -> dict:
 
     root = Path(spec["root"])
     materialized = materialize_region(spec)
+    for receipt in (root / "monthly" / "s1").glob("*.json"):
+        source_metadata = json.loads(receipt.read_text())
+        source_metadata.update(
+            composite="per-pixel validity-masked monthly median",
+            quantity="gamma-naught",
+            units="linear",
+            native_grid_spacing_m=10,
+            effective_sar_resolution_m=[20, 22],
+        )
+        source_metadata.pop("native_source_resolution_m", None)
+        receipt.write_text(json.dumps(source_metadata, indent=2))
     weak = prepare_weak_semantics(spec)
     evaluation = prepare_evaluation_targets(spec)
     geographic_audit = audit_geography_and_panels(spec, materialized["coverage"])
