@@ -193,8 +193,20 @@ def follow(spec_path: Path) -> None:
                     publish(spec, key.replace(":", "_"))
             devices = [spec["reserved_device"]]
             for model in ["public", "highres"]:
-                if _json(trial / "runs" / model / "status.json").get("state") == "complete":
+                model_status = _json(trial / "runs" / model / "status.json")
+                if model_status.get("state") == "complete":
                     devices += spec[model + "_devices"]
+                else:
+                    registration = _json(trial / f"{model}-train-process.json")
+                    pid = registration.get("pid")
+                    process_path = Path(f"/proc/{pid}/stat")
+                    alive = process_path.exists()
+                    if alive:
+                        alive = process_path.read_text().split(") ", 1)[1].split()[0] != "Z"
+                    if pid is not None and not alive:
+                        dump(root / "follow-status.json", snapshot(spec, "training_failed"))
+                        publish(spec, "training_failed")
+                        raise RuntimeError(f"Registered encoder process stopped: {model}")
             busy = {v["device"] for v in active.values() if v["device"] is not None}
             available = [d for d in devices if d not in busy]
 
@@ -311,6 +323,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.phase == "export":
         from xuannv_embedding.export.regional_trial import export
 
+        if args.model not in {"public", "highres"}:
+            raise ValueError("Export requires one registered regional model")
         trial, root = Path(spec["trial"]), Path(spec["output"])
         export(
             trial / f"{args.model}-spec.json",
@@ -319,8 +333,12 @@ def main(argv: list[str] | None = None) -> int:
             device_name=args.device,
         )
     elif args.phase == "score":
+        if args.job_index is None or not 0 <= args.job_index < len(jobs()):
+            raise ValueError("A registered nonnegative downstream job index is required")
         benchmark.score_job(spec, jobs()[args.job_index], device_name=args.device)
     elif args.phase == "regression":
+        if args.model not in {"public", "highres", "aef", "raw_public", "raw_highres"}:
+            raise ValueError("Regression requires a registered representation")
         benchmark.score_regression(spec, args.model)
     else:
         summarize(spec)
