@@ -18,6 +18,8 @@ from rasterio.transform import from_origin
 from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window
 
+GDAL_CACHE_BYTES = 128 * 1024**2
+
 
 @dataclass(frozen=True)
 class Budget:
@@ -179,7 +181,7 @@ def window_mosaic(
             GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
             GDAL_HTTP_MAX_RETRY=3,
             GDAL_HTTP_TIMEOUT=90,
-            GDAL_CACHEMAX=128,
+            GDAL_CACHEMAX=GDAL_CACHE_BYTES,
         ),
         contextlib.ExitStack() as stack,
     ):
@@ -276,7 +278,7 @@ def read_optical_asset(item: dict, name: str, spec: dict, categorical=False):
         GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
         GDAL_HTTP_MAX_RETRY=3,
         GDAL_HTTP_TIMEOUT=90,
-        GDAL_CACHEMAX=128,
+        GDAL_CACHEMAX=GDAL_CACHE_BYTES,
     ):
         with (
             rasterio.open(url) as src,
@@ -562,6 +564,18 @@ def validate_jobs(jobs: list[dict], root: Path) -> None:
 
 
 def _execute_job(payload):
+    """Serialize duplicate job IDs across independent data-preparation processes."""
+    import fcntl
+
+    spec, job = payload
+    lock_path = Path(spec["root"]) / "status" / (job["id"] + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        return _execute_job_unlocked(payload)
+
+
+def _execute_job_unlocked(payload):
     import resource
     import time
 

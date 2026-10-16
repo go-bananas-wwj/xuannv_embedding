@@ -289,3 +289,72 @@ def test_raster_jobs_execute_in_isolated_processes(tmp_path):
     for i in range(2):
         with rasterio.open(tmp_path / f"output_{i}.tif") as f:
             assert np.all(f.read(1) == 7)
+
+
+def test_raster_reads_allocate_cache_in_bytes(tmp_path, monkeypatch):
+    import contextlib
+
+    import planetary_computer
+    import rasterio
+    from rasterio.env import get_gdal_config
+    from rasterio.transform import from_origin
+
+    import xuannv_embedding.data_process.regional_acquisition as acquisition
+
+    source = tmp_path / "source.tif"
+    with rasterio.open(
+        source,
+        "w",
+        driver="GTiff",
+        width=2,
+        height=2,
+        count=1,
+        dtype="uint8",
+        crs="EPSG:2193",
+        transform=from_origin(0, 20, 10, 10),
+    ) as dst:
+        dst.write(np.full((2, 2), 7, dtype="uint8"), 1)
+    original_env = rasterio.Env
+
+    @contextlib.contextmanager
+    def checked_env(**kwargs):
+        with original_env(**kwargs):
+            assert get_gdal_config("GDAL_CACHEMAX") >= 128 * 1024**2
+            yield
+
+    monkeypatch.setattr(acquisition.rasterio, "Env", checked_env)
+    monkeypatch.setattr(planetary_computer, "sign", lambda url: url)
+    result = acquisition.read_optical_asset(
+        {"assets": {"band": {"href": str(source)}}},
+        "band",
+        {"bounds": [0, 0, 20, 20], "crs": "EPSG:2193"},
+    )
+    assert np.all(result == 7)
+
+
+def test_same_job_cannot_write_concurrently(tmp_path, monkeypatch):
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    import xuannv_embedding.data_process.regional_acquisition as acquisition
+
+    active = maximum = 0
+    mutex = threading.Lock()
+
+    def execute(payload):
+        nonlocal active, maximum
+        with mutex:
+            active += 1
+            maximum = max(maximum, active)
+        time.sleep(0.03)
+        with mutex:
+            active -= 1
+        return {"state": "complete"}
+
+    monkeypatch.setattr(acquisition, "_execute_job_unlocked", execute)
+    payload = ({"root": str(tmp_path)}, {"id": "same_job"})
+    with ThreadPoolExecutor(2) as pool:
+        results = list(pool.map(acquisition._execute_job, [payload, payload]))
+    assert all(r["state"] == "complete" for r in results)
+    assert maximum == 1
