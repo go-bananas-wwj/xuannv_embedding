@@ -49,6 +49,9 @@ def test_watchdog_uses_saved_steps_and_falls_back_from_a_corrupt_latest_file(tmp
     selected, step, rejected = select_checkpoint(tmp_path, spec, config)
     assert selected.name == "step0400.pt" and step == 4
     assert any(r["file"] == "latest.pt" for r in rejected)
+    torch.save(torch.ones(1), tmp_path / "latest.pt")
+    selected, step, rejected = select_checkpoint(tmp_path, spec, config)
+    assert selected.name == "step0400.pt" and step == 4
 
 
 def test_watchdog_keeps_healthy_runs_and_never_restarts_completed_training():

@@ -28,6 +28,8 @@ def _tensors(value):
 
 def validate_resume_checkpoint(path, *, config_sha256, sources, regions, max_steps) -> int:
     state = torch.load(str(path), map_location="cpu", weights_only=True, mmap=True)
+    if not isinstance(state, dict) or not isinstance(state.get("metrics"), dict):
+        raise ValueError("Checkpoint must contain a training-state mapping and progress metadata")
     if (
         state.get("format_version") != "1"
         or state.get("config_sha256") != config_sha256
@@ -40,6 +42,22 @@ def validate_resume_checkpoint(path, *, config_sha256, sources, regions, max_ste
         raise ValueError("Invalid checkpoint training step")
     if state.get("metrics", {}).get("steps") != epoch + 1:
         raise ValueError("Checkpoint progress metadata is inconsistent")
+    resume = state["metrics"].get("regional_resume")
+    if resume is not None:
+        if (
+            not isinstance(resume, dict)
+            or resume.get("schema") != "regional-resume-v1"
+            or not isinstance(resume.get("registration"), dict)
+            or not isinstance(resume.get("rank_states"), list)
+            or not resume["rank_states"]
+        ):
+            raise ValueError("Checkpoint has incomplete per-rank recovery state")
+        for rank in resume["rank_states"]:
+            if not isinstance(rank, dict) or any(
+                not isinstance(rank.get(key), torch.Tensor) or rank[key].dtype != torch.uint8
+                for key in ["torch_rng_state", "sampler_rng_state"]
+            ):
+                raise ValueError("Checkpoint has invalid random-generator state")
     optimizer = state.get("optimizer")
     if (
         not isinstance(optimizer, dict)
