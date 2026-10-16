@@ -39,12 +39,12 @@ def _tile(source: Path, target: Path, bounds, crs, resolution, quality=False, ca
     if quality:
         data = np.concatenate([data, np.zeros((1, size, size), dtype="float32")])
     if categorical:
-        converted = np.full(data.shape, 255, dtype="float32")
-        for index, code in enumerate([10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100]):
+        converted = np.zeros(data.shape, dtype="float32")
+        for index, code in enumerate([10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100], start=1):
             converted[data == code] = index
         data = converted
         valid &= data[0] != 255
-    data[:, ~valid] = 255 if categorical else -9999
+    data[:, ~valid] = 0 if categorical else -9999
     target.parent.mkdir(parents=True, exist_ok=True)
     profile = dict(
         driver="GTiff",
@@ -54,7 +54,7 @@ def _tile(source: Path, target: Path, bounds, crs, resolution, quality=False, ca
         dtype="float32",
         crs=crs,
         transform=transform,
-        nodata=255 if categorical else -9999,
+        nodata=0 if categorical else -9999,
         tiled=True,
         compress="deflate",
         predictor=3,
@@ -570,6 +570,16 @@ def finalize_region(spec: dict) -> dict:
             for tensor in sample["source_frames"].values():
                 if not bool(tensor.isfinite().all()):
                     raise ValueError("nonfinite regional source")
+            for head_name, head in config.model.target_heads.items():
+                if head.loss_type == "categorical":
+                    target = sample["targets"][head_name]
+                    valid = sample["target_masks"][head_name] > 0
+                    if bool(((target < 0) | (target >= head.channels)).any()):
+                        raise ValueError("categorical target exceeds decoder class indices")
+                    if bool((target[valid] == 0).any()):
+                        raise ValueError(
+                            "valid land-cover classes cannot use the ignored zero slot"
+                        )
             if name == "linz_static_rgb":
                 assert sample["highres_frames"]["highres_optical"].dim() == 3
             shapes.append({k: list(v.shape) for k, v in sample["source_frames"].items()})

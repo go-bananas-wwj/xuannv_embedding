@@ -53,6 +53,9 @@ def test_preparation_keeps_single_static_observation_and_quality_masks(tmp_path:
         assert f.read(12)[0, 0] == 0
     with rasterio.open(p.with_name(p.stem + "_mask.tif")) as f:
         assert f.read(1).tolist() == [[1, 0], [1, 1]]
+    with rasterio.open(tmp_path / records[0]["sources"]["worldcover"][0]) as f:
+        assert f.nodata == 0
+        assert f.read(1).tolist() == [[1, 0], [1, 1]]
     assert result["training_started"] is False
     from xuannv_embedding.data_process.regional_preparation import audit_geography_and_panels
 

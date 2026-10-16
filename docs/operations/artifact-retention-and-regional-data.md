@@ -66,7 +66,9 @@ normalization statistics, explicit companion masks, an ordered manifest, referen
 labels and audits for public-only/static-high-resolution data configurations.
 The static aerial file is stored once per patch. A nominal 3 m input uses 427
 pixels over a 1280 m patch, retaining the exact geographic bounds. Reconstruction
-quality carriers are zero slots, with validity in companion masks.
+quality carriers are zero slots, with validity in companion masks. WorldCover
+class zero is reserved for invalid/ignored pixels; its eleven real classes use
+indices 1–11 and require twelve decoder slots, including the ignored slot.
 
 OSM supervision has separate `masks/` and `valid_masks/` rasters. Known positives
 and declared weak negatives from incompatible WorldCover classes are supervised;
