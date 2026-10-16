@@ -1,8 +1,8 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.9",
-  "verified_date": "2026-10-15",
-  "scope": "v6年度数据合同、两版200轮模型、11组同预算候选训练、第二个继续训练种子的三份复验制品、一次性选择、30份主/参考下游头结果、五份制品空间确认和真实8卡EMA恢复状态检查；弱标签与单建筑位置不构成独立5m精度认证，未确认通用语义与细节稳定双提升。",
+  "report_version": "1.10",
+  "verified_date": "2026-10-16",
+  "scope": "Existingv6data and completed4M/100M/ABC evidence remain unchanged. Adds an audited local62000-position target inventory and a prospective target-supervision/defect-repair plan. New target interfaces, acceptance and training have not started.",
   "evidence": {
     "E1": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
@@ -791,6 +791,204 @@
       },
       "selection_git": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
       "selection_source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50"
+    },
+    "E13": {
+      "scope": "Read-only existing target asset inventory, complete patch_id join to currentv6 manifests,3sample rows per static array, and the prospective section14 execution plan. No new target interface or training implemented.",
+      "audited_at": "2026-10-16T13:59:14.318068+08:00",
+      "target_root": "/data/wwj/xuannv_china_ai_ready_dataset/targets",
+      "target_version": "static-targets-20260922",
+      "files": [
+        {
+          "path": "outputs/target_inventory/20261016/summary.json",
+          "sha256": "6d02b78b960346c527f119e972785278d464adc0b539094f58557b38d1b17bd5"
+        },
+        {
+          "path": "outputs/target_inventory/20261016/update_report_evidence.py",
+          "sha256": "a1bc73487843d02275c760867dc66ed2758639302dcb4f9bae17887f78735dc4"
+        },
+        {
+          "path": "outputs/target_inventory/20261016/report_v1_10_build.log",
+          "sha256": "61bbf164ea896b537cc61cba2807bdbb904271e1003f4e68b42e13319f248f94"
+        },
+        {
+          "path": "outputs/target_inventory/20261016/next_stage_plan_excerpt.pdf",
+          "sha256": "0309a999c70f48c8adcb3803a3f153335f12d398052f15d5b40611dd6a4a00cb"
+        },
+        {
+          "path": "outputs/target_inventory/20261016/plan_excerpt_derivation.json",
+          "sha256": "8e09ea7f9d97776f9def08846814b569b2efef7f4c6503568c882b61db2bc196"
+        },
+        {
+          "path": "docs/report-maintenance.md",
+          "sha256": "624fe14a665f5b97652d7de2fcab894fb7db961b60cce19154e5ae7cb0f593be"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/README.md",
+          "sha256": "80700bfb9f5f232f1d51916bfd199c3bfaca4f2aed2769e8ed7486aeb811e25b"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/manifest.json",
+          "sha256": "17be2d12b36e0fc05f741c571e8d9a2a0e4a51ccb8fe714e6c92c22eb58e5a2b"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/index.parquet",
+          "sha256": "d07b101abf4ca175f1b50da1cc83e9eafb8f27e7f114978282a087521e2bbea1"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/files.sha256",
+          "sha256": "a1004c8021cd588ebfbfc224675f91fe3a1480f2d9debfe233d94fa37aca03f8"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/validation.json",
+          "sha256": "4f98bd6ddaec69af46834fd0dce56286b0f52f2e07f712e07431c328f50f3e3c"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/provenance/target_reader_verification.json",
+          "sha256": "2b6b862aea63739a8a20b8101d0bec43dc800a2b34cd31553e2bfa596e691e9b"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/provenance/target_geometry_worldcover_v2_full.json",
+          "sha256": "0cfa77d7be8f4781ae93f8dbb3636ada0ed51d2ed75b73c4f0a4aaee893d5d76"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/provenance/target_geometry_clcd_full.json",
+          "sha256": "0c50e412f7005f0ac5dcfdbcd47079b695bdb492c3ea731e80366413e10b6193"
+        },
+        {
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/provenance/target_geometry_nightlights_full.json",
+          "sha256": "9f29692504c218fab066b1f162cd1c185859e58deb5fdcd8ff98ae2c34f21954"
+        }
+      ],
+      "static_archives": [
+        {
+          "name": "dem_elevation",
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/static/dem_elevation.zarr.zip",
+          "bytes": 2224326103,
+          "shape": [
+            62000,
+            128,
+            128
+          ],
+          "dtype": "float32",
+          "declared_sha256": "93f7ee520d4a893a5d352922493e418d8c5c7432bdf480d53e8e12416a315f11",
+          "full_sha_verified_this_inventory": false
+        },
+        {
+          "name": "dem_slope",
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/static/dem_slope.zarr.zip",
+          "bytes": 3116974967,
+          "shape": [
+            62000,
+            128,
+            128
+          ],
+          "dtype": "float32",
+          "declared_sha256": "83c949b5b33921edc72c76fd21633ff90c7f528a84977ab06d592ee9526bcba2",
+          "full_sha_verified_this_inventory": false
+        },
+        {
+          "name": "worldcover_2020",
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/static/worldcover_2020.zarr.zip",
+          "bytes": 121359404,
+          "shape": [
+            62000,
+            128,
+            128
+          ],
+          "dtype": "uint8",
+          "declared_sha256": "836026b4491d35a1212de1061cde59172f8904466cab3ade3de2cfae2e0d9ba7",
+          "full_sha_verified_this_inventory": false
+        },
+        {
+          "name": "worldcover_2021",
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/static/worldcover_2021.zarr.zip",
+          "bytes": 124383717,
+          "shape": [
+            62000,
+            128,
+            128
+          ],
+          "dtype": "uint8",
+          "declared_sha256": "07084d5f2f5246edd95f3ffcb5f4c5a98fd4554fd8a5fc5c0bd0ddf2159bf0a5",
+          "full_sha_verified_this_inventory": false
+        },
+        {
+          "name": "clcd_2020",
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/static/clcd_2020.zarr.zip",
+          "bytes": 54230072,
+          "shape": [
+            62000,
+            128,
+            128
+          ],
+          "dtype": "uint8",
+          "declared_sha256": "39df8676d3fb06867a7509da9a2ea144d361e3c2094fb073e09089151685debe",
+          "full_sha_verified_this_inventory": false
+        },
+        {
+          "name": "clcd_2021",
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/static/clcd_2021.zarr.zip",
+          "bytes": 54469521,
+          "shape": [
+            62000,
+            128,
+            128
+          ],
+          "dtype": "uint8",
+          "declared_sha256": "9b38705a93c5dd249f0d2d34532dc01a12da894cb39106bef86fdcb4e9bf13c1",
+          "full_sha_verified_this_inventory": false
+        },
+        {
+          "name": "nightlights_2020",
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/static/nightlights_2020.zarr.zip",
+          "bytes": 2143450658,
+          "shape": [
+            62000,
+            128,
+            128
+          ],
+          "dtype": "float32",
+          "declared_sha256": "a6839f17c4d54c4d4385f25f69a890d4ff32426a1f131defcf617f498c676b53",
+          "full_sha_verified_this_inventory": false
+        },
+        {
+          "name": "nightlights_2021",
+          "path": "/data/wwj/xuannv_china_ai_ready_dataset/targets/static/nightlights_2021.zarr.zip",
+          "bytes": 2144563292,
+          "shape": [
+            62000,
+            128,
+            128
+          ],
+          "dtype": "float32",
+          "declared_sha256": "05988016e29c3687510dc081c87e9614f83a44b2a872a46b42352926d70248d8",
+          "full_sha_verified_this_inventory": false
+        }
+      ],
+      "validation_limits": {
+        "full_current_geometric_acceptance": false,
+        "full_valid_coverage_recomputed": false,
+        "OSM_sample_read_repeated": false,
+        "historical_validation_is_current_full_acceptance": false,
+        "target_only_means_independent_ground_truth": false
+      },
+      "external_sources": [
+        {
+          "title": "AlphaEarth Foundations v2, S16.2",
+          "url": "https://arxiv.org/html/2507.22291v2",
+          "verified_date": "2026-10-16"
+        },
+        {
+          "title": "Copernicus DEM official product description",
+          "url": "https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM",
+          "verified_date": "2026-10-16"
+        },
+        {
+          "title": "ESA WorldCover data access",
+          "url": "https://esa-worldcover.org/en/data-access",
+          "verified_date": "2026-10-16"
+        }
+      ]
     }
   },
   "verified_metrics": {
@@ -969,6 +1167,24 @@
         "subprocess_wall_seconds": 74.01317637227476,
         "limitation": "Current checkpoint schema does not record RNG state. This test does not assert identical stochastic continuation; epoch marker after steps limit is not a complete epoch."
       }
+    },
+    "target_inventory_20261016": {
+      "registered_positions": 62000,
+      "v6_unique_positions": {
+        "all": 61732,
+        "all_matched": 61732,
+        "train": 50562,
+        "train_matched": 50562
+      },
+      "static_arrays_sampled": 8,
+      "sample_rows_per_array": [
+        0,
+        31000,
+        61999
+      ],
+      "full_coverage_or_geometry_certification": false,
+      "old_target_split_matches_current_v6": false,
+      "current_annual_models_used_these_static_training_targets": false
     }
   },
   "current_source_sha256": {
@@ -977,7 +1193,7 @@
     "src/xuannv_embedding/training/annual_data.py": "c863804e126b9b49e064ee4153befc73ee90a063a4a435fda717be28b4f19932",
     "src/xuannv_embedding/export/annual.py": "cdd35df9cc16b9f922c175422a63458c09abcf98ad22c848916d0d27e263849b",
     "configs/production/annual5m_v1.yaml": "04e1fe066625a31e6e86497b0c58850835ae0db5ed2cafbac767a060d1a3e77f",
-    "docs/xuannv_annual5m_report.tex": "9472a5f6652c48dc6b587cc9b4afbfaa76e7b3deb9d09bac2a40ea51ec1967e6",
+    "docs/xuannv_annual5m_report.tex": "da8af66e14f2789ac11b3e7f094540940a3d5d37ef80057eb0191427a90450d3",
     "src/xuannv_embedding/__init__.py": "6d0af358c736e931c7fc052318b50279e2a1b4751c99e3353ce6ddd276b4eb61",
     "src/xuannv_embedding/config.py": "833b601ce42b984ecb1425da07f70afb44cedbdaf71228b545e42483448cdd98",
     "src/xuannv_embedding/cli/__init__.py": "c67dbc764a7c61514a855bf4e86b9a1895dcdb113f44c6c556afcb1b7ad6bc2e",
@@ -1057,20 +1273,25 @@
     "source": "https://github.com/tectonic-typesetting/tectonic/releases/tag/tectonic%400.15.0",
     "tex_bundle": "tlextras-2022.0r0",
     "fonts": "Fandol via TeX bundle; embedded in PDF",
-    "binary_path": "/home/heyuhang/.local/bin/tectonic"
+    "binary_path": "/home/heyuhang/.local/bin/tectonic",
+    "last_build_log": "outputs/target_inventory/20261016/report_v1_10_build.log"
   },
-  "report_source_sha256": "9472a5f6652c48dc6b587cc9b4afbfaa76e7b3deb9d09bac2a40ea51ec1967e6",
+  "report_source_sha256": "da8af66e14f2789ac11b3e7f094540940a3d5d37ef80057eb0191427a90450d3",
   "runtime_status": {
     "annual_model_runtime_completed": true,
     "two_200_epoch_runs_completed": true,
     "note": "Runtime status is evidenced by training artifacts. The immutable data-release summary still has annual_model_ready=false.",
     "annual_abc_completed": true,
-    "actual_CUDA_EMA_state_resume_completed": true
+    "actual_CUDA_EMA_state_resume_completed": true,
+    "independent_target_plan_documented": true,
+    "independent_target_interface_implemented": false,
+    "independent_target_training_started": false,
+    "independent_target_dataset_current_full_acceptance": false
   },
   "rendered_report": {
     "path": "docs/xuannv_annual5m_report.pdf",
-    "sha256": "ec151261b8f89542151ef2be143d5acc330da385caa3cce44d6d3f3130555df4",
-    "bytes": 8423427
+    "sha256": "3007f7cddc1566b9a821a9a1a7690ba5860086e7156d3ec7dbe38a8b9ffd8452",
+    "bytes": 8476839
   },
   "full_test_suite": {
     "passed": 393,
@@ -1078,5 +1299,66 @@
     "seconds": 261.81,
     "git_sha": "58f437485f949ec9cca49c17ea0ec7bc6cb7812d",
     "source_code_sha256": "4e62522fbf38832253fcec7024b173324b5347d385304663f198047a81dd9d50"
+  },
+  "verified_timezone": "Asia/Shanghai",
+  "planned_next_stage": {
+    "status": "documented_not_started",
+    "section": 14,
+    "derived_excerpt": "outputs/target_inventory/20261016/next_stage_plan_excerpt.pdf",
+    "excerpt_physical_pages_in_main_report": [
+      38,
+      43
+    ],
+    "teacher_default": false,
+    "EMA_default": false,
+    "primary_artifact_seed": 42,
+    "robustness_seed": 17,
+    "first_target_sources": [
+      "dem_elevation",
+      "worldcover"
+    ],
+    "deferred_targets": [
+      "dem_slope",
+      "clcd",
+      "nightlights",
+      "osm"
+    ],
+    "clcd_initial_role": "Cross-product diagnostic only, not independent manual truth.",
+    "arms": {
+      "R0": "ExactPAN coverage; legacy context; no auxiliary targets.",
+      "R1": "R0 plus corrected context pooling; no auxiliary targets.",
+      "D1": "R1 plus DEM elevation.",
+      "D2": "R1 plus WorldCover.",
+      "D3": "R1 plus DEM elevation and WorldCover."
+    },
+    "screen": {
+      "annual_records": 16384,
+      "updates_per_run": 4096,
+      "global_batch": 32,
+      "exposures_per_run": 131072,
+      "seeds": [
+        17,
+        42
+      ],
+      "training_runs": 10
+    },
+    "expanded_validation": {
+      "annual_records": 32768,
+      "updates_per_run": 8192,
+      "global_batch": 32,
+      "exposures_per_run": 262144,
+      "seeds": [
+        17,
+        42
+      ],
+      "training_runs": 4,
+      "arms": "R1 and one selected recipe, fresh initialization from the original checkpoint."
+    },
+    "rough_training_loop_GPU_hour_range": [
+      106,
+      120
+    ],
+    "budget_limitation": "Linear extrapolation from prior22-25min/2048updates on8GPUs. Excludes added targetIO/compute,dataacceptance,initialization,smoke,evaluation,and original pretraining. Re-estimate after real128stepengineeringrun.",
+    "product_promotion_requires_new_spatial_confirmation": true
   }
 }
