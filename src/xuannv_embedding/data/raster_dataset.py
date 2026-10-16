@@ -268,6 +268,7 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
             patch_ids.append(record.source_patch_id)
         for task, root in self.dataset_config.supervised_label_roots.items():
             mask_root = root / "masks"
+            validity_root = root / "valid_masks"
             exact = [mask_root / f"{patch_id}.tif" for patch_id in patch_ids]
             path = next((item for item in exact if item.is_file()), None)
             if path is None:
@@ -277,12 +278,26 @@ class RegionRasterDataset(Dataset[dict[str, Any]]):
                 path = max(dated, default=None)
             if path is None:
                 labels[task] = torch.zeros(*self.output_size)
-                masks[task] = torch.tensor(0.0)
+                masks[task] = (
+                    torch.zeros(*self.output_size) if validity_root.is_dir() else torch.tensor(0.0)
+                )
                 continue
             with rasterio.open(path) as raster:
                 value = torch.from_numpy(raster.read(1, out_dtype="float32"))[None]
             labels[task] = (_resize(value, self.output_size, nearest=True)[0] > 0).float()
-            masks[task] = torch.tensor(1.0)
+            if validity_root.is_dir():
+                validity_path = validity_root / path.name
+                if not validity_path.is_file():
+                    raise ValueError("sparse semantic label is missing its validity raster")
+                with rasterio.open(validity_path) as raster:
+                    validity = torch.from_numpy(raster.read(1, out_dtype="float32"))[None]
+                if not bool(torch.isfinite(validity).all()) or bool(
+                    ((validity < 0) | (validity > 1)).any()
+                ):
+                    raise ValueError("semantic validity must be finite and between zero and one")
+                masks[task] = _resize(validity, self.output_size, nearest=True)[0]
+            else:
+                masks[task] = torch.tensor(1.0)
         return labels, masks
 
     def __len__(self) -> int:

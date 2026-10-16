@@ -226,3 +226,18 @@ def test_explicit_highres_representative_month_preserves_acquisition_paths(tmp_p
     assert sample["highres_frames"]["highres_optical"][:, 0, 0, 0].tolist() == [2.0, 8.0]
     assert sample["targets"]["highres_optical_recon"][:, 0, 0, 0].tolist() == [2.0, 8.0]
     assert all((tmp_path / p).exists() for p in paths)
+
+
+def test_sparse_semantic_labels_load_explicit_validity_without_changing_legacy_masks(tmp_path):
+    from types import SimpleNamespace
+
+    dataset = object.__new__(RegionRasterDataset)
+    root = tmp_path / "weak"
+    dataset.dataset_config = SimpleNamespace(supervised_label_roots={"task": root})
+    dataset.output_size = (2, 2)
+    _write(root / "masks/p.tif", np.array([[[1, 0], [0, 0]]], dtype="float32"))
+    _write(root / "valid_masks/p.tif", np.array([[[1, 0], [1, 0]]], dtype="float32"))
+    record = SimpleNamespace(patch_id="p", source_patch_id=None)
+    labels, masks = dataset._supervised_labels(record)
+    assert labels["task"].tolist() == [[1, 0], [0, 0]]
+    assert masks["task"].tolist() == [[1, 0], [1, 0]]

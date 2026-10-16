@@ -237,6 +237,8 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
         return validate_main(argv)
     if command == "storage":
         return storage_main(argv)
+    if command == "acquire":
+        return acquire_main(argv)
     raise ValueError(f"未知 data command: {command}")
 
 
@@ -265,6 +267,10 @@ def storage_main(argv: Sequence[str] | None = None) -> int:
     cleanup = actions.add_parser("cleanup", help="生成待审核清理清单，不删除数据")
     cleanup.add_argument("--root", type=Path, required=True)
     cleanup.add_argument("--output", type=Path, required=True)
+    prune = actions.add_parser("prune", help="按文件身份核验并执行制品清理清单")
+    prune.add_argument("--manifest", type=Path, required=True)
+    prune.add_argument("--journal", type=Path, required=True)
+    prune.add_argument("--validate-only", action="store_true")
     backup = actions.add_parser("backup", help="按容量预算调用 restic 并写入回执")
     backup.add_argument("--source", type=Path, action="append", required=True)
     backup.add_argument("--repository", type=Path, required=True)
@@ -286,7 +292,15 @@ def storage_main(argv: Sequence[str] | None = None) -> int:
         write_inventory,
     )
 
-    if args.action == "init":
+    if args.action == "prune":
+        from xuannv_embedding.data_process.retention import apply_manifest, validate_manifest
+
+        if args.validate_only:
+            document = validate_manifest(args.manifest, args.journal)
+            result = {"state": "validated", "files": len(document["files"])}
+        else:
+            result = apply_manifest(args.manifest, args.journal)
+    elif args.action == "init":
         result = initialize_layout(args.root)
     elif args.action == "inventory":
         result = write_inventory(
@@ -322,3 +336,29 @@ def storage_main(argv: Sequence[str] | None = None) -> int:
         result = cleanup_candidates(args.root, args.output)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
+
+
+def acquire_main(argv: Sequence[str] | None = None) -> int:
+    """Acquire bounded regional data from frozen source lists, without training."""
+    parser = argparse.ArgumentParser(prog="xuannv data acquire")
+    parser.add_argument("--spec", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--jobs", type=Path)
+    mode.add_argument("--materialize", action="store_true")
+    parser.add_argument("--workers", type=int, default=4)
+    args = parser.parse_args(argv)
+    if args.materialize:
+        from xuannv_embedding.data_process.regional_preparation import finalize_region
+
+        report = finalize_region(json.loads(args.spec.read_text()))
+        print(
+            json.dumps({k: report[k] for k in ("state", "patches", "months", "training_started")})
+        )
+        return 0
+    from xuannv_embedding.data_process.regional_acquisition import run_acquisition
+
+    report = run_acquisition(
+        json.loads(args.spec.read_text()), json.loads(args.jobs.read_text()), args.workers
+    )
+    print(json.dumps({k: v for k, v in report.items() if k != "jobs"}, indent=2))
+    return 0 if report["state"] == "complete" else 1
