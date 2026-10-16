@@ -130,7 +130,7 @@ def prepare_experiments(
                     epochs=2 if scope == "engineering" else 8,
                     lr=3e-5,
                     warmup_epochs=1,
-                    save_every=8,
+                    save_every=8 if scope == "engineering" else 4,
                     compile=False,
                     gradient_checkpointing=True,
                     latent_prediction_weight=0.0,
