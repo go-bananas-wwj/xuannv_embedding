@@ -167,6 +167,12 @@ class Supervisor:
         if self.state.get("schema") != "regional-watchdog-v1":
             raise ValueError("Unknown watchdog state schema")
         self.state.update(pid=os.getpid(), state="monitoring")
+        self.state["policy"] = {
+            "poll_seconds": args.poll_seconds,
+            "stale_seconds": args.stale_seconds,
+            "startup_grace_seconds": args.startup_grace,
+            "max_restarts_per_model": args.max_restarts,
+        }
         self.children = []
 
     def save(self):
@@ -245,6 +251,7 @@ class Supervisor:
                 record.update(pid=min(matched), adopted_worker=True)
                 dump(record_path, record)
             return
+        reason = "no_progress_timeout" if matched else "process_exit"
         delay = min(600, 60 * 2 ** max(0, model["restarts"] - 1)) if model["restarts"] else 0
         if now - model.get("last_restart_utc", 0) < delay:
             model["state"] = "backoff"
@@ -336,6 +343,7 @@ class Supervisor:
             progress_at=time.time(),
             checkpoint_step=saved_step,
             recovery_pid=child.pid,
+            last_restart_reason=reason,
         )
         self.event(
             name,
@@ -346,6 +354,7 @@ class Supervisor:
             attempt=attempt,
             git_sha=revision,
             rejected_checkpoints=rejected,
+            reason=reason,
         )
 
     def check_evaluation(self):
@@ -444,6 +453,12 @@ def main(argv=None):
         return 0
     with (supervisor.root / "watchdog.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        supervisor.event(
+            "watchdog",
+            "audit_started" if args.once else "started",
+            pid=os.getpid(),
+            policy=supervisor.state["policy"],
+        )
         while not stop.exists():
             supervisor.tick()
             if args.once:
