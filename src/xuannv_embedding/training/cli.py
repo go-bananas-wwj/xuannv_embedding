@@ -743,6 +743,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
     if distributed:
         dist.barrier()
+        # Variable native-grid batches can leave almost all VRAM in the allocator cache.
+        # NCCL finalization needs driver memory even after the last update/checkpoint.
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
         dist.destroy_process_group()
     return 0
 

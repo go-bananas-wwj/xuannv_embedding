@@ -132,6 +132,7 @@ def prepare_experiments(
                     warmup_epochs=1,
                     save_every=8,
                     compile=False,
+                    gradient_checkpointing=True,
                     latent_prediction_weight=0.0,
                     view_consistency_weight=0.0,
                 )
@@ -175,6 +176,8 @@ def prepare_experiments(
         "expanded_recipe": "Not selected; only paired expanded data identities "
         "have been materialized.",
         "engineering_bound": "128updates plus at most2resume-checkupdates; no accuracy selection",
+        "memory_policy": "All new arms enable gradient checkpointing; no parameter-schema "
+        "change. Supersedes the initial no-checkpointing pilot after NCCL finalization OOM.",
     }
     write_json(output / "plan.json", result)
     return result
