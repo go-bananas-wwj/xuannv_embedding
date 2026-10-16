@@ -19,6 +19,7 @@ from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window
 
 GDAL_CACHE_BYTES = 128 * 1024**2
+LANDSAT_QUALITY_VERSION = "radsat-zero-valid-v1"
 
 
 @dataclass(frozen=True)
@@ -148,6 +149,8 @@ def window_mosaic(
     dtype: str,
     budget: Budget,
     resampling=Resampling.average,
+    *,
+    source_overviews: bool = False,
 ) -> dict:
     """Read COG windows only; retain holes via nodata and an explicit validity mask."""
     receipt = destination.with_suffix(".json")
@@ -186,8 +189,27 @@ def window_mosaic(
         contextlib.ExitStack() as stack,
     ):
         readers = []
+        overview_records = []
         for url in assets:
             src = stack.enter_context(rasterio.open(url))
+            if source_overviews:
+                native_resolution = max(abs(v) for v in src.res)
+                eligible = [
+                    (i, factor)
+                    for i, factor in enumerate(src.overviews(1))
+                    if native_resolution * factor <= resolution
+                ]
+                if eligible:
+                    level, factor = eligible[-1]
+                    src = stack.enter_context(rasterio.open(url, overview_level=level))
+                    overview_records.append(
+                        {
+                            "source": url,
+                            "factor": factor,
+                            "native_resolution_m": native_resolution,
+                            "read_resolution_m": max(abs(v) for v in src.res),
+                        }
+                    )
             readers.append(
                 stack.enter_context(
                     WarpedVRT(
@@ -229,6 +251,7 @@ def window_mosaic(
         "shape": [count, height, width],
         "resolution_m": resolution,
         "valid_fraction": valid_pixels / (width * height),
+        "source_overviews": overview_records,
         "sources": assets,
         "crs": spec["crs"],
         "bounds": spec["bounds"],
@@ -303,7 +326,9 @@ def acquire_optical_item(
     import planetary_computer
 
     if destination.exists() and destination.with_suffix(".json").exists():
-        return destination
+        cached = json.loads(destination.with_suffix(".json").read_text())
+        if source != "landsat" or cached.get("quality_mask_version") == LANDSAT_QUALITY_VERSION:
+            return destination
     bands = (
         ["B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11", "B12"]
         if source == "s2"
@@ -311,7 +336,9 @@ def acquire_optical_item(
     )
     budget.check(300 * 1024**2)
     q = read_optical_asset(item, "SCL" if source == "s2" else "qa_pixel", spec, True)
-    sat = None if source == "s2" else read_optical_asset(item, "qa_radsat", spec, True).filled(1)
+    # Zero means no saturated bands. QA_RADSAT's zero-valued nodata mask must not
+    # remove clear pixels; QA_PIXEL and reflectance masks determine availability.
+    sat = None if source == "s2" else read_optical_asset(item, "qa_radsat", spec, True).filled(0)
     valid = optical_valid(source, q.filled(0), sat) & ~np.ma.getmaskarray(q)
     offsets = {}
     quantification = None
@@ -396,6 +423,9 @@ def acquire_optical_item(
                 "s2_boa_quantification": quantification,
                 "s2_boa_offsets": offsets,
                 "valid_fraction": float(valid.mean()),
+                "quality_mask_version": (
+                    LANDSAT_QUALITY_VERSION if source == "landsat" else "scl-v1"
+                ),
                 "state": "complete",
             },
             indent=2,
@@ -404,7 +434,14 @@ def acquire_optical_item(
     return destination
 
 
-def monthly_optical(paths: list[Path], destination: Path, spec: dict, budget: Budget) -> dict:
+def monthly_optical(
+    paths: list[Path],
+    destination: Path,
+    spec: dict,
+    budget: Budget,
+    *,
+    quality_version: str | None = None,
+) -> dict:
     """Cloud-masked per-pixel median; no borrowing observations from other months."""
     import contextlib
     import warnings
@@ -413,7 +450,9 @@ def monthly_optical(paths: list[Path], destination: Path, spec: dict, budget: Bu
         raise ValueError("month has no observations")
     receipt = destination.with_suffix(".json")
     if destination.exists() and receipt.exists():
-        return json.loads(receipt.read_text())
+        cached = json.loads(receipt.read_text())
+        if quality_version is None or cached.get("quality_mask_version") == quality_version:
+            return cached
     budget.check(400 * 1024**2)
     destination.parent.mkdir(parents=True, exist_ok=True)
     tmp = destination.with_suffix(".partial.tif")
@@ -445,6 +484,8 @@ def monthly_optical(paths: list[Path], destination: Path, spec: dict, budget: Bu
         "resolution_m": 10,
         "native_source_resolution_m": {"s2": [10, 20, 60], "landsat": [30]},
     }
+    if quality_version is not None:
+        result["quality_mask_version"] = quality_version
     receipt.write_text(json.dumps(result, indent=2))
     return result
 
@@ -538,8 +579,8 @@ def validate_jobs(jobs: list[dict], root: Path) -> None:
         }:
             raise ValueError("unsupported acquisition job kind")
         options = {
-            "linz": {"url", "resolution", "count", "dtype", "categorical"},
-            "raster": {"assets", "resolution", "count", "dtype", "categorical"},
+            "linz": {"url", "resolution", "count", "dtype", "categorical", "source_overviews"},
+            "raster": {"assets", "resolution", "count", "dtype", "categorical", "source_overviews"},
             "vector": {"url"},
             "osm": {"url"},
             "monthly_optical": {"source", "catalog"},
@@ -622,6 +663,7 @@ def _execute_job_unlocked(payload):
                 job["dtype"],
                 budget,
                 Resampling.nearest if job.get("categorical") else Resampling.average,
+                source_overviews=job.get("source_overviews", False),
             )
         else:
             items = json.loads((root / job["catalog"]).read_text())["selected"]
@@ -632,7 +674,13 @@ def _execute_job_unlocked(payload):
                     paths.append(acquire_radar_item(item, temporary, spec, budget))
                 else:
                     paths.append(acquire_optical_item(item, job["source"], temporary, spec, budget))
-            result = monthly_optical(paths, target, spec, budget)
+            result = monthly_optical(
+                paths,
+                target,
+                spec,
+                budget,
+                quality_version=LANDSAT_QUALITY_VERSION if job.get("source") == "landsat" else None,
+            )
             for temporary in paths:
                 temporary.unlink()
                 Path(str(temporary) + ".msk").unlink(missing_ok=True)

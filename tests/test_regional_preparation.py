@@ -137,3 +137,14 @@ def test_evaluation_targets_keep_height_and_old_building_vintages_separate(tmp_p
         assert np.all(f.read(2) == 0)
     assert report["buildings"]["eligible_for_claims_about_2024_building_accuracy"] is False
     assert report["training_inputs"] is False
+
+
+def test_finalization_rejects_old_landsat_quality_before_publishing_data(tmp_path):
+    import pytest
+
+    from xuannv_embedding.data_process.regional_preparation import finalize_region
+
+    with pytest.raises(ValueError, match="quality-mask version"):
+        finalize_region({"root": str(tmp_path), "months": ["2024-04"]})
+    assert not (tmp_path / "processed/manifest.json").exists()
+    assert not (tmp_path / "readiness.json").exists()

@@ -358,3 +358,78 @@ def test_same_job_cannot_write_concurrently(tmp_path, monkeypatch):
         results = list(pool.map(acquisition._execute_job, [payload, payload]))
     assert all(r["state"] == "complete" for r in results)
     assert maximum == 1
+
+
+def test_landsat_zero_radiometric_saturation_flags_do_not_remove_clear_pixels(
+    tmp_path, monkeypatch
+):
+    import rasterio
+
+    import xuannv_embedding.data_process.regional_acquisition as acquisition
+
+    def read(item, name, spec, categorical=False):
+        if name == "qa_pixel":
+            return np.ma.array(np.full((2, 2), 64, dtype="uint16"), mask=False)
+        if name == "qa_radsat":
+            return np.ma.array(np.zeros((2, 2), dtype="uint16"), mask=True)
+        return np.ma.array(np.full((2, 2), 1000, dtype="float32"), mask=False)
+
+    monkeypatch.setattr(acquisition, "read_optical_asset", read)
+    item = {
+        "id": "scene",
+        "properties": {"datetime": "2024-04-01T00:00:00Z"},
+        "assets": {
+            b: {"raster:bands": [{"scale": 0.0001, "offset": 0}]}
+            for b in ["blue", "green", "red", "nir08", "swir16", "swir22"]
+        },
+    }
+    output = tmp_path / "scene.tif"
+    acquisition.acquire_optical_item(
+        item,
+        "landsat",
+        output,
+        {"bounds": [0, 0, 20, 20], "crs": "EPSG:2193"},
+        Budget(tmp_path, 1024**3, 0),
+    )
+    with rasterio.open(output) as src:
+        assert np.all(src.read_masks(1) == 255)
+        assert np.allclose(src.read(1), 0.1)
+
+
+def test_mosaic_can_read_a_finer_source_overview_before_downsampling(tmp_path):
+    import rasterio
+    from rasterio.enums import ColorInterp, Resampling
+    from rasterio.transform import from_origin
+
+    from xuannv_embedding.data_process.regional_acquisition import window_mosaic
+
+    source = tmp_path / "aerial.tif"
+    values = np.stack([np.full((16, 16), v, dtype="uint8") for v in [80, 20, 10, 255]])
+    with rasterio.open(
+        source,
+        "w",
+        driver="GTiff",
+        width=16,
+        height=16,
+        count=4,
+        dtype="uint8",
+        crs="EPSG:2193",
+        transform=from_origin(0, 4, 0.25, 0.25),
+    ) as dst:
+        dst.write(values)
+        dst.colorinterp = (ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha)
+        dst.build_overviews([2, 4, 8], Resampling.average)
+    report = window_mosaic(
+        [str(source)],
+        tmp_path / "out.tif",
+        {"bounds": [0, 0, 4, 4], "crs": "EPSG:2193"},
+        3,
+        3,
+        "uint8",
+        Budget(tmp_path, 1024**3, 0),
+        source_overviews=True,
+    )
+    assert report["source_overviews"][0]["factor"] == 8
+    assert report["source_overviews"][0]["read_resolution_m"] == 2
+    with rasterio.open(tmp_path / "out.tif") as src:
+        assert src.read(1)[0, 0] > src.read(3)[0, 0]

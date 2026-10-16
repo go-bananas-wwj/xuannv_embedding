@@ -555,6 +555,16 @@ def finalize_region(spec: dict) -> dict:
     from xuannv_embedding.data.raster_dataset import RegionRasterDataset
 
     root = Path(spec["root"])
+    from xuannv_embedding.data_process.regional_acquisition import LANDSAT_QUALITY_VERSION
+
+    for month in spec["months"]:
+        receipt = root / "monthly" / "landsat" / (month + ".json")
+        if (
+            not receipt.exists()
+            or json.loads(receipt.read_text()).get("quality_mask_version")
+            != LANDSAT_QUALITY_VERSION
+        ):
+            raise ValueError("Landsat quality-mask version is not verified")
     materialized = materialize_region(spec)
     for receipt in (root / "monthly" / "s1").glob("*.json"):
         source_metadata = json.loads(receipt.read_text())
@@ -658,9 +668,13 @@ def audit_geography_and_panels(spec: dict, coverage: list[dict]) -> dict:
                 records[index]["sources"]["s2"][month_index],
             ]
             fig, axes = plt.subplots(1, 2, figsize=(8, 4))
-            for ax, relative, title in zip(axes, paths, ["static aerial RGB", "S2 " + month]):
+            from xuannv_embedding.data_process.regional_visualization import rgb_band_order
+
+            for source, ax, relative, title in zip(
+                ["aerial", "s2"], axes, paths, ["static aerial RGB", "S2 " + month]
+            ):
                 with rasterio.open(root / relative) as src:
-                    image = src.read([3, 2, 1]).transpose(1, 2, 0)
+                    image = src.read(rgb_band_order(source)).transpose(1, 2, 0)
                     mask = src.read_masks(1) > 0
                 good = image[mask]
                 if good.size:
