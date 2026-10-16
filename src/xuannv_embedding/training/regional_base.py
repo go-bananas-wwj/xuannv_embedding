@@ -25,8 +25,10 @@ from xuannv_embedding.models.highres_transformer import HighResTransformerModel
 from xuannv_embedding.models.model import AEFOutput
 from xuannv_embedding.training.checkpoint import save_training_checkpoint
 from xuannv_embedding.training.cli import build_training_system
+from xuannv_embedding.training.distributed_experiment import gather_objects
 from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.regional_refinement import StaticObjective, rename_targets
+from xuannv_embedding.training.regional_resume import capture_rank, recover, registration
 from xuannv_embedding.training.runtime import TrainingSystem, _autocast, _grad_scaler, _move
 
 
@@ -375,6 +377,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--approval", type=Path)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--micro-batch", type=int, default=2)
+    parser.add_argument("--resume", type=Path)
+    parser.add_argument("--stop-after-updates", type=int)
     args = parser.parse_args(argv)
     if args.phase == "train":
         require_training_approval(args.spec, args.approval)
@@ -490,10 +494,101 @@ def run_training(
     scaler = _grad_scaler(device, device.type == "npu")
     generator = torch.Generator().manual_seed(settings["seed"])
     output = Path(spec["output"])
+    identity = registration(spec, args.spec, world, args.micro_batch)
+    recovered = {
+        "completed_steps": 0,
+        "elapsed_seconds": 0.0,
+        "skipped_updates": 0,
+        "recovery_mode": "fresh",
+    }
+    if getattr(args, "resume", None) is not None:
+        recovered = recover(
+            args.resume,
+            system,
+            optimizer,
+            scaler,
+            generator,
+            device,
+            config,
+            spec,
+            identity,
+            cache,
+            rank=rank,
+        )
+        previous = output / "status.json"
+        if previous.exists():
+            recovered["elapsed_seconds"] = max(
+                recovered["elapsed_seconds"],
+                json.loads(previous.read_text()).get("elapsed_seconds", 0),
+            )
+        if rank == 0:
+            dump(
+                output / f"recovery-{time.time_ns()}.json",
+                {
+                    **recovered,
+                    "checkpoint": str(args.resume),
+                    "checkpoint_sha256": sha(args.resume),
+                    "source_git_sha": os.environ["XUANNV_GIT_SHA"],
+                    "registration": identity,
+                },
+            )
     started = time.monotonic()
-    step = 1
-    skipped_updates = 0
-    while step <= settings["steps"]:
+    step = recovered["completed_steps"] + 1
+    skipped_updates = recovered["skipped_updates"]
+    requested_stop = getattr(args, "stop_after_updates", None)
+    stop = settings["steps"] if requested_stop is None else requested_stop
+    if type(stop) is not int or stop < 1 or not step - 1 <= stop <= settings["steps"]:
+        raise ValueError("Stop update must lie within the remaining registered budget")
+
+    def elapsed():
+        return recovered["elapsed_seconds"] + time.monotonic() - started
+
+    def save(step, *, final=False):
+        states = gather_objects(capture_rank(generator, device, scaler))
+        if rank != 0:
+            return
+        kwargs = dict(
+            model=system.model,
+            criterion=system.criterion,
+            optimizer=optimizer,
+            scheduler=None,
+            epoch=step - 1,
+            config_sha256=spec["config"]["sha256"],
+            git_sha=os.environ["XUANNV_GIT_SHA"],
+            source_schema={k: asdict(v) for k, v in config.model.input_sources.items()},
+            regions=[d.region for d in config.data.datasets],
+            metrics={
+                "steps": step,
+                "static_weight": system.criterion.weight,
+                "regional_resume": {
+                    "schema": "regional-resume-v1",
+                    "registration": identity,
+                    "rank_states": states,
+                    "elapsed_seconds": elapsed(),
+                    "skipped_updates": skipped_updates,
+                    "recovery_mode": recovered["recovery_mode"],
+                },
+            },
+        )
+        save_training_checkpoint(output / "latest.pt", **kwargs)
+        if step in checkpoint_steps(settings):
+            save_training_checkpoint(output / f"step{step:06d}.pt", **kwargs)
+        if final or step == settings["steps"]:
+            save_training_checkpoint(output / "final.pt", **kwargs)
+        elif step == 400:
+            save_training_checkpoint(output / "step0400.pt", **kwargs)
+
+    if rank == 0:
+        dump(
+            output / "status.json",
+            {
+                "state": "running",
+                "optimizer_steps": step - 1,
+                "elapsed_seconds": elapsed(),
+                "recovery_mode": recovered["recovery_mode"],
+            },
+        )
+    while step <= stop:
         if __import__("shutil").disk_usage(output).free < settings["min_free_gib"] * 2**30:
             raise RuntimeError("Disk reserve reached")
         wrapped.train()
@@ -544,43 +639,25 @@ def run_training(
                 {
                     "state": "running",
                     "optimizer_steps": step,
-                    "elapsed_seconds": time.monotonic() - started,
+                    "elapsed_seconds": elapsed(),
                     "loss": float(losses["total"].detach().cpu()),
                     "active_domain": domain["region"],
                     "active_months": domain["months"],
                 },
             )
         milestones = checkpoint_steps(settings)
-        if rank == 0 and (
-            step % settings["save_every"] == 0 or step == settings["steps"] or step in milestones
-        ):
-            kwargs = dict(
-                model=system.model,
-                criterion=system.criterion,
-                optimizer=optimizer,
-                scheduler=None,
-                epoch=step - 1,
-                config_sha256=spec["config"]["sha256"],
-                git_sha=os.environ["XUANNV_GIT_SHA"],
-                source_schema={k: asdict(v) for k, v in config.model.input_sources.items()},
-                regions=[d.region for d in config.data.datasets],
-                metrics={"steps": step, "static_weight": system.criterion.weight},
-            )
-            save_training_checkpoint(output / "latest.pt", **kwargs)
-            if step in milestones:
-                save_training_checkpoint(output / f"step{step:06d}.pt", **kwargs)
-            if step in [400, settings["steps"]]:
-                save_training_checkpoint(
-                    output / ("final.pt" if step == settings["steps"] else "step0400.pt"), **kwargs
-                )
+        if step % settings["save_every"] == 0 or step == stop or step in milestones:
+            save(step)
         step += 1
+    if recovered["completed_steps"] == settings["steps"]:
+        save(settings["steps"], final=True)
     if rank == 0:
         dump(
             output / "status.json",
             {
-                "state": "complete",
-                "optimizer_steps": settings["steps"],
-                "elapsed_seconds": time.monotonic() - started,
+                "state": "complete" if stop == settings["steps"] else "checkpointed",
+                "optimizer_steps": stop,
+                "elapsed_seconds": elapsed(),
             },
         )
     if world > 1:
