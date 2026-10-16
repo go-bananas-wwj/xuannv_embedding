@@ -608,8 +608,15 @@ def finalize_region(spec: dict) -> dict:
     provenance = {}
     for path in (root / "catalogs").rglob("*.json"):
         provenance[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
+    from xuannv_embedding.data_process.regional_visualization import render_data_visualizations
+
+    visualization = render_data_visualizations(
+        spec, require_complete=True, label=spec.get("visualization_label", "研究区")
+    )
     report = {
         "state": "data_ready",
+        "visualization": visualization["overview"],
+        "visualization_paths": visualization["path_inventory"],
         "patches": materialized["patches"],
         "months": len(spec["months"]),
         "loader_audits": audits,

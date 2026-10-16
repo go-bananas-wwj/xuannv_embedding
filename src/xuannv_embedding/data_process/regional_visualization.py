@@ -74,10 +74,15 @@ def source_inventory(spec: dict) -> list[dict]:
             path = root / "monthly" / source / (month + ".tif")
             available = path.exists() and path.with_suffix(".json").exists()
             if available and source == "landsat":
-                available = (
-                    json.loads(path.with_suffix(".json").read_text()).get("quality_mask_version")
-                    == LANDSAT_QUALITY_VERSION
-                )
+                try:
+                    available = (
+                        json.loads(path.with_suffix(".json").read_text()).get(
+                            "quality_mask_version"
+                        )
+                        == LANDSAT_QUALITY_VERSION
+                    )
+                except (OSError, json.JSONDecodeError):
+                    available = False
             rows.append(
                 {
                     "source": source,
