@@ -51,6 +51,7 @@ def checkpoint_diagnostics(
     from xuannv_embedding.data.raster_dataset import collate_region_batch
     from xuannv_embedding.export.context import dump, sha
     from xuannv_embedding.training.cli import _setup_device
+    from xuannv_embedding.training.feature_preservation import attach_teacher, load_teacher
     from xuannv_embedding.training.regional_base import build_regional_system, read_spec
     from xuannv_embedding.training.runtime import _autocast, _move
 
@@ -80,6 +81,14 @@ def checkpoint_diagnostics(
         ),
     )
     system.to(device).eval()
+    system.criterion.teacher_weight = spec["training"].get("teacher_weight", 0.0)
+    teacher = (
+        load_teacher(
+            spec["teacher"], cache, channels=config.model.embed_dim, size=config.data.patch_size
+        )
+        if system.criterion.teacher_weight
+        else None
+    )
     result = {
         "kind": "fixed_sample_unmasked_objective_snapshots_not_original_training_curve",
         "sample_indices": indices,
@@ -102,6 +111,8 @@ def checkpoint_diagnostics(
         sums = {}
         for index in indices:
             sample = torch.load(cache["records"][index]["path"], weights_only=True, mmap=True)
+            if teacher is not None:
+                sample = attach_teacher(sample, index, teacher)
             batch = _move(collate_region_batch([sample]), device)
             with torch.inference_mode(), _autocast(device, device.type == "npu"):
                 losses = system(batch)

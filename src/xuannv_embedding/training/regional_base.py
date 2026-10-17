@@ -26,6 +26,12 @@ from xuannv_embedding.models.model import AEFOutput
 from xuannv_embedding.training.checkpoint import save_training_checkpoint
 from xuannv_embedding.training.cli import build_training_system
 from xuannv_embedding.training.distributed_experiment import gather_objects, global_means
+from xuannv_embedding.training.feature_preservation import (
+    attach_teacher,
+    freeze_public_parameters,
+    load_teacher,
+    preservation_loss,
+)
 from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.regional_diagnostics import append_training_curve
 from xuannv_embedding.training.regional_refinement import StaticObjective, rename_targets
@@ -98,6 +104,7 @@ class RegionalObjective(StaticObjective):
         self.quality_channels = quality_channels
         self.head_only = False
         self.weight = static_weight
+        self.teacher_weight = 0.0
         self.base.requires_grad_(True)
 
     def set_epoch(self, step: int) -> None:
@@ -114,9 +121,17 @@ class RegionalObjective(StaticObjective):
             recon[key] = recon[key][:, :, keep]
             clean_targets[key] = clean_targets[key][:, :, keep]
         cleaned = AEFOutput(output.embedding_map, output.embedding, recon)
-        return super().forward(
+        result = super().forward(
             cleaned, clean_targets, masks, supervised_labels, supervised_label_masks
         )
+        if self.teacher_weight:
+            anchor = preservation_loss(
+                output, targets["public_teacher_embedding"], masks["public_teacher_embedding"]
+            )
+            result["public_anchor"] = anchor
+            result["public_anchor_weighted"] = anchor * self.teacher_weight
+            result["total"] = result["total"] + anchor * self.teacher_weight
+        return result
 
 
 def build_regional_system(
@@ -308,7 +323,7 @@ def read_spec(path: Path) -> tuple[dict[str, Any], Config, dict[str, Any]]:
     required = {"schema", "mode", "config", "cache", "checkpoint", "training", "output"}
     if (
         not required.issubset(spec)
-        or set(spec) - required - {"initialization_config"}
+        or set(spec) - required - {"initialization_config", "teacher"}
         or spec["schema"] != "regional-base-v1"
     ):
         raise ValueError("Unknown or missing regional specification fields")
@@ -356,11 +371,28 @@ def read_spec(path: Path) -> tuple[dict[str, Any], Config, dict[str, Any]]:
     }
     if (
         not expected.issubset(training)
-        or set(training) - expected - {"static_weight", "checkpoint_steps"}
+        or set(training)
+        - expected
+        - {"static_weight", "checkpoint_steps", "freeze_public", "teacher_weight"}
         or training["effective_batch"] != 48
     ):
         raise ValueError("Invalid training settings")
     validate_static_weight(training.get("static_weight", 0.25))
+    if type(training.get("freeze_public", False)) is not bool:
+        raise ValueError("freeze_public must be a boolean")
+    weight = training.get("teacher_weight", 0.0)
+    if type(weight) not in {int, float} or not math.isfinite(weight) or weight < 0:
+        raise ValueError("teacher_weight must be finite and nonnegative")
+    if training.get("freeze_public", False) and config.model.highres_transformer is None:
+        raise ValueError("Freezing the public backbone requires high-resolution trainable layers")
+    if weight:
+        if "teacher" not in spec:
+            raise ValueError("Positive teacher_weight requires a registered public teacher")
+        load_teacher(
+            spec["teacher"], cache, channels=config.model.embed_dim, size=config.data.patch_size
+        )
+    elif "teacher" in spec:
+        raise ValueError("An unused teacher reference is not allowed")
     checkpoint_steps(training)
     if training["steps"] < 1 or not 0 <= training["head_steps"] < training["steps"]:
         raise ValueError("Invalid update budget")
@@ -406,6 +438,7 @@ def main(argv: list[str] | None = None) -> int:
             {**receipt, "strict_keys": True, "months": config.data.months, "optimizer_steps": 0},
         )
         return 0
+    system.criterion.teacher_weight = spec["training"].get("teacher_weight", 0.0)
     device = torch.device(args.device)
     if device.type == "npu":
         import torch_npu  # noqa: F401
@@ -419,6 +452,11 @@ def main(argv: list[str] | None = None) -> int:
         sample = torch.load(
             cache["records"][domain["indices"][0]]["path"], weights_only=True, mmap=True
         )
+        if system.criterion.teacher_weight:
+            teacher = load_teacher(
+                spec["teacher"], cache, channels=config.model.embed_dim, size=config.data.patch_size
+            )
+            sample = attach_teacher(sample, domain["indices"][0], teacher)
         batch = _move(collate_region_batch([sample]), device)
         with torch.inference_mode(), _autocast(device, device.type == "npu"):
             embedding = system.model(
@@ -463,12 +501,22 @@ def run_training(
             device = torch.device(f"npu:{local}")
         dist.init_process_group("hccl" if device.type == "npu" else "gloo")
     settings = spec["training"]
+    system.criterion.teacher_weight = settings.get("teacher_weight", 0.0)
+    teacher = None
+    if settings.get("teacher_weight", 0.0):
+        teacher = load_teacher(
+            spec["teacher"], cache, channels=config.model.embed_dim, size=config.data.patch_size
+        )
+    if settings.get("freeze_public", False):
+        freeze_public_parameters(system)
     if args.micro_batch < 1 or 48 % (world * args.micro_batch):
         raise ValueError("Micro batch and world size must divide effective batch48")
     accumulation = 48 // (world * args.micro_batch)
     system.to(device)
     groups = {name: [] for name in ["public", "highres", "heads"]}
     for name, parameter in system.named_parameters():
+        if not parameter.requires_grad:
+            continue
         key = (
             "heads"
             if name.startswith("criterion.") or "decoders." in name
@@ -618,6 +666,11 @@ def run_training(
                 torch.load(cache["records"][i]["path"], weights_only=True, mmap=True)
                 for i in selected
             ]
+            if teacher is not None:
+                samples = [
+                    attach_teacher(sample, index, teacher)
+                    for sample, index in zip(samples, selected)
+                ]
             batch = _move(collate_region_batch(samples), device)
             batch = apply_input_masking(batch, asdict(config.training.input_masking))
             with _autocast(device, device.type == "npu"):
