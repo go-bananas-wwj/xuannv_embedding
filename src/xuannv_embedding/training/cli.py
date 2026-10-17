@@ -459,6 +459,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--initialize-from", type=Path)
     parser.add_argument("--initialize-config", type=Path)
+    parser.add_argument("--initialize-target-heads", type=Path)
+    parser.add_argument("--target-head-seed", type=int)
     parser.add_argument("--teacher-checkpoint", type=Path)
     parser.add_argument("--teacher-config", type=Path)
     parser.add_argument("--device")
@@ -479,22 +481,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--initialize-from 与 --initialize-config 必须一起提供")
     if args.resume is not None and args.initialize_from is not None:
         parser.error("--resume 与 --initialize-from 互斥")
-    for source in (args.initialize_from, args.teacher_checkpoint):
+    if args.initialize_target_heads is not None and (
+        args.initialize_from is None or args.resume is not None
+    ):
+        parser.error("--initialize-target-heads requires fresh --initialize-from, not --resume")
+    if args.target_head_seed is not None and args.initialize_target_heads is None:
+        parser.error("--target-head-seed requires --initialize-target-heads")
+    for source in (args.initialize_from, args.teacher_checkpoint, args.initialize_target_heads):
         if source is not None and source.resolve() == args.output.resolve():
-            parser.error("训练输出不得覆盖初始化或教师 checkpoint")
+            parser.error("训练输出不得覆盖初始化、教师或预热头 checkpoint")
 
     config = Config.from_yaml(args.config)
     target_config = config.training.independent_targets
-    from xuannv_embedding.training.target_supervision import validate_research_budget
+    from xuannv_embedding.training.target_supervision import (
+        research_budget_record,
+        validate_research_budget,
+        validate_research_resume,
+    )
 
     try:
-        validate_research_budget(
-            target_config,
-            steps=args.steps,
-            epochs=args.epochs if args.epochs is not None else config.training.epochs,
-            initialize_from=args.initialize_from,
-            resume=args.resume,
-        )
+        if args.resume is None:
+            validate_research_budget(
+                target_config,
+                steps=args.steps,
+                epochs=args.epochs if args.epochs is not None else config.training.epochs,
+                initialize_from=args.initialize_from,
+                resume=None,
+            )
     except ValueError as exc:
         parser.error(str(exc))
     target_identity = None
@@ -577,6 +590,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "git_sha": initial_state["git_sha"],
             }
         del initial_state
+    warmed_head_identity = None
+    if args.initialize_target_heads is not None:
+        from xuannv_embedding.training.target_warmup import initialize_readouts
+
+        warmed_head_identity = initialize_readouts(
+            args.initialize_target_heads,
+            system,
+            config,
+            seed=(
+                args.target_head_seed
+                if args.target_head_seed is not None
+                else config.experiment.seed
+            ),
+        )
     teacher_identity = None
     teacher_config = None
     if (args.teacher_checkpoint is None) != (args.teacher_config is None):
@@ -613,6 +640,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         weight_decay=config.training.weight_decay,
         fused=accelerate,
         auxiliary_lr_multiplier=(target_config.head_lr_multiplier if target_config else 1.0),
+        vmf_lr_multiplier=config.training.annual_vmf_lr_multiplier,
     )
     scheduler = build_scheduler(
         optimizer,
@@ -636,6 +664,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if state["metrics"].get("teacher_identity") != teacher_identity:
             raise ValueError("恢复训练的 teacher_identity 不一致")
         initialization_identity = state["metrics"].get("initialization_identity")
+        warmed_head_identity = state["metrics"].get("warmed_head_identity")
+        validate_research_resume(
+            target_config,
+            state,
+            steps=args.steps,
+            epochs=_epoch_count(config.training.epochs, args.epochs, start_epoch),
+        )
         system.restore_auxiliary_state(state.get("auxiliary_state", {}))
         del state
     if accelerate:
@@ -710,6 +745,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "completed_epoch": completed_epoch,
                     "teacher_identity": teacher_identity,
                     "initialization_identity": initialization_identity,
+                    "warmed_head_identity": warmed_head_identity,
+                    "research_budget": research_budget_record(
+                        target_config,
+                        steps=args.steps,
+                        completed_epochs=completed_epoch,
+                    ),
                     "source_code_sha256": source_code_sha256,
                     **({"independent_targets": target_identity} if target_identity else {}),
                 },
@@ -718,7 +759,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             dist.barrier()
 
     def report_step(metrics: dict[str, Any]) -> None:
-        if rank == 0 and (metrics["batch"] == 1 or metrics["batch"] % 25 == 0):
+        if rank == 0 and (
+            metrics["batch"] == 1 or metrics["batch"] % 25 == 0 or metrics["parameter_updates"]
+        ):
             print(json.dumps({"progress": metrics}), flush=True)
 
     summary = train_steps(
@@ -731,6 +774,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         start_epoch=start_epoch,
         gradient_accumulation_steps=config.training.gradient_accumulation_steps,
         amp=config.training.amp and not args.no_amp,
+        update_diagnostics_interval=config.training.update_diagnostics_interval,
         epoch_end_callback=save_periodic,
         step_callback=report_step,
     )
@@ -749,6 +793,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             "source_code_sha256": source_code_sha256,
             "teacher_identity": teacher_identity,
             "initialization_identity": initialization_identity,
+            "warmed_head_identity": warmed_head_identity,
+            "research_budget": research_budget_record(
+                target_config,
+                steps=args.steps,
+                completed_epochs=int(summary["end_epoch"]) + 1,
+            ),
+            "annual_vmf_lr_multiplier": config.training.annual_vmf_lr_multiplier,
             "ema_updates": system.ema_updates,
             "global_samples": global_samples,
             "wall_seconds": wall_seconds,

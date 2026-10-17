@@ -29,6 +29,32 @@ def validate_research_budget(target, *, steps, epochs, initialize_from, resume):
         )
 
 
+def research_budget_record(target, *, steps, completed_epochs):
+    if target is None or not target.research_max_updates:
+        return None
+    return {
+        "limit": target.research_max_updates,
+        "step_limit_per_epoch": steps,
+        "completed_epochs": completed_epochs,
+        "completed_batch_upper_bound": steps * completed_epochs,
+        "scope": "Conservative cumulative batch bound, including prior resumed epochs.",
+    }
+
+
+def validate_research_resume(target, state, *, steps, epochs):
+    """Resume only new checkpoints carrying the original cumulative budget ledger."""
+    if target is None or not target.research_max_updates:
+        return
+    ledger = state["metrics"].get("research_budget")
+    initial = state["metrics"].get("initialization_identity")
+    completed = int(state["epoch"]) + 1
+    expected = research_budget_record(target, steps=steps, completed_epochs=completed)
+    if not initial or not initial.get("checkpoint_sha256") or ledger != expected:
+        raise ValueError("Bounded resume lacks a matching cumulative budget and initialization")
+    if steps < 1 or epochs < 1 or steps * (completed + epochs) > target.research_max_updates:
+        raise ValueError("Bounded resume exceeds its original cumulative research budget")
+
+
 class TargetSupervision(nn.Module):
     """Isolated readouts; target tensors enter loss(), never the encoder or forward()."""
 

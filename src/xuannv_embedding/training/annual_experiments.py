@@ -277,7 +277,12 @@ def run(args) -> None:
         if arm.get("steps_per_epoch"):
             command += ["--steps", str(arm["steps_per_epoch"])]
         periodic = sorted(checkpoint.parent.glob("model.epoch-*.pt"))
+        remaining_epochs = plan["epochs"]
         if periodic:
+            _, _, previous = load_model(Path(arm["config"]), periodic[-1], torch.device("cpu"))
+            remaining_epochs -= previous["epoch"] + 1
+            if remaining_epochs <= 0:
+                raise ValueError("Complete periodic checkpoint exists without a final artifact")
             command += ["--resume", str(periodic[-1])]
         else:
             command += [
@@ -286,6 +291,17 @@ def run(args) -> None:
                 "--initialize-config",
                 plan["initialize_config"],
             ]
+            if arm.get("warmed_heads"):
+                head = arm["warmed_heads"]
+                if digest(Path(head["path"])) != head["sha256"]:
+                    raise ValueError("Frozen readout initialization changed")
+                command += [
+                    "--initialize-target-heads",
+                    head["path"],
+                    "--target-head-seed",
+                    str(head["seed"]),
+                ]
+        command += ["--epochs", str(remaining_epochs)]
         if arm["changes"].get("teacher"):
             command += [
                 "--teacher-checkpoint",

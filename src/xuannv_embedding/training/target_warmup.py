@@ -135,11 +135,42 @@ def restore_warmed_heads(path, module, *, seed, expected_contract, expected_mode
         or not state.get("encoder_unchanged")
     ):
         raise ValueError("Warmup encoder/target identity mismatch")
+    if str(seed) not in state["heads"]:
+        raise ValueError("Readout initialization seed is absent from the warmed artifact")
     values = state["heads"][str(seed)]
     if not all(bool(torch.isfinite(value).all()) for value in values.values()):
         raise ValueError("Nonfinite warmed readout")
     module.load_state_dict(values, strict=True)
     return state
+
+
+def initialize_readouts(path, system, config, *, seed):
+    """Initialize joint-training readout weights with strict provenance; reset Adam explicitly."""
+    from xuannv_embedding.training.annual_experiments import digest, model_state_digest
+
+    target = getattr(system.criterion, "target_supervision", None)
+    if target is None:
+        raise ValueError("Warmed readout initialization requires independent target heads")
+    receipt = json.loads(path.with_suffix(".json").read_text())
+    checkpoint_sha = digest(path)
+    if receipt.get("checkpoint_sha256") != checkpoint_sha:
+        raise ValueError("Warmed readout checkpoint digest differs from its receipt")
+    state = restore_warmed_heads(
+        path,
+        target,
+        seed=seed,
+        expected_contract=head_contract(config),
+        expected_model_sha256=model_state_digest(system.model),
+    )
+    return {
+        "path": str(path.resolve()),
+        "sha256": checkpoint_sha,
+        "seed": seed,
+        "head_optimizer_updates_before_joint_training": state["head_optimizer_updates"],
+        "model_state_sha256": state["model_state_sha256"],
+        "optimizer_state_restored": False,
+        "note": "Readout weights initialized; joint-training Adam moments start fresh.",
+    }
 
 
 def continue_readouts(path, heads, optimizer, *, config, model_sha256, world_size, epoch_batches):

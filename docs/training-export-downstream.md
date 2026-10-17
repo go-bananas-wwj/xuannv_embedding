@@ -250,3 +250,21 @@ vMF噪声RNG重新初始化，不声明逐位接续；这不会恢复或更新�
 在既定训练位置比较初始/预热头，以及原始/修复后的上下文梯度路径。诊断使用FP32、训练模式和固定vMF噪声、
 不构造优化器；记录实际加权损失的范数与夹角、高分/融合/vMF完整小参数组和一个明确命名的STP参数。
 它不读取新的开发或确认角色，不把局部梯度冲突解释为下游退化的因果证明。
+
+主干微调可在 `train` 的 `--initialize-from` / `--initialize-config` 之外，增加
+`--initialize-target-heads /path/heads.pt --target-head-seed 42`。这会校验头文件摘要凭据、
+原模型张量摘要与完整目标/输入合同，只载入头权重；联合训练的 Adam 状态重新开始，并在
+checkpoint 的 `warmed_head_identity` 中登记。`--resume` 则恢复完整联合训练状态，不能再次
+传头初始化参数。输出路径不得覆盖原主干或预热头。
+
+`training.annual_vmf_lr_multiplier` 默认为 `1.0`，保留历史优化器参数顺序；设为 `0`
+只冻结 `bottleneck.proj`，仍允许损失经该投影反传到上游。大于零的其他值为投影独立学习率
+倍率，不改变 `log_kappa`、其他模型参数或目标头倍率。该设置仅适用于年度模型。
+`training.update_diagnostics_interval` 默认 `0`；正整数在首次及相应优化器步上记录实际参数
+差值、相对权重范数及与负原始梯度的夹角。它只支持无 GradScaler 的 FP32/BF16，
+不裁剪梯度、不重写 Adam 状态；原始梯度范数与实际 Adam 更新量必须分别解释。
+
+新研究 checkpoint 记录保守的累计批次预算账本。保持原配置与每轮显式 `--steps`，可用
+`--resume /path/periodic.pt` 接续剩余轮数；恢复入口验证原初始化身份、累计轮数和总预算，
+不能通过多次恢复超出 `research_max_updates`。缺少账本的历史研究 checkpoint 仍拒绝恢复。
+账本不改变正式数据放行状态；采样按下一轮接续，vMF RNG 重启，不声明逐位一致。

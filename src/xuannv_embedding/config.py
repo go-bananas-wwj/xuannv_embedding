@@ -280,6 +280,8 @@ class TrainingConfig:
     highres_visible_targets: bool = False
     highres_visible_weight: float | None = None
     compile: bool = False
+    annual_vmf_lr_multiplier: float = 1.0
+    update_diagnostics_interval: int = 0
     input_masking: InputMaskingConfig = field(default_factory=InputMaskingConfig)
     independent_targets: IndependentTargetsConfig | None = None
 
@@ -652,6 +654,8 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         "compile",
         "input_masking",
         "independent_targets",
+        "annual_vmf_lr_multiplier",
+        "update_diagnostics_interval",
     }
     required = {
         "epochs",
@@ -776,6 +780,12 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
         compile=_boolean(raw.get("compile", False), "training.compile"),
         input_masking=_parse_masking(raw.get("input_masking", {}), model),
         independent_targets=_parse_independent_targets(raw.get("independent_targets"), model),
+        annual_vmf_lr_multiplier=_non_negative_float(
+            raw.get("annual_vmf_lr_multiplier", 1.0), "training.annual_vmf_lr_multiplier"
+        ),
+        update_diagnostics_interval=_non_negative_int(
+            raw.get("update_diagnostics_interval", 0), "training.update_diagnostics_interval"
+        ),
     )
 
 
@@ -976,6 +986,7 @@ def _validate_cross_contracts(
         or training.highres_visible_weight is not None
         or training.latent_prediction_pool_factors is not None
         or training.view_consistency_weight
+        or training.annual_vmf_lr_multiplier != 1.0
     ):
         raise ConfigError("Context pooling and multiscale objectives require annual5m")
     if model.architecture == "annual5m":

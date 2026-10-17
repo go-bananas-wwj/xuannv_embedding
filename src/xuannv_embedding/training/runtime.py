@@ -224,15 +224,18 @@ def train_steps(
     scheduler: Any | None = None,
     epoch_end_callback: Callable[[int], None] | None = None,
     step_callback: Callable[[dict[str, Any]], None] | None = None,
+    update_diagnostics_interval: int = 0,
 ) -> dict[str, float | int]:
     """训练有限个 epoch，并返回可序列化的发布门禁摘要。"""
-    if epochs <= 0 or gradient_accumulation_steps <= 0:
+    if epochs <= 0 or gradient_accumulation_steps <= 0 or update_diagnostics_interval < 0:
         raise ValueError("epochs 与 gradient_accumulation_steps 必须是正整数")
     if start_epoch < 0:
         raise ValueError("start_epoch 必须是非负整数")
     system.to(device)
     system.train()
     scaler = _grad_scaler(device, amp)
+    if update_diagnostics_interval and scaler is not None:
+        raise ValueError("Actual-update diagnostics require BF16/FP32 without a GradScaler")
     optimizer.zero_grad(set_to_none=True)
     batch_count = 0
     optimizer_steps = 0
@@ -265,6 +268,7 @@ def train_steps(
             else:
                 scaler.scale(loss).backward()
             pending += 1
+            update_metrics = {}
             batch_count += 1
             loss_sum += float(losses["total"].detach().float().cpu())
             if pending == gradient_accumulation_steps:
@@ -274,7 +278,20 @@ def train_steps(
                     # 非有限范数属于预期路径，只统计不中断训练。
                     skipped_steps += 1
                 if scaler is None:
+                    snapshot = None
+                    if update_diagnostics_interval and (
+                        optimizer_steps == 0
+                        or (optimizer_steps + 1) % update_diagnostics_interval == 0
+                    ):
+                        from xuannv_embedding.training.update_diagnostics import snapshot_parameters
+
+                        snapshot = snapshot_parameters(_unwrap(system))
                     optimizer.step()
+                    if snapshot is not None:
+                        from xuannv_embedding.training.update_diagnostics import measure_updates
+
+                        update_metrics = measure_updates(snapshot)
+                        del snapshot
                 else:
                     scaler.step(optimizer)
                     scaler.update()
@@ -297,6 +314,7 @@ def train_steps(
                             losses.get("recon", losses["total"]).detach().float().cpu()
                         ),
                         "gradient_norm": gradient_norm,
+                        "parameter_updates": update_metrics,
                         "elapsed_seconds": previous_end - started,
                         "data_wait_seconds": data_wait_seconds,
                         "step_seconds": previous_end - batch_started,
