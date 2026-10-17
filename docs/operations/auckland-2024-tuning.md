@@ -76,3 +76,13 @@ New training appends successful-update component losses, group learning rates, e
 and AMP skip counts every 20 updates. Values are averaged across accumulation passes and
 distributed ranks, with missing optional semantic statistics aggregated by key. Checkpoint
 and sample artifacts stay outside Git; protocol, code and compact milestones are published.
+
+## Launch verification
+
+At 2026-10-17 15:48 Beijing time all three candidates had passed their real-data two-NPU
+first-update gates, saved finite complete checkpoints and entered exact-state continuation.
+Initial accumulated/distributed mean total losses were 0.89516 / 0.89695 / 0.89695 in table
+order. These are training diagnostics, not new downstream improvements. The supervisor
+reported zero restarts. Full CPU tests passed (840 tests); targeted tests, Black, Ruff,
+repository checks and wheel/sdist builds passed. Production source is commit `46d9db7`;
+subsequent progress commits change documentation only.
