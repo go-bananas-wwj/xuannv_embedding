@@ -25,8 +25,9 @@ from xuannv_embedding.models.highres_transformer import HighResTransformerModel
 from xuannv_embedding.models.model import AEFOutput
 from xuannv_embedding.training.checkpoint import save_training_checkpoint
 from xuannv_embedding.training.cli import build_training_system
-from xuannv_embedding.training.distributed_experiment import gather_objects
+from xuannv_embedding.training.distributed_experiment import gather_objects, global_means
 from xuannv_embedding.training.masking import apply_input_masking
+from xuannv_embedding.training.regional_diagnostics import append_training_curve
 from xuannv_embedding.training.regional_refinement import StaticObjective, rename_targets
 from xuannv_embedding.training.regional_resume import capture_rank, recover, registration
 from xuannv_embedding.training.runtime import TrainingSystem, _autocast, _grad_scaler, _move
@@ -605,6 +606,8 @@ def run_training(
         optimizer.zero_grad(set_to_none=True)
         domain = training_domain(cache, step)
         set_reference_window(system.model, domain["months"])
+        record_curve = step == 1 or step % 20 == 0 or step == stop
+        curve_losses = {}
         for _ in range(accumulation):
             order = torch.randperm(len(domain["indices"]), generator=generator).tolist()
             ids = [domain["indices"][i] for i in order]
@@ -620,6 +623,10 @@ def run_training(
             with _autocast(device, device.type == "npu"):
                 losses = wrapped(batch)
                 loss = losses["total"] / accumulation
+            if record_curve:
+                for key, value in losses.items():
+                    if isinstance(value, torch.Tensor) and value.numel() == 1:
+                        curve_losses[key] = curve_losses.get(key, 0) + value.detach().float()
             if not torch.isfinite(loss):
                 raise FloatingPointError("Nonfinite regional loss")
             if scaler is None:
@@ -633,6 +640,21 @@ def run_training(
                     "Repeated AMP overflows; stop without counting skipped updates"
                 )
             continue
+        if record_curve:
+            # Some semantic statistics are absent when a rank has no valid labels.
+            # Aggregate by key rather than assuming equal-length tensors across ranks.
+            means = global_means(
+                {key: float(value.cpu()) for key, value in curve_losses.items()}, accumulation
+            )
+            if rank == 0:
+                append_training_curve(
+                    output / "training-curve.jsonl",
+                    step=step,
+                    losses=means,
+                    rates={group["name"]: group["lr"] for group in optimizer.param_groups},
+                    elapsed_seconds=elapsed(),
+                    skipped_updates=skipped_updates,
+                )
         if rank == 0 and (step % 20 == 0 or step == settings["steps"]):
             dump(
                 output / "status.json",
