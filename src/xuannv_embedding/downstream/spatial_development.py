@@ -341,6 +341,30 @@ def prepare(args):
     )
 
 
+def development_dataset_config(datasets, frozen):
+    """Resolve a frozen annual split by its verified year, allowing region aliases."""
+    from xuannv_embedding.utils.manifest import IndexedManifest
+
+    manifest = Path(frozen["path"])
+    records = IndexedManifest(manifest)
+    year = frozen["year"]
+    months = [f"{year}-{month:02}" for month in range(1, 13)]
+    if records.years != {year} or records.meta.months != months:
+        raise ValueError("Development manifest differs from its frozen calendar year")
+    candidates = []
+    for dataset in datasets:
+        source = IndexedManifest(dataset.manifest_path)
+        if source.years == {year} and source.meta.months == months:
+            candidates.append(dataset)
+    named = [dataset for dataset in candidates if dataset.region == frozen["region"]]
+    matches = named or candidates
+    if len(matches) != 1:
+        raise ValueError("Development year/region must identify exactly one configured dataset")
+    return replace(
+        matches[0], region=frozen["region"], manifest_path=manifest, patch_grid_path=manifest
+    )
+
+
 def export(args):
     import torch
     from torch.utils.data import DataLoader
@@ -384,8 +408,8 @@ def export(args):
         for frozen in plan["manifests"]:
             if digest(Path(frozen["path"])) != frozen["sha256"]:
                 raise ValueError("Development manifest changed")
-            dc = next(row for row in config.data.datasets if row.region == frozen["region"])
-            dataset = annual_dataset(config, replace(dc, manifest_path=Path(frozen["path"])))
+            dc = development_dataset_config(config.data.datasets, frozen)
+            dataset = annual_dataset(config, dc)
             loader = DataLoader(
                 dataset,
                 batch_size=2,

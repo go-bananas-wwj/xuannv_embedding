@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -8,6 +10,49 @@ from xuannv_embedding.downstream.spatial_development import (
     sample_indices,
     spatial_folds,
 )
+
+
+def test_development_export_resolves_region_aliases_by_verified_annual_manifest(tmp_path):
+    from xuannv_embedding.config import RegionDatasetConfig
+    from xuannv_embedding.downstream.spatial_development import development_dataset_config
+    from xuannv_embedding.utils.manifest import ManifestRecord, write_manifest
+
+    def manifest(name, region, year):
+        path = tmp_path / name
+        write_manifest(
+            path,
+            [ManifestRecord("p", region, {"s2": None}, provenance={"year": year})],
+            months=[f"{year}-{month:02}" for month in range(1, 13)],
+        )
+        return path
+
+    datasets = [
+        RegionDatasetConfig(
+            region=f"national{year}",
+            manifest_path=manifest(f"{year}.train.jsonl", f"national{year}", year),
+            statistics_dir=tmp_path / f"statistics{year}",
+            patch_grid_path=tmp_path / f"grid{year}.json",
+            source_map={"s2": "s2"},
+            supervised_label_roots={},
+        )
+        for year in [2020, 2021]
+    ]
+    frozen = {
+        "path": str(manifest("development.jsonl", "annual_2021", 2021)),
+        "region": "annual_2021",
+        "year": 2021,
+    }
+    selected = development_dataset_config(datasets, frozen)
+    assert selected.region == "annual_2021" and selected.manifest_path == Path(frozen["path"])
+    assert selected.statistics_dir == datasets[1].statistics_dir
+    assert selected.source_map == datasets[1].source_map
+    assert datasets[1].region == "national2021"
+    with pytest.raises(ValueError, match="calendar year"):
+        development_dataset_config(datasets, {**frozen, "year": 2020})
+    with pytest.raises(ValueError, match="exactly one"):
+        development_dataset_config(datasets[:1], frozen)
+    with pytest.raises(ValueError, match="exactly one"):
+        development_dataset_config([datasets[1], datasets[1]], frozen)
 
 
 def test_spatial_folds_union_macro_and_component_and_keep_parent_years_together():
