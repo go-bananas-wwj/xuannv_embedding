@@ -78,6 +78,9 @@ jobs:
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-multisource --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-target-comparison --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-training-pool --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment development-prepare --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment development-export --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment development-probe --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment warmup-target-heads --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment diagnose-target-heads --help > /dev/null
       - run: >-

@@ -189,3 +189,18 @@ def test_top_level_subcommand_help_runs(command: str) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "usage:" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "command", ["development-prepare", "development-export", "development-probe"]
+)
+def test_spatial_development_workflow_help(command):
+    result = subprocess.run(
+        [sys.executable, "-m", "xuannv_embedding.cli", "experiment", command, "--help"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert ("--output" if command == "development-prepare" else "--plan") in result.stdout

@@ -268,3 +268,14 @@ checkpoint 的 `warmed_head_identity` 中登记。`--resume` 则恢复完整联�
 `--resume /path/periodic.pt` 接续剩余轮数；恢复入口验证原初始化身份、累计轮数和总预算，
 不能通过多次恢复超出 `research_max_updates`。缺少账本的历史研究 checkpoint 仍拒绝恢复。
 账本不改变正式数据放行状态；采样按下一轮接续，vMF RNG 重启，不声明逐位一致。
+
+空间开发读出诊断使用 `experiment development-prepare` 冻结协议和既有 development 位置，
+再物化本角色的 WorldCover/DSM 标签。该入口校验审计与划分身份，拒绝原预训练或旧候选位置；
+validation/confirmation 不进入此流程。macro 与 component 的并集保持同 fold，两个年度按父格
+绑定，训练 fold 与留出 fold 额外保留 1,290m 父格边界缓冲。协议先保存后读取开发标签。
+`development-export --plan ... --arm ...` 从观测独立导出 10m/40m 聚合特征，
+`development-probe --plan ... --arm ...` 为每个制品重新拟合相同的线性 ridge 读出；
+固定正则 0.001，每年度记录最多抽样 1024 个覆盖像素、256 个DSM单元。
+归一化及分类权重只用训练 fold，留出像元全量评分，阈值不调参。候选必须保留与原制品相同
+的观测有效支持，不得通过删困难位置改善指标。它衡量新空间位置上的同产品可读性，
+不代表独立人工5m精度，也不能覆盖既定道路保留条件。
