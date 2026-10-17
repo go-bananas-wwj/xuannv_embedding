@@ -69,3 +69,13 @@ attempts and honors a STOP file. The language model does not poll continuously. 
 validation milestones and completion are automatically published to GitHub. Runtime weights,
 teacher arrays, exports, logs and plots stay in the data workspace. Peak additional artifacts
 are expected to remain well below the existing 150 GiB preparation budget.
+
+## Launch verification
+
+All routes entered exact-state continuation after their real-data two-NPU first-update
+gates on 2026-10-17 at about 22:16 Beijing time. Both frozen routes passed bitwise checks
+of all 399 public model state tensors against the initializer; neither optimizer contains
+a public parameter group. The anchored route recorded angular loss 0.0023743 and its
+weighted contribution 0.0047486, confirming the new term is active. These are startup
+checks, not downstream improvements. Source is `458d71e`. The full 848-test run and final
+45 targeted tests passed, along with formatting, static checks, repository gates and builds.
