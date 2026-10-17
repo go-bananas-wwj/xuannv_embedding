@@ -4,8 +4,8 @@ Generated from registered local artifacts; no runtime payloads are published.
 
 ```json
 {
-  "stage": "progress_check",
-  "updated_utc": "2026-10-17T03:02:07.445776+00:00",
+  "stage": "export_highres",
+  "updated_utc": "2026-10-17T05:20:27.499594+00:00",
   "models": {
     "public": {
       "state": "complete",
@@ -13,10 +13,9 @@ Generated from registered local artifacts; no runtime payloads are published.
       "elapsed_seconds": 33789.86364024971
     },
     "highres": {
-      "state": "running",
-      "optimizer_steps": 4560,
-      "elapsed_seconds": 48227.65684058983,
-      "loss": 0.8990051746368408
+      "state": "complete",
+      "optimizer_steps": 5334,
+      "elapsed_seconds": 56384.45817144029
     }
   },
   "reference": {
