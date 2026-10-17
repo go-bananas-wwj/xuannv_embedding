@@ -223,3 +223,26 @@ JSON 的每项包含互斥 `train / val / test`。
 运行器将已冻结的 `steps_per_epoch` 传给训练入口。重建评测统一关闭独立目标及可见重建，
 冻结嵌入探针沿用开发标签、fold、训练步数及阈值。WorldCover/OSM 的同产品评分仅作开发诊断；
 新确认集保持封存，研究对照结果不会自动覆盖原生产模型。
+
+独立监督头可先在冻结的年度编码器上预热：
+
+```bash
+torchrun --standalone --nproc_per_node=8 -m xuannv_embedding.cli experiment warmup-target-heads \
+  --config /path/warmup.yaml --initialize-config /path/original/config.yaml \
+  --checkpoint /path/original/model.pt --output /path/new/heads.pt --steps 1024
+```
+
+该入口要求显式 `research_max_updates`，冻结全部编码器、融合层及 vMF 参数和状态，
+只优化七个训练头。头学习率为 `training.lr * head_lr_multiplier`，按完整权重训练，
+不对冻结编码器应用辅助渐入。默认种子 42/17 是两套头初始化，二者共享同一次冻结特征、
+样本顺序、输入掩膜和vMF噪声；不能将其记为两个独立的主干训练种子。
+冻结主干采用eval模式，vMF单独保留训练噪声；读出头使用FP32。默认每512步保存头状态，
+最终逐rank核对编码器与头状态摘要。制品只含监督头、头优化器及来源身份，不是新编码器。
+`target_warmup.restore_warmed_heads` 在核对原编码器、目标准备、归一化和输入策略后严格载入头，
+不会把冻结阶段的优化器状态带入主干微调。
+
+`experiment diagnose-target-heads --config ... --initialize-config ... --checkpoint ...
+--warmup ... --midpoint ... --positions TRAIN_POSITIONS.json --output gradients.json`
+在既定训练位置比较初始/预热头，以及原始/修复后的上下文梯度路径。诊断使用FP32、训练模式和固定vMF噪声、
+不构造优化器；记录实际加权损失的范数与夹角、高分/融合/vMF完整小参数组和一个明确命名的STP参数。
+它不读取新的开发或确认角色，不把局部梯度冲突解释为下游退化的因果证明。

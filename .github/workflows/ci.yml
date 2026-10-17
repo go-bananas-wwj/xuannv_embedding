@@ -77,6 +77,8 @@ jobs:
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-targets --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-multisource --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-target-comparison --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment warmup-target-heads --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment diagnose-target-heads --help > /dev/null
       - run: >-
           XUANNV_GIT_SHA=${{ github.sha }}
           /tmp/xuannv-clean-install/bin/xuannv train

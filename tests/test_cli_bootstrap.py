@@ -73,6 +73,19 @@ def test_supervised_experiment_preparation_help(command) -> None:
     assert expected in result.stdout
 
 
+@pytest.mark.parametrize("command", ["warmup-target-heads", "diagnose-target-heads"])
+def test_frozen_head_workflow_help(command):
+    result = subprocess.run(
+        [sys.executable, "-m", "xuannv_embedding.cli", "experiment", command, "--help"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--checkpoint" in result.stdout and "--initialize-config" in result.stdout
+
+
 @pytest.mark.parametrize(
     "module",
     [

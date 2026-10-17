@@ -995,6 +995,26 @@ def main(argv=None) -> int:
         command.add_argument(f"--{name}", required=True, type=Path)
     command.set_defaults(handler=prepare_target_comparison)
     command = commands.add_parser(
+        "warmup-target-heads", help="Train independent readouts with the annual encoder frozen"
+    )
+    for name in ("config", "initialize-config", "checkpoint", "output"):
+        command.add_argument(f"--{name}", required=True, type=Path)
+    command.add_argument("--steps", required=True, type=int)
+    command.add_argument("--save-every", type=int, default=512)
+    command.add_argument("--head-seeds", nargs="+", type=int, default=[42, 17])
+    command.add_argument("--device", default="cuda")
+    command.set_defaults(handler=_warmup_target_heads)
+    command = commands.add_parser(
+        "diagnose-target-heads", help="Attribute fixed TRAIN gradients before/after head warmup"
+    )
+    for name in ("config", "initialize-config", "checkpoint", "warmup", "positions", "output"):
+        command.add_argument(f"--{name}", required=True, type=Path)
+    command.add_argument("--midpoint", type=Path)
+    command.add_argument("--mask-seed", type=int, default=9)
+    command.add_argument("--noise-seed", type=int, default=2026)
+    command.add_argument("--device", default="cuda:0")
+    command.set_defaults(handler=_diagnose_target_heads)
+    command = commands.add_parser(
         "prepare", help="Freeze paired ABC configs and stratified sample IDs"
     )
     for name in [
@@ -1088,3 +1108,15 @@ def main(argv=None) -> int:
     torch.set_num_threads(2)
     args.handler(args)
     return 0
+
+
+def _warmup_target_heads(args):
+    from xuannv_embedding.training.target_warmup import warmup
+
+    warmup(args)
+
+
+def _diagnose_target_heads(args):
+    from xuannv_embedding.training.target_gradients import diagnose
+
+    diagnose(args)
