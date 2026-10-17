@@ -50,7 +50,7 @@ jobs:
           for command in data downstream train diagnose export experiment; do
             /tmp/xuannv-clean-install/bin/xuannv "$command" --help > /dev/null
           done
-          # 从 parser 枚举，包含 targets-audit；新命令自动进入 wheel help 门禁。
+          # 从 parser 枚举，包含 targets-audit/targets-prepare/targets-local；新命令自动进入门禁。
           for command in $(/tmp/xuannv-clean-install/bin/python - <<'PY'
           import argparse
 
@@ -77,6 +77,10 @@ jobs:
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-targets --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-multisource --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment prepare-target-comparison --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment prepare-training-pool --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment development-prepare --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment development-export --help > /dev/null
+          /tmp/xuannv-clean-install/bin/xuannv experiment development-probe --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment warmup-target-heads --help > /dev/null
           /tmp/xuannv-clean-install/bin/xuannv experiment diagnose-target-heads --help > /dev/null
       - run: >-

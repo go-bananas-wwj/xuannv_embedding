@@ -979,6 +979,35 @@ def prepare_local_supervision(args):
     )
 
 
+def prepare_training_pool(args):
+    from xuannv_embedding.training.target_experiments import prepare_training_pool as prepare
+
+    result = prepare(args.prepared_root, args.initial_config, args.output, scope=args.scope)
+    print(
+        json.dumps(
+            {"frozen_training_positions": result["unique_positions"], "training_started": False}
+        )
+    )
+
+
+def _development_prepare(args):
+    from xuannv_embedding.downstream.spatial_development import prepare
+
+    prepare(args)
+
+
+def _development_export(args):
+    from xuannv_embedding.downstream.spatial_development import export
+
+    export(args)
+
+
+def _development_probe(args):
+    from xuannv_embedding.downstream.spatial_development import probe
+
+    probe(args)
+
+
 def prepare_target_comparison(args):
     from xuannv_embedding.training.target_comparison import prepare_comparison
 
@@ -1004,6 +1033,36 @@ def main(argv=None) -> int:
         command.add_argument(f"--{name}", required=True, type=Path)
     command.add_argument("--workers", type=int, default=4)
     command.set_defaults(handler=prepare_local_supervision)
+    command = commands.add_parser(
+        "prepare-training-pool",
+        help="Materialize a frozen training scope without choosing a recipe",
+    )
+    for name in ("prepared-root", "initial-config", "output"):
+        command.add_argument(f"--{name}", required=True, type=Path)
+    command.add_argument("--scope", choices=["screen", "expanded", "allowed"], default="allowed")
+    command.set_defaults(handler=prepare_training_pool)
+    command = commands.add_parser(
+        "development-prepare",
+        help="Freeze a new spatial-development readout protocol before label access",
+    )
+    for name in ("prepared-root", "target-root", "audit-contract", "matrix-plan", "output"):
+        command.add_argument(f"--{name}", required=True, type=Path)
+    command.set_defaults(handler=_development_prepare)
+    command = commands.add_parser(
+        "development-export",
+        help="Export observation-only features on frozen development positions",
+    )
+    command.add_argument("--plan", required=True, type=Path)
+    command.add_argument("--arm", required=True)
+    command.add_argument("--device", default="cuda:0")
+    command.add_argument("--workers", type=int, default=2)
+    command.set_defaults(handler=_development_export)
+    command = commands.add_parser(
+        "development-probe", help="Fit fixed spatial ridge readouts, using training folds only"
+    )
+    command.add_argument("--plan", required=True, type=Path)
+    command.add_argument("--arm", required=True)
+    command.set_defaults(handler=_development_probe)
     command = commands.add_parser(
         "prepare-target-comparison", help="Freeze a bounded two-recipe, two-seed comparison"
     )

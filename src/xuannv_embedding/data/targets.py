@@ -9,7 +9,13 @@ from pathlib import Path
 
 import numpy as np
 
-from xuannv_embedding.data.target_contract import LEGACY_TARGET_SCHEMA, LOCAL_TASKS, SCHEMA_TASKS
+from xuannv_embedding.data.target_contract import (
+    LEGACY_TARGET_SCHEMA,
+    LOCAL_TASKS,
+    SCHEMA_TASKS,
+    TRAINING_SCOPE_KEYS,
+    training_positions,
+)
 from xuannv_embedding.data_process.target_audit import WC_CODES, digest, local_path
 
 
@@ -26,8 +32,10 @@ class AnnualTargetReader:
         import pyarrow.parquet as pq
 
         self.root, self.prepared = target_root, prepared_root
-        if scope not in {"screen", "expanded"}:
-            raise ValueError("Training targets require screen or expanded experiment scope")
+        if scope not in TRAINING_SCOPE_KEYS:
+            raise ValueError(
+                "Training targets require screen, expanded or allowed experiment scope"
+            )
         path = prepared_root / "preparation.json"
         if digest(path) != preparation_sha256:
             raise ValueError("Target preparation identity mismatch")
@@ -56,14 +64,15 @@ class AnnualTargetReader:
         self.roles = {
             role: {row["patch_id"] for row in rows} for role, rows in split["roles"].items()
         }
-        self.roles["train"] = set(split[f"{scope}_patch_ids"])
+        scope_ids = training_positions(split, scope)
+        self.roles["train"] = set(scope_ids)
         self.tasks = SCHEMA_TASKS[self.preparation.get("target_schema", LEGACY_TARGET_SCHEMA)]
         self.allow_evaluation = allow_evaluation
         stats_path = prepared_root / f"train_statistics.{scope}.json"
         if digest(stats_path) != self.preparation["train_statistics_sha256"][scope]:
             raise ValueError("Target train statistics identity mismatch")
         self.statistics = json.loads(stats_path.read_text())
-        expected_rows = [self.rows[patch] for patch in split[f"{scope}_patch_ids"]]
+        expected_rows = [self.rows[patch] for patch in scope_ids]
         if (
             hashlib.sha256(json.dumps(expected_rows).encode()).hexdigest()
             != self.statistics["target_rows_sha256"]

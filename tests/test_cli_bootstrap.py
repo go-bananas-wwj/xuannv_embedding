@@ -29,7 +29,7 @@ def test_module_help_is_available_without_optional_dependencies() -> None:
     assert "region-agnostic monthly geospatial embeddings" in result.stdout
 
 
-@pytest.mark.parametrize("command", ["targets-audit", "targets-prepare"])
+@pytest.mark.parametrize("command", ["targets-audit", "targets-prepare", "targets-local"])
 def test_target_audit_help_does_not_import_optional_data_stack(command: str) -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
@@ -58,7 +58,13 @@ main(['data', COMMAND, '--help'])
 
 
 @pytest.mark.parametrize(
-    "command", ["prepare-targets", "prepare-multisource", "prepare-target-comparison"]
+    "command",
+    [
+        "prepare-targets",
+        "prepare-multisource",
+        "prepare-target-comparison",
+        "prepare-training-pool",
+    ],
 )
 def test_supervised_experiment_preparation_help(command) -> None:
     result = subprocess.run(
@@ -183,3 +189,18 @@ def test_top_level_subcommand_help_runs(command: str) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "usage:" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "command", ["development-prepare", "development-export", "development-probe"]
+)
+def test_spatial_development_workflow_help(command):
+    result = subprocess.run(
+        [sys.executable, "-m", "xuannv_embedding.cli", "experiment", command, "--help"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert ("--output" if command == "development-prepare" else "--plan") in result.stdout

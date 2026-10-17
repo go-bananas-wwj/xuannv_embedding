@@ -218,6 +218,10 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
         from xuannv_embedding.data_process.target_prepare import main
 
         return main(list(argv))
+    if command == "targets-local":
+        from xuannv_embedding.data_process.local_targets import main
+
+        return main(list(argv))
     if command == "grid":
         return grid_main(argv)
     if command == "registry":

@@ -827,8 +827,8 @@ def _parse_independent_targets(value: Any, model: ModelConfig) -> IndependentTar
     if schema not in SCHEMA_TASKS:
         raise ConfigError("Unsupported independent target schema")
     scope = _string(raw["scope"], section + ".scope")
-    if scope not in {"screen", "expanded"}:
-        raise ConfigError("Independent target scope must be screen or expanded")
+    if scope not in {"screen", "expanded", "allowed"}:
+        raise ConfigError("Independent target scope must be screen, expanded or allowed")
     sha = _string(raw["preparation_sha256"], section + ".preparation_sha256")
     if not re.fullmatch(r"[0-9a-f]{64}", sha):
         raise ConfigError("Independent target preparation SHA must be64hexcharacters")
