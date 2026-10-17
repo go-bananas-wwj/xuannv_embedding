@@ -3,7 +3,7 @@
 ```json
 {
   "stage": "training_and_validation",
-  "utc": 1792259478.881651,
+  "utc": 1792266893.1929903,
   "supervisor_pid": 219835,
   "completed": {},
   "restarts": {},
@@ -23,6 +23,10 @@
       {
         "step": 800,
         "validation_macro_f1": 0.5229426322506436
+      },
+      {
+        "step": 1600,
+        "validation_macro_f1": 0.5436560323793582
       }
     ],
     "frozen_anchored": [
