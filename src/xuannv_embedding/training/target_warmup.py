@@ -142,6 +142,52 @@ def restore_warmed_heads(path, module, *, seed, expected_contract, expected_mode
     return state
 
 
+def continue_readouts(path, heads, optimizer, *, config, model_sha256, world_size, epoch_batches):
+    """Continue completed frozen-view traversals; encoder and readout identity stay strict."""
+    from xuannv_embedding.training.annual_experiments import digest
+
+    state = torch.load(path, map_location="cpu", weights_only=True)
+    receipt = json.loads(path.with_suffix(".json").read_text())
+    if (
+        receipt["checkpoint_sha256"] != digest(path)
+        or receipt["world_size"] != world_size
+        or state["feature_seed"] != config.experiment.seed
+        or list(state["heads"]) != list(heads.readouts)
+        or receipt["global_annual_exposures"]
+        != (receipt["head_optimizer_updates_per_seed"] - receipt.get("previous_head_updates", 0))
+        * config.data.batch_size
+        * world_size
+    ):
+        raise ValueError("Readout continuation sampling/checkpoint identity differs")
+    step = state["head_optimizer_updates"]
+    if step < 1 or step % epoch_batches:
+        raise ValueError("Readout continuation requires a complete frozen-data traversal")
+    for seed, module in heads.readouts.items():
+        restore_warmed_heads(
+            path,
+            module,
+            seed=int(seed),
+            expected_contract=head_contract(config),
+            expected_model_sha256=model_sha256,
+        )
+    expected_lr = config.training.lr * config.training.independent_targets.head_lr_multiplier
+    optimizer.load_state_dict(state["optimizer"])
+    if any(group["lr"] != expected_lr for group in optimizer.param_groups):
+        raise ValueError("Readout continuation learning rate differs")
+    return (
+        step,
+        state["head_initialization"],
+        {
+            "path": str(path),
+            "sha256": digest(path),
+            "previous_steps": step,
+            "git_sha": state["git_sha"],
+            "source_code_sha256": state["source_code_sha256"],
+            "noise_rng_restarted": True,
+        },
+    )
+
+
 def load_base(config, initial_config_path, checkpoint, device):
     from xuannv_embedding.training.annual_experiments import digest
     from xuannv_embedding.training.cli import build_training_system
@@ -230,6 +276,23 @@ def warmup(args):
         )
         git_sha, source_sha = _git_sha(), _source_code_sha256()
         history, records, step = [], [], 0
+        parent = None
+        if args.readout_state is not None:
+            epoch_batches = sum(len(loader) for loader in stream.loaders)
+            step, initial, parent = continue_readouts(
+                args.readout_state,
+                heads,
+                optimizer,
+                config=config,
+                model_sha256=before,
+                world_size=world,
+                epoch_batches=epoch_batches,
+            )
+            if step >= args.steps:
+                raise ValueError("Requested total warmup budget is already complete")
+            stream.epoch = step // epoch_batches
+        previous_steps = step
+        epoch_metrics = []
         start = time.perf_counter()
 
         def save(path):
@@ -250,6 +313,7 @@ def warmup(args):
                     "model_optimizer_updates": 0,
                     "head_optimizer_updates": step,
                     "feature_seed": config.experiment.seed,
+                    "readout_parent": parent,
                     "feature_mode": (
                         "training masks and vMF noise; other frozen layers eval; "
                         "BF16 encoder if supported, FP32 readouts"
@@ -267,6 +331,8 @@ def warmup(args):
 
         while step < args.steps:
             count = 0
+            data_epoch = stream.epoch
+            totals = {seed: {} for seed in heads.readouts}
             for batch in stream:
                 rows = [(row["year"], row["patch_id"]) for row in batch["metadata"]]
                 metrics = head_step(
@@ -278,6 +344,15 @@ def warmup(args):
                     amp=config.training.amp,
                 )
                 records.extend(rows)
+                for seed, values in metrics["head_losses"].items():
+                    values = {
+                        name: value
+                        for name, value in values.items()
+                        if name in {f"target_{task}" for task in heads.readouts[seed].weights}
+                    }
+                    values["weighted_total"] = metrics["global_weighted_losses"][seed]
+                    for name, value in values.items():
+                        totals[seed][name] = totals[seed].get(name, 0.0) + value
                 step += 1
                 count += 1
                 if step == 1 or step % 25 == 0 or step == args.steps:
@@ -298,6 +373,17 @@ def warmup(args):
                     break
             if not count:
                 raise ValueError("No training batches available")
+            entry = {
+                "data_epoch": data_epoch,
+                "batches": count,
+                "global_batch_objective_means": {
+                    seed: {name: value / count for name, value in values.items()}
+                    for seed, values in totals.items()
+                },
+            }
+            epoch_metrics.append(entry)
+            if rank == 0:
+                print(json.dumps({"warmup_epoch": entry}), flush=True)
         if model_state_digest(model) != before:
             raise AssertionError("Frozen encoder changed")
         receipt = {
@@ -330,6 +416,9 @@ def warmup(args):
                     "head_seeds": args.head_seeds,
                     "feature_seed": config.experiment.seed,
                     "head_optimizer_updates_per_seed": step,
+                    "previous_head_updates": previous_steps,
+                    "head_updates_this_run": step - previous_steps,
+                    "readout_parent": parent,
                     "model_optimizer_updates": 0,
                     "global_annual_exposures": len(all_records),
                     "unique_annual_records": len(set(all_records)),
@@ -346,6 +435,7 @@ def warmup(args):
                     "source_code_sha256": source_sha,
                     "rank_metrics": ranks,
                     "training_loss_progress": history,
+                    "epoch_metrics": epoch_metrics,
                     "scope": "Training-only readout warmup; no downstream/confirmation scoring.",
                 },
             )

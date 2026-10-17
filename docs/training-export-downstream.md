@@ -240,6 +240,10 @@ torchrun --standalone --nproc_per_node=8 -m xuannv_embedding.cli experiment warm
 最终逐rank核对编码器与头状态摘要。制品只含监督头、头优化器及来源身份，不是新编码器。
 `target_warmup.restore_warmed_heads` 在核对原编码器、目标准备、归一化和输入策略后严格载入头，
 不会把冻结阶段的优化器状态带入主干微调。
+若头仍在学习，可用 `--readout-state /path/heads.pt --steps TOTAL` 延长冻结预热；
+它严格核对头、原模型、目标与输入策略、batch及卡数，恢复头优化器，只接受完整数据遍历边界。
+`TOTAL` 是累计头步数，仍受新配置的显式研究预算约束。输入掩膜沿用下一遍历的确定性种子，
+vMF噪声RNG重新初始化，不声明逐位接续；这不会恢复或更新主干优化器。
 
 `experiment diagnose-target-heads --config ... --initialize-config ... --checkpoint ...
 --warmup ... --midpoint ... --positions TRAIN_POSITIONS.json --output gradients.json`

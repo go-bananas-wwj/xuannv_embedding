@@ -1002,6 +1002,7 @@ def main(argv=None) -> int:
     command.add_argument("--steps", required=True, type=int)
     command.add_argument("--save-every", type=int, default=512)
     command.add_argument("--head-seeds", nargs="+", type=int, default=[42, 17])
+    command.add_argument("--readout-state", type=Path)
     command.add_argument("--device", default="cuda")
     command.set_defaults(handler=_warmup_target_heads)
     command = commands.add_parser(

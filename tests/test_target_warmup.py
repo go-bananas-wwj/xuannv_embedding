@@ -16,6 +16,7 @@ from xuannv_embedding.training.target_gradients import (
 from xuannv_embedding.training.target_warmup import (
     FORMAT,
     HeadReadouts,
+    continue_readouts,
     freeze_encoder,
     head_contract,
     head_step,
@@ -142,6 +143,63 @@ def test_gradient_cosine_distinguishes_opposition_from_missing_support():
     assert result["cosines"]["image"]["auxiliary_total"] == -1
     assert result["cosines"]["image"]["absent"] is None
     assert result["auxiliary_to_image_norm_ratio"] == 0.5
+
+
+def test_readout_continuation_preserves_optimizer_and_checks_traversal_identity(tmp_path):
+    import copy
+    import hashlib
+    import json
+
+    cfg = config()
+    cfg = replace(cfg, data=replace(cfg.data, batch_size=2))
+    model = FixedEncoder()
+    freeze_encoder(model)
+    data = batch()
+    heads = HeadReadouts(cfg, [42, 17])
+    initial = {seed: copy.deepcopy(m.state_dict()) for seed, m in heads.readouts.items()}
+    lr = cfg.training.lr * cfg.training.independent_targets.head_lr_multiplier
+    optimizer = torch.optim.AdamW(heads.parameters(), lr=lr)
+    head_step(model, heads, data, optimizer, device=torch.device("cpu"))
+    path = tmp_path / "heads.pt"
+    torch.save(
+        {
+            "format": FORMAT,
+            "contract": head_contract(cfg),
+            "model_state_sha256": "a" * 64,
+            "encoder_unchanged": True,
+            "model_optimizer_updates": 0,
+            "head_optimizer_updates": 1,
+            "feature_seed": cfg.experiment.seed,
+            "git_sha": "abcd123",
+            "source_code_sha256": "b" * 64,
+            "heads": {s: m.state_dict() for s, m in heads.readouts.items()},
+            "head_initialization": initial,
+            "optimizer": optimizer.state_dict(),
+        },
+        path,
+    )
+    path.with_suffix(".json").write_text(
+        json.dumps(
+            {
+                "checkpoint_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "world_size": 1,
+                "global_annual_exposures": 2,
+                "head_optimizer_updates_per_seed": 1,
+            }
+        )
+    )
+    resumed = HeadReadouts(cfg, [42, 17])
+    resumed_optimizer = torch.optim.AdamW(resumed.parameters(), lr=lr)
+    args = dict(config=cfg, model_sha256="a" * 64, world_size=1, epoch_batches=1)
+    step, _, parent = continue_readouts(path, resumed, resumed_optimizer, **args)
+    assert step == 1 and parent["noise_rng_restarted"] is True
+    head_step(model, heads, data, optimizer, device=torch.device("cpu"))
+    head_step(model, resumed, data, resumed_optimizer, device=torch.device("cpu"))
+    assert all(torch.equal(v, resumed.state_dict()[k]) for k, v in heads.state_dict().items())
+    with pytest.raises(ValueError, match="traversal"):
+        continue_readouts(path, resumed, resumed_optimizer, **{**args, "epoch_batches": 2})
+    with pytest.raises(ValueError, match="identity"):
+        continue_readouts(path, resumed, resumed_optimizer, **{**args, "world_size": 2})
 
 
 def _distributed_warmup_worker(rank, rendezvous, directory):
