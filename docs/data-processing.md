@@ -32,6 +32,7 @@ xuannv data release-quality       完成云影、配准、重复和放行门禁
 xuannv data check-annual          抽样读取年度原生网格数据
 xuannv data targets-audit         核验独立目标包、年度关联、覆盖及候选训练统计量
 xuannv data targets-prepare       冻结空间实验划分并生成原生DEM的40m监督缓存
+xuannv data targets-local         按screen/expanded/allowed冻结训练范围派生七目标缓存
 xuannv data p0                    从观测 pilot 准备真实 P0 训练数据
 ```
 
@@ -89,6 +90,19 @@ WorldCover 使用已验收的 2020/2021 年度 10m 数组。三套 `train_statis
 按 40m/640m/5m 的监督网格聚合坡度、CLCD、夜光及 OSM 结构，并核验实际使用的七个新增
 年度归档。它不重新选样或读取确认位置；输出与原监督目录分开保存，细节见
 [训练、导出与下游评测](training-export-downstream.md)。
+
+`targets-local` 在既有空间划分及原生DSM准备之后派生坡度、CLCD、夜光和OSM监督。
+`--scope screen`（默认）、`expanded` 或 `allowed` 各自使用对应的冻结训练位置与统计量，
+并生成独立缓存；缓存scope必须与训练配置完全一致。`allowed` 是已排除所有评测角色的
+完整允许训练池，不含开发、验证或确认位置。命令不会改动父准备包或正式放行标志。
+
+```bash
+xuannv data targets-local --prepared-root /path/native_ready --target-root /path/targets \
+  --output /path/new/allowed_ready --scope allowed --workers 4
+```
+
+扩大训练范围后必须使用新缓存的准备SHA及本scope的DSM统计量；旧screen预热头的输入/目标
+合同不能直接冒充allowed合同。需要在新合同下重新预热，或另做有来源记录的显式转换。
 
 ## 全国不变量
 

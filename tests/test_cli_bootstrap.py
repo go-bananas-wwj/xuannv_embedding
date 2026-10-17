@@ -29,7 +29,7 @@ def test_module_help_is_available_without_optional_dependencies() -> None:
     assert "region-agnostic monthly geospatial embeddings" in result.stdout
 
 
-@pytest.mark.parametrize("command", ["targets-audit", "targets-prepare"])
+@pytest.mark.parametrize("command", ["targets-audit", "targets-prepare", "targets-local"])
 def test_target_audit_help_does_not_import_optional_data_stack(command: str) -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")

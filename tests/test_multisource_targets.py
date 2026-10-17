@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import numpy as np
@@ -23,7 +24,9 @@ def local_bundle(target_bundle):  # noqa: F811
     for year in (2020, 2021):
         for task, value in (("clcd", 8), ("nightlights", -0.25 if year == 2020 else 2.0)):
             path = root / f"static/{task}_{year}.zarr.zip"
-            values = np.full((2, 128, 128), value, dtype=np.uint8 if task == "clcd" else np.float32)
+            values = np.full(
+                (len(index), 128, 128), value, dtype=np.uint8 if task == "clcd" else np.float32
+            )
             with zarr.ZipStore(str(path), mode="w") as store:
                 group = zarr.group(store=store)
                 group.create_dataset(f"targets/{task}_{year}", data=values)
@@ -46,7 +49,7 @@ def local_bundle(target_bundle):  # noqa: F811
             for year in (2020, 2021) if name == "reliable_negative" else (int(name),):
                 if name == "reliable_negative":
                     for channel in OSM_CHANNELS:
-                        states = np.zeros((2, 128, 128), np.uint8)
+                        states = np.zeros((len(index), 128, 128), np.uint8)
                         states[:, 64:96, 64:96] = 3
                         group.create_dataset(f"{year}/states/{channel}", data=states)
                         group.create_dataset(
@@ -60,7 +63,7 @@ def local_bundle(target_bundle):  # noqa: F811
                     ]:
                         prefix = f"{year}/" + ("structure_2p5m/" if structure else "")
                         for channel in channels:
-                            x = np.zeros((2, size, size), np.uint8)
+                            x = np.zeros((len(index), size, size), np.uint8)
                             x[:, 16:32, 16:32] = 255
                             for field in ("targets", "states", "confidence", "source_bits"):
                                 data = (
@@ -83,9 +86,19 @@ def local_bundle(target_bundle):  # noqa: F811
     write_json(parent / "preparation.json", parent_receipt)
     write_json(parent / "pretraining_split_binding.json", {})
     for scope in ("allowed", "expanded"):
-        (parent / f"train_statistics.{scope}.json").write_bytes(
-            (parent / "train_statistics.screen.json").read_bytes()
+        stats = json.loads((parent / "train_statistics.screen.json").read_text())
+        stats.update(
+            scope=scope,
+            unique_positions=len(index) - 1,
+            target_rows_sha256=hashlib.sha256(
+                json.dumps(list(range(len(index) - 1))).encode()
+            ).hexdigest(),
         )
+        write_json(parent / f"train_statistics.{scope}.json", stats)
+        parent_receipt["train_statistics_sha256"][scope] = digest(
+            parent / f"train_statistics.{scope}.json"
+        )
+    write_json(parent / "preparation.json", parent_receipt)
     output = parent.with_name("local_ready")
     prepare_local_targets(parent, root, output, workers=2)
     return root, output, digest(output / "preparation.json"), index

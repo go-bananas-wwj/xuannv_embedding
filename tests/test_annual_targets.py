@@ -13,7 +13,7 @@ from xuannv_embedding.data_process.target_audit import digest, write_json
 
 
 @pytest.fixture
-def target_bundle(tmp_path):
+def target_bundle(tmp_path, request):
     pa = pytest.importorskip("pyarrow")
     pq = pytest.importorskip("pyarrow.parquet")
     zarr = pytest.importorskip("zarr")
@@ -25,7 +25,11 @@ def target_bundle(tmp_path):
     paths, first = make_native_archive(tmp_path, split_inside_tiff=False)
     epsg, col, row = first["patch_id"].removeprefix("parent_").split(":")
     second = geometry_record(f"parent_{epsg}:{int(col) + 1}:{row}")
-    index = [dict(first, target_row=0), dict(second, target_row=1)]
+    count = getattr(request, "param", 2)
+    positions = [first, second]
+    if count == 3:
+        positions.append(geometry_record(f"parent_{epsg}:{int(col) + 2}:{row}"))
+    index = [dict(value, target_row=i) for i, value in enumerate(positions)]
     root, prepared = tmp_path / "targets", tmp_path / "prepared"
     (root / "static").mkdir(parents=True)
     prepared.mkdir()
@@ -47,7 +51,7 @@ def target_bundle(tmp_path):
     for year, code in [(2020, 50), (2021, 80)]:
         name = f"worldcover_{year}"
         relative = f"static/{name}.zarr.zip"
-        values = np.full((2, 128, 128), code, dtype=np.uint8)
+        values = np.full((count, 128, 128), code, dtype=np.uint8)
         valid = np.ones_like(values, dtype=bool)
         values[:, 0, 0], valid[:, 0, 0] = 0, False
         with zarr.ZipStore(str(root / relative), mode="w") as store:
@@ -61,13 +65,14 @@ def target_bundle(tmp_path):
                 sha256=digest(root / relative),
             )
         )
-    write_json(root / "manifest.json", {"patches": 2, "files": entries})
+    write_json(root / "manifest.json", {"patches": count, "files": entries})
     write_json(
         prepared / "experiment_splits.json",
         {
-            "roles": {"development": [second], "validation": [], "confirmation": []},
+            "roles": {"development": [positions[-1]], "validation": [], "confirmation": []},
             "screen_patch_ids": [first["patch_id"]],
-            "expanded_patch_ids": [first["patch_id"]],
+            "expanded_patch_ids": [value["patch_id"] for value in positions[:-1]],
+            "allowed_train_patch_ids": [value["patch_id"] for value in positions[:-1]],
         },
     )
     write_json(

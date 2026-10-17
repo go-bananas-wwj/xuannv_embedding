@@ -21,6 +21,30 @@ SCHEMA_TASKS = {
     MULTISOURCE_TARGET_SCHEMA: frozenset(TARGET_TASKS),
 }
 
+TRAINING_SCOPE_KEYS = {
+    "screen": "screen_patch_ids",
+    "expanded": "expanded_patch_ids",
+    "allowed": "allowed_train_patch_ids",
+}
+
+
+def training_positions(split, scope):
+    """Return frozen training IDs; every evaluation role remains excluded in every scope."""
+    if scope not in TRAINING_SCOPE_KEYS:
+        raise ValueError("Unknown frozen training scope")
+    values = split[TRAINING_SCOPE_KEYS[scope]]
+    if (
+        not isinstance(values, list)
+        or not values
+        or not all(isinstance(value, str) for value in values)
+        or len(set(values)) != len(values)
+    ):
+        raise ValueError("Frozen training positions must be nonempty and unique")
+    evaluation = {row["patch_id"] for rows in split["roles"].values() for row in rows}
+    if set(values) & evaluation:
+        raise ValueError("Frozen training scope overlaps an evaluation role")
+    return list(values)
+
 
 def target_shape(task: str) -> tuple[int, ...]:
     channels, pool, kind = TARGET_TASKS[task]

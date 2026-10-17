@@ -19,6 +19,7 @@ from xuannv_embedding.data.target_contract import (
     STRUCTURE_CHANNELS,
     TARGET_TASKS,
     target_shape,
+    training_positions,
 )
 from xuannv_embedding.data.target_transforms import (
     aggregate_continuous,
@@ -62,7 +63,9 @@ def summarize_batch(data, task):
     return result
 
 
-def prepare_local_targets(parent: Path, target_root: Path, output: Path, *, workers=4):
+def prepare_local_targets(
+    parent: Path, target_root: Path, output: Path, *, workers=4, scope="screen"
+):
     import pyarrow as pa
     import pyarrow.parquet as pq
     import zarr
@@ -79,10 +82,12 @@ def prepare_local_targets(parent: Path, target_root: Path, output: Path, *, work
     ):
         raise ValueError("Derived supervision must not overwrite its source roots")
     parent_sha = digest(parent / "preparation.json")
-    with AnnualTargetReader(target_root, parent, preparation_sha256=parent_sha) as reader:
+    with AnnualTargetReader(
+        target_root, parent, preparation_sha256=parent_sha, scope=scope
+    ) as reader:
         source_rows, native_hashes = dict(reader.rows), dict(reader.row_hashes)
     split = json.loads((parent / "experiment_splits.json").read_text())
-    ids = sorted(split["screen_patch_ids"], key=source_rows.__getitem__)
+    ids = sorted(training_positions(split, scope), key=source_rows.__getitem__)
     source_index = np.array([source_rows[p] for p in ids])
     manifest = json.loads((target_root / "manifest.json").read_text())
     names = {
@@ -114,9 +119,9 @@ def prepare_local_targets(parent: Path, target_root: Path, output: Path, *, work
     (output / "native_dem").symlink_to((parent / "native_dem").resolve(), target_is_directory=True)
     for name in ("experiment_splits.json", "pretraining_split_binding.json"):
         (output / name).write_bytes((parent / name).read_bytes())
-    for scope in ("allowed", "expanded"):
-        (output / f"train_statistics.{scope}.json").symlink_to(
-            (parent / f"train_statistics.{scope}.json").resolve()
+    for other_scope in {"screen", "expanded", "allowed"} - {scope}:
+        (output / f"train_statistics.{other_scope}.json").symlink_to(
+            (parent / f"train_statistics.{other_scope}.json").resolve()
         )
     group = zarr.open_group(str(cache / "targets.zarr"), mode="w")
     group.attrs.update(complete=False, schema=MULTISOURCE_TARGET_SCHEMA)
@@ -287,7 +292,7 @@ def prepare_local_targets(parent: Path, target_root: Path, output: Path, *, work
     local_manifest = {
         "schema": MULTISOURCE_TARGET_SCHEMA,
         "complete": True,
-        "scope": "screen",
+        "scope": scope,
         "positions": len(ids),
         "years": [2020, 2021],
         "tasks": list(LOCAL_TASKS),
@@ -311,14 +316,14 @@ def prepare_local_targets(parent: Path, target_root: Path, output: Path, *, work
         "runtime": {"numpy": np.__version__, "zarr": zarr.__version__},
     }
     write_json(cache / "manifest.json", local_manifest)
-    stats = json.loads((parent / "train_statistics.screen.json").read_text())
+    stats = json.loads((parent / f"train_statistics.{scope}.json").read_text())
     stats["local_target_statistics_by_year"] = statistics
     stats["local_target_statistics_note"] = (
         "Descriptive training-scope counts; static slope is duplicated by year in cache, "
         "unique statistics are year2020 only. Existing DSM normalization retained; "
         "nightlights preserved in stored units."
     )
-    write_json(output / "train_statistics.screen.json", stats)
+    write_json(output / f"train_statistics.{scope}.json", stats)
     preparation = json.loads((parent / "preparation.json").read_text())
     preparation.update(
         schema="xuannv.target-preparation.v2",
@@ -329,8 +334,31 @@ def prepare_local_targets(parent: Path, target_root: Path, output: Path, *, work
         formal_training_released=False,
         completed_at=datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
     )
-    preparation["train_statistics_sha256"]["screen"] = digest(
-        output / "train_statistics.screen.json"
+    preparation["train_statistics_sha256"][scope] = digest(
+        output / f"train_statistics.{scope}.json"
     )
     write_json(output / "preparation.json", preparation)
     return preparation
+
+
+def main(argv=None):
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="xuannv data targets-local")
+    for name in ("prepared-root", "target-root", "output"):
+        parser.add_argument(f"--{name}", required=True, type=Path)
+    parser.add_argument("--scope", choices=["screen", "expanded", "allowed"], default="screen")
+    parser.add_argument("--workers", type=int, default=4)
+    args = parser.parse_args(argv)
+    result = prepare_local_targets(
+        args.prepared_root, args.target_root, args.output, workers=args.workers, scope=args.scope
+    )
+    print(
+        json.dumps(
+            {
+                "prepared_scope": args.scope,
+                "formal_training_released": result["formal_training_released"],
+            }
+        )
+    )
+    return 0

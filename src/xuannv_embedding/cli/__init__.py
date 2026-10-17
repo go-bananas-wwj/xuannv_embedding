@@ -76,6 +76,7 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
         "check-annual": "抽样验收年度原生网格和变长观测读取器",
         "targets-audit": "全量核验独立目标包、年度关联、覆盖与候选训练统计量",
         "targets-prepare": "冻结空间实验划分，并从原生DEM生成40m监督缓存",
+        "targets-local": "按冻结训练范围生成七目标派生缓存，不改变数据放行状态",
         "p0": "从观测 pilot 准备真实 P0 训练数据",
     }
     for command, help_text in descriptions.items():
