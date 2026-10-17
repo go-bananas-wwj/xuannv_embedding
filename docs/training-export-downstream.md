@@ -71,6 +71,12 @@ loss scaling），仅在硬件不支持 bf16 时回退到 fp16 + GradScaler。
 恢复或导出新格式 checkpoint 时，还会逐项核对当前配置文件 SHA-256、source schema 和 region
 清单；任一身份不一致都会在加载权重前失败，不能把别的运行状态静默套到当前数据合同。
 
+DDP 包装前，各进程还会核对参数和 buffer 的名称、注册顺序、形状、类型与训练标志；
+同形状但不同传感器的层也必须一致。年度 PAN 投影层按配置列表顺序注册。新 checkpoint
+逐优化器参数组保存参数名，恢复前检查槽位身份；顺序改变时直接拒绝。历史多 PAN checkpoint
+未保存这项身份，其优化器状态无法安全续训；仍可按名称加载模型进行推理或用
+`--initialize-from` 开始新的优化器。已有单模型评测数值保留，修复前多卡运行的配方比较需要重跑。
+
 修改训练目标后继续优化既有模型，使用成对的 `--initialize-from`、`--initialize-config`。
 它们先按原配置严格核验 checkpoint，只加载模型参数，重新创建 optimizer、scheduler 和损失
 predictor；原 checkpoint 的摘要、epoch、Git SHA 会记入新制品。该操作与 `--resume` 互斥，

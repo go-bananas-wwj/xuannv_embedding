@@ -185,7 +185,10 @@ class Annual5mModel(nn.Module):
         super().__init__()
         self.sensor_channels = dict(sensor_channels)
         self.source_roles = dict(source_roles)
-        self.pan_sources = set(pan_sources)
+        # DDP and optimizer checkpoints match parameters by registration order.
+        # A set can register same-shaped PAN projectors under different names on
+        # different ranks, silently broadcasting/reducing the wrong sensor.
+        self.pan_sources = tuple(pan_sources)
         self.target_sources = dict(target_sources)
         self.feature_dim = feature_dim
         self.embed_dim = embed_dim

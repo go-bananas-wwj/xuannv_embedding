@@ -26,6 +26,7 @@ from xuannv_embedding.training.checkpoint import (
     save_training_checkpoint,
 )
 from xuannv_embedding.training.distillation import freeze_teacher
+from xuannv_embedding.training.distributed_layout import validate_distributed_layout
 from xuannv_embedding.training.losses import TotalLoss
 from xuannv_embedding.training.masking import apply_input_masking
 from xuannv_embedding.training.optimizer import build_optimizer, build_scheduler
@@ -656,6 +657,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             optimizer=optimizer,
             scheduler=scheduler,
             device=device,
+            optimizer_named_parameters=system.named_parameters(),
             expected_config_sha256=config_sha256,
             expected_source_schema=source_schema,
             expected_regions=regions,
@@ -679,6 +681,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         torch.backends.cudnn.allow_tf32 = True
         system.model.temporal_encoder.compile()
     wrapped: nn.Module = system
+    parameter_layout_sha256 = validate_distributed_layout(system)
     if distributed:
         # precision_scale=1 时 AEFModel 会跳过 upsample_head（编码器输出已是输入分辨率），
         # 该子模块的 6 个参数因此拿不到梯度。它们属于已登记的 431 键合同，不能删，
@@ -740,8 +743,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 source_schema=source_schema,
                 regions=regions,
                 auxiliary_state=system.auxiliary_state(),
+                optimizer_named_parameters=system.named_parameters(),
                 metrics={
                     "checkpoint_kind": "periodic",
+                    "parameter_layout_sha256": parameter_layout_sha256,
                     "completed_epoch": completed_epoch,
                     "teacher_identity": teacher_identity,
                     "initialization_identity": initialization_identity,
@@ -788,6 +793,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     summary.update(
         {
             "world_size": dist.get_world_size() if distributed else 1,
+            "parameter_layout_sha256": parameter_layout_sha256,
             "spatial_size": args.spatial_size,
             "device_type": device.type,
             "source_code_sha256": source_code_sha256,
@@ -824,6 +830,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_schema=source_schema,
             regions=regions,
             auxiliary_state=system.auxiliary_state(),
+            optimizer_named_parameters=system.named_parameters(),
             metrics=summary,
         )
         print(json.dumps(summary, ensure_ascii=False, sort_keys=True))

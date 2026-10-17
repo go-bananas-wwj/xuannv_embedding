@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +71,45 @@ def _atomic_torch_save(state: dict[str, Any], path: Path) -> None:
         raise
 
 
+def optimizer_parameter_names(
+    optimizer: Optimizer,
+    model: nn.Module,
+    criterion: nn.Module | None = None,
+    named_parameters: Iterable[tuple[str, nn.Parameter]] | None = None,
+) -> list[list[str]]:
+    """Bind every positional optimizer slot to its semantic parameter name."""
+    if named_parameters is None:
+        named_parameters = [
+            (f"{prefix}.{name}", parameter)
+            for prefix, module in (("model", model), ("criterion", criterion))
+            if module is not None
+            for name, parameter in module.named_parameters()
+        ]
+    names = {}
+    seen_names = set()
+    for name, parameter in named_parameters:
+        if not isinstance(name, str) or not name or name in seen_names:
+            raise CheckpointError("Optimizer parameter names must be nonempty and unique")
+        if id(parameter) in names:
+            raise CheckpointError("Optimizer parameter has multiple semantic names")
+        names[id(parameter)] = name
+        seen_names.add(name)
+    try:
+        groups = [
+            [names[id(parameter)] for parameter in group["params"]]
+            for group in optimizer.param_groups
+        ]
+    except KeyError as exc:
+        raise CheckpointError(
+            "Optimizer contains a parameter outside model/criterion; provide "
+            "optimizer_named_parameters for the complete TrainingSystem"
+        ) from exc
+    flat = [name for group in groups for name in group]
+    if len(flat) != len(set(flat)):
+        raise CheckpointError("Optimizer parameter appears in multiple slots")
+    return groups
+
+
 def save_training_checkpoint(
     path: str | Path,
     *,
@@ -84,6 +124,7 @@ def save_training_checkpoint(
     regions: list[str],
     metrics: dict[str, Any] | None = None,
     auxiliary_state: dict[str, Any] | None = None,
+    optimizer_named_parameters: Iterable[tuple[str, nn.Parameter]] | None = None,
 ) -> None:
     """按版本化生产合同原子保存训练状态。"""
     _validate_metadata(
@@ -103,6 +144,9 @@ def save_training_checkpoint(
         "model": model.state_dict(),
         "criterion": criterion.state_dict() if criterion is not None else None,
         "optimizer": optimizer.state_dict(),
+        "optimizer_parameter_names": optimizer_parameter_names(
+            optimizer, model, criterion, optimizer_named_parameters
+        ),
         "scheduler": scheduler.state_dict() if scheduler is not None else None,
         "metrics": dict(metrics or {}),
         "auxiliary_state": dict(auxiliary_state or {}),
@@ -121,6 +165,7 @@ def load_training_checkpoint(
     expected_config_sha256: str | None = None,
     expected_source_schema: dict[str, Any] | None = None,
     expected_regions: list[str] | None = None,
+    optimizer_named_parameters: Iterable[tuple[str, nn.Parameter]] | None = None,
 ) -> dict[str, Any]:
     """严格加载新格式 checkpoint；不接受缺失溯源元数据的文件。"""
     try:
@@ -153,6 +198,21 @@ def load_training_checkpoint(
         raise CheckpointError("checkpoint source_schema 与当前配置不一致")
     if state["regions"] != expected_regions:
         raise CheckpointError("checkpoint regions 与当前配置不一致")
+    if optimizer is not None:
+        saved_names = state.get("optimizer_parameter_names")
+        if saved_names is None:
+            if len(getattr(model, "highres_projections", {})) > 1:
+                raise CheckpointError(
+                    "Legacy multi-PAN checkpoint has no optimizer parameter-name identity; "
+                    "optimizer resume is unsafe. Load model weights only and "
+                    "start a fresh optimizer."
+                )
+        elif saved_names != optimizer_parameter_names(
+            optimizer, model, criterion, optimizer_named_parameters
+        ):
+            raise CheckpointError(
+                "Checkpoint optimizer parameter names/order differ; positional restore rejected"
+            )
     try:
         model.load_state_dict(state["model"], strict=True)
         if criterion is not None:

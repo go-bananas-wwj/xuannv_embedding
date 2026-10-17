@@ -284,6 +284,9 @@ def warmup(args):
             for seed, module in heads.readouts.items()
         }
         heads.to(device)
+        from xuannv_embedding.training.distributed_layout import validate_distributed_layout
+
+        validate_distributed_layout(heads)
         wrapped = (
             nn.parallel.DistributedDataParallel(
                 heads,
