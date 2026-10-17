@@ -534,6 +534,10 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "regional-tuning":
+        from xuannv_embedding.training.regional_tuning import main as tuning_main
+
+        return tuning_main(forwarded[1:])
     if forwarded and forwarded[0] == "watchdog":
         from xuannv_embedding.training.watchdog import main as watchdog_main
 
@@ -552,6 +556,7 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("regional-tuning", help="验证集选参并监控有界区域实验", add_help=False)
     sub.add_parser("watchdog", help="监控并从有效检查点恢复区域训练", add_help=False)
     sub.add_parser("regional-benchmark", help="固定空间下游评测与阶段同步", add_help=False)
     sub.add_parser("paired-region", help="准备同区域公共三源与静态高分对照", add_help=False)
