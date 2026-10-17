@@ -13,6 +13,11 @@
       "stage": "complete",
       "utc": 1792236013.2265046,
       "validation_macro_f1": 0.532822990777096
+    },
+    "faster_fusion": {
+      "stage": "complete",
+      "utc": 1792236090.1254928,
+      "validation_macro_f1": 0.5332629472138632
     }
   }
 }
