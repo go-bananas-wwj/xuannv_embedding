@@ -1,8 +1,8 @@
 {
   "report": "xuannv_annual5m_report.tex",
-  "report_version": "1.15",
+  "report_version": "1.16",
   "verified_date": "2026-10-17",
-  "scope": "Preserves E1-E20 and every prior verified metric object. Adds E21-E22 for execution of the low-LR two-recipe,two-seed comparison, unchanged primary rule and secondary cross-LR diagnostics. No new confirmation roles or production promotion.",
+  "scope": "Preserves E1-E22 and every prior verified scientific metric. Adds E23-E24 for frozen100M target-head prewarm and training-only gradient attribution. Mainmodelupdates0; no new downstream/confirmation scores or production promotion.",
   "evidence": {
     "E1": {
       "path": "/data/heyuhang/processed/national_annual5m_quality_v6/summary.json",
@@ -4009,6 +4009,429 @@
         "new_confirmation_roles_opened": false
       },
       "test_scope": "Production package, tests and dependencies unchanged. Reuses the previously executed443-pass2-skip full suite; no new full-suite run claimed."
+    },
+    "E23": {
+      "scope": "Frozen-original100M readout warmup only. Initial1024update plan followed by a documented training-only extension to total4096; no backbone optimizer or new downstream scores.",
+      "verified_at": "2026-10-17T23:29:38.401444+08:00",
+      "files": [
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/plan.json",
+          "sha256": "99fbbb37a596cf36c26b397592dc71b77a72b8d54fad7873f4f937e567b0c9a3"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/config.yaml",
+          "sha256": "5b59cd1c83b03d8929fd667b0e6c5349138e0037430eb5a68aff7ff2ed395f90"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/plan.json",
+          "sha256": "c7114d638a6e566a058e14419a9cd975722f9a4dcd7b77193e22d6a9223d53c2"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/config.yaml",
+          "sha256": "a373681c4d8323acdcbb56c2199c8ac5cb0e8fb681026b81f2dc33b373261569"
+        },
+        {
+          "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_checks_20261016/gradient_positions.json",
+          "sha256": "aef5f270ddd67450413fb88d7d2555befe4cfc6d3ed4e3da2bc2fa5d4794fb9d"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/prepare.py",
+          "sha256": "1e653e6dcf76bd543f46c8353c476aea3bd82aa64ea1f46d59972178f335a009"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/preparation.log",
+          "sha256": "935c99b4b17839e111e267f3e12b8ab4dd6178ec6cf5ed6a9d64a62b9bfa4834"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/prepare_extension.py",
+          "sha256": "5fb69f8a98d088b650145da867f286f7fb97a14ea973a9554eef9dc6d89a76bc"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/extension_preparation.log",
+          "sha256": "f0f2a24324c3309788b219b4a31e9d8e35ec316f8c5e18f97642488fc8a602bb"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/audit_scope.py",
+          "sha256": "73c930fa771693cd5f8be03b94cbca296f72dd0554f2eb0188e122dcecbc3d22"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/scope_audit.json",
+          "sha256": "a9194fe16b3238b5bb5ac91eb41a7988baa395efa5139fe0a474e9f088687dbb"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/scope_audit.log",
+          "sha256": "fc0fb5fc7618c371991473df07c1385d4aeed8bf704a46a4e2dba7045c6d784a"
+        }
+      ],
+      "phases": {
+        "initial": {
+          "git_sha": "4236ec110ff7550220e41a26773f55a07b34fbe5",
+          "source_code_sha256": "699b67270a739f5d146cf42cf33dc8faf53c02c118f3ac6202353c41be4796bd",
+          "plan_sha256": "99fbbb37a596cf36c26b397592dc71b77a72b8d54fad7873f4f937e567b0c9a3"
+        },
+        "extended": {
+          "git_sha": "dee3e173b7ee094c6f238cab692e4844f56a0a09",
+          "source_code_sha256": "9a6fd9d34379afb42415e750edbf4832d77886976de724bbefc23ab3869380d8",
+          "plan_sha256": "c7114d638a6e566a058e14419a9cd975722f9a4dcd7b77193e22d6a9223d53c2"
+        }
+      },
+      "model_parameters": 104216905,
+      "trainable_parameters": 3900,
+      "head_parameters_per_initialization": 1950,
+      "head_initialization_seeds": [
+        42,
+        17
+      ],
+      "feature_seed": 42,
+      "shared_feature_views_and_data_order": true,
+      "head_seeds_are_not_backbone_training_repeats": true,
+      "head_learning_rate": 0.003,
+      "weights_unchanged_total": 0.2,
+      "main_model_optimizer_updates": 0,
+      "frozen_training_positions": 8192,
+      "annual_records": 16384,
+      "all_phases_feature_exposures": 131072,
+      "head_updates_per_seed_total": 4096,
+      "formal_release_changed": false,
+      "scope_audit": {
+        "passed": true,
+        "training_positions": 8192,
+        "training_annual_records": 16384,
+        "downstream_candidates": 327,
+        "downstream_overlap": 0,
+        "new_frozen_role_overlap": 0,
+        "gradient_positions": [
+          "parent_32650:470:3431",
+          "parent_32651:198:2605",
+          "parent_32645:551:3709"
+        ],
+        "gradient_annual_observations": 6,
+        "labels_or_scores_from_new_roles_read": false,
+        "formal_training_released": false,
+        "plan_sha256": "c7114d638a6e566a058e14419a9cd975722f9a4dcd7b77193e22d6a9223d53c2"
+      },
+      "extension_is_posthoc_and_training_only": true,
+      "diagnostic_snapshot_clarification": "The extended frozen plan inherited an old diagnostic_scope prose label initial/512/1024. Its midpoint_steps=2048, executed command and diagnostic snapshots are authoritative: initial/2048/4096. The frozen plan itself was not rewritten.",
+      "readout_continuation": "HeadAdam state preserved, complete-traversal sampling boundary; vMFnoiseRNG restarted explicitly, no bitwise-resume claim."
+    },
+    "E24": {
+      "scope": "Completed frozen readout prewarm, strict per-rank state/optimizer verification and FP32 train-mode gradients on six previously selected training records. Readout/gradient diagnostics do not establish embedding accuracy.",
+      "verified_at": "2026-10-17T23:29:38.401444+08:00",
+      "files": [
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/run.py",
+          "sha256": "e3a620a67b1ed175d9edfe854de70c91cb1cdb455a550bdc50e63ac6dd30882b"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/runner.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/process.json",
+          "sha256": "4f59cb18e2c6d52c14d685e05b4c2f8161bb43192d8594c6376ba791653be366"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/warmup.log",
+          "sha256": "ea19fe30a09c6330d484536c8abd6ffba1b6531f6f4907d753e688e7e63afc86"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/check_heads.py",
+          "sha256": "8d1d603fdf4267f4d8a73ae049f718ca0d1b48d87438ada6d9d6063e52316945"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/check_heads.log",
+          "sha256": "69e51df553818fdddd34baa96439ec54cfb788cff445f66afd3881b4ba062b20"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/head_verification.json",
+          "sha256": "83d615be9eb2535433a991d63f35c65af7b65c73d43beb235172f01190ecc2be"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/gradients.log",
+          "sha256": "9ae1130cd5a345e014bb2adb71d2e0a2001567a944dd69c431f11ddb1da08ddc"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/gradients.json",
+          "sha256": "9356d7e28bcfe448f99019bc97e99679a13a492d44f3653d188d1fb21ca9fd3c"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/summarize.py",
+          "sha256": "fe9736633fe494afcc333a84409fea5c60ba70a7b527c5e3e36c8cf0720ee36c"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/summary.json",
+          "sha256": "2bded484cb08603a9c94747e087b107c84dedc73f165aa3020101bb104370ed4"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/summary.log",
+          "sha256": "a6248e16b4a949988d3a94360a35714405186485959901dc33b4bb0ff9f4ad2a"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/plot.py",
+          "sha256": "24c4174944c567d282e1bd236ca7a0cb28733b0617e0965a367c1ef3f3f619fa"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/plot.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/head_warmup.pdf",
+          "sha256": "538f52298dd822cd32e2b7f1c07eccbb5cc83e6deb55fa2a9908557bc1f53240"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/head_warmup.png",
+          "sha256": "f629c7c5c62d16697eceffa8d3a7f104543e688484f05a148cbb3ac0d1f6485c"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/figure_derivation.json",
+          "sha256": "2d6215d8801f634a345492a1802347323d2cab1deba6531c09513f153abccfed"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/run.py",
+          "sha256": "25f780e453e812278a91e954555384e7b0a9ab5fc3240a4d815cd0df5dc04290"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/runner.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/process.json",
+          "sha256": "f8ea04fd6f21e3a22c53d731beb21e6941c3a634984fa247d965542afa5b4648"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/warmup.log",
+          "sha256": "32865fa61aa6404250854c60a2887af8f45c466934cc321eb9ce98b1971f9499"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/check_heads.py",
+          "sha256": "31e73557210779df36d04cb7c47cbd88c649a8e00307e7e2aadef4863a587da8"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/check_heads.log",
+          "sha256": "69e51df553818fdddd34baa96439ec54cfb788cff445f66afd3881b4ba062b20"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/head_verification.json",
+          "sha256": "734c20c80ce774f750814734ce6215a9a2dcb9b1120866eb37a7c9ffbea30faa"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/gradients.log",
+          "sha256": "9ae1130cd5a345e014bb2adb71d2e0a2001567a944dd69c431f11ddb1da08ddc"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/gradients.json",
+          "sha256": "bfdd546f91f0bd532898fa82b7883a30ba7a9d3e5e512f1b361a732200c5db91"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/summarize.py",
+          "sha256": "3c0d557032d4aa12b927e79e7f11ca1b330cd74563bedb3c775fdc80a3a13f21"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/summary.json",
+          "sha256": "1ec6fb88423d51b96b6a0aecc0d0813ee88f9f8edc2ceb7b9941a4a7601fb961"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/summary.log",
+          "sha256": "cb82d0d42453c24fe4e3e66063070a291a07724eefdfa4b7e299ebaa8b439d47"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/plot.py",
+          "sha256": "f17bfe2c66991e0d26a1b634451a78d7b4c1156933ed420f6d34b5c4638ad60b"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/plot.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/head_warmup.pdf",
+          "sha256": "68287e9dd0ec1946cccbb0105d290ecd63f4a87e0d434de64e612cd5c0c88c66"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/head_warmup.png",
+          "sha256": "1167b5d55752a71483450eae24eabb9da72bf718ddafffd7b06739c6fd4642cc"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/figure_derivation.json",
+          "sha256": "444b6583fbb14f8c7339db738ec9724864fe07816bc1126e9e5dc5b5690d2dff"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/heads.json",
+          "sha256": "648457fd61e8234bf2c8ea5f152c46f398fe638c2faebe1dba96db1fe0e8b810"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.json",
+          "sha256": "00b8edcf2da49d7a6a7780690ce5ffb4a2008b36f69110ce0f49a7544f7326c5"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/heads.pt",
+          "sha256": "01a83a7db48fba323e1866e1d8e383ecf0622d1b04fdefc49e5bc8e73dfdfc29"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/heads.step-1024.pt",
+          "sha256": "25d0a29b71efc31b49b7191c774dcfbaae298eea0d6c3e6a46164cf31e8078f1"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/heads.step-512.pt",
+          "sha256": "c244f18b16d7ef22e61d9b4d25d319dfcb2828a9e88c0fb6fe5f1230f3c5b9e8"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.pt",
+          "sha256": "8e24b344c4145a4a2d8aaaa60e8675c654efe46ec88a8ce160cad31bb87caae7"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.step-2048.pt",
+          "sha256": "bf11094ef0eae3eb1590bf750d2147db11ea152b39c7817e42444b0dcf747b4b"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.step-3072.pt",
+          "sha256": "d95173131cad1a3d8d6ed6bc36c61f1b25e1f4354a3731265a0737aba9307f53"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.step-4096.pt",
+          "sha256": "9861dbea8561207ebd00590812ff19d843292a1cfa0ff915fb092256b4b29bea"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/pytest_current.log",
+          "sha256": "1a53a1e0857dc3bbdc4e962ce8839df62e803c44f100073a0ea0c29898489453"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/pytest_targeted_final.log",
+          "sha256": "24804c1454e60e616664655216ad9cd9138b24fcd014bdd2512fbbe257642a30"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/pytest_continue.log",
+          "sha256": "34634fa8c2c000043e94bd7f1089b2b25cca73b01529f358053cb883c2171010"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/black_final.log",
+          "sha256": "c6827b9d336754ce47284473d5fe65be72bd9412a8f026c09c442a1ed92b8327"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_checks_20261017/ruff_final.log",
+          "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/pytest_full.log",
+          "sha256": "7624eca2a288a9e0ad1237e0431ab288767eaf5ebe690a9039033efd18a019ac"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/next_action.json",
+          "sha256": "9539fbf5e3cff0668cbc5f0ca9ae48ffe7dc85223929ab4a4f18d00fd941807d"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/write_report.py",
+          "sha256": "597b6efef883f9674830aee56832d019309fda34e209756bb9ab258165e8659f"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/check_report.py",
+          "sha256": "1fe0e225ab4ed7a89341f4bfdf1e31d400015d2c1b62b1c900e26e28c40f2342"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/report_v1_16_build.log",
+          "sha256": "7d3e6fec17734ed33560658c5eaf798a43b312fc474d1105ab27d0200bfedcb6"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/report_verification.log",
+          "sha256": "d144cb0a9787ea6a95a4c7852c16339d9dddd00baf5f2e92243be1e43b9424a6"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/pdf_verification.json",
+          "sha256": "a1eeba7497e0ae3f659b7d955cd6b60d4795b0a6d12c8e7209faa4b187fadead"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/excerpt_derivation.json",
+          "sha256": "c5d8066b45d7a2fd1fb9d650ad5e57cafc94baf54f4915c818184545a6aa8471"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/report_source.diff",
+          "sha256": "548bbbef1c7d676e621a303e7e34353c48f2d61922a765a0e1e695c29a4e8307"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/repository_final.log",
+          "sha256": "725e9ce0427eccc25d57440ecd86b498d849d54b4ca9f7350e458b4c3b396d33"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/black_final.log",
+          "sha256": "c6827b9d336754ce47284473d5fe65be72bd9412a8f026c09c442a1ed92b8327"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/ruff_final.log",
+          "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/update_evidence.py",
+          "sha256": "4fedd626586855e5270f845ff92d6e9bba56021b0cc0dd75dee84bace49ffe8e"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_extended_checks_20261017/final_verify.py",
+          "sha256": "231bd1c2317c3e36a9ae922997fade1c08d517bbc89588d429e22cccf12df2d6"
+        }
+      ],
+      "head_checkpoint_files": [
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/heads.pt",
+          "sha256": "01a83a7db48fba323e1866e1d8e383ecf0622d1b04fdefc49e5bc8e73dfdfc29"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/heads.step-1024.pt",
+          "sha256": "25d0a29b71efc31b49b7191c774dcfbaae298eea0d6c3e6a46164cf31e8078f1"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/heads.step-512.pt",
+          "sha256": "c244f18b16d7ef22e61d9b4d25d319dfcb2828a9e88c0fb6fe5f1230f3c5b9e8"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.pt",
+          "sha256": "8e24b344c4145a4a2d8aaaa60e8675c654efe46ec88a8ce160cad31bb87caae7"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.step-2048.pt",
+          "sha256": "bf11094ef0eae3eb1590bf750d2147db11ea152b39c7817e42444b0dcf747b4b"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.step-3072.pt",
+          "sha256": "d95173131cad1a3d8d6ed6bc36c61f1b25e1f4354a3731265a0737aba9307f53"
+        },
+        {
+          "path": "outputs/annual_targets/head_warmup_20261017/extended/heads.step-4096.pt",
+          "sha256": "9861dbea8561207ebd00590812ff19d843292a1cfa0ff915fb092256b4b29bea"
+        }
+      ],
+      "model_state_sha256": "b15c237ad2857fc19dc5f757b8b36a992986e5093ff35ce4390758b743b3afb3",
+      "encoder_unchanged_all_ranks_all_phases": true,
+      "head_updates_per_seed": 4096,
+      "main_model_updates": 0,
+      "diagnostic_optimizer_updates": 0,
+      "gradient_mode": "FP32 train, fixed mask9andvMFnoise2026; original/repairedcontext; initial/2048/4096heads. Firstphase initial/512/1024also retained.",
+      "gradient_scope": "Complete small highres/fusion/vMFparameter groups; onlySTPinput_projection.weight. Rawgradients, notAdamupdatevectors. Six historical-support-selected TRAIN observations; not representative accuracy or a causal model-performance experiment.",
+      "decision": {
+        "stage_completed": "Step 1: frozen-original100M target-head prewarm and fixed-TRAIN gradient attribution",
+        "stop_at_cumulative_head_steps": 4096,
+        "main_model_optimizer_updates": 0,
+        "head_status": "Deliver the bounded prewarm as a reproducible initialization; do not claim all heads converged. Full-traversal coverage and OSM losses are still falling.",
+        "head_checkpoint": "outputs/annual_targets/head_warmup_20261017/extended/heads.pt",
+        "head_initialization_seeds": [
+          42,
+          17
+        ],
+        "seeds_are_readout_initializations_not_independent_backbone_trials": true,
+        "next_step_recommendation": "Before another main-model short comparison, fix a shared vMF-projection protection policy for the repaired baseline and seven-target arm; initialize the seven-target arm from the warmed readouts. Keep original100M as the retention reference. Freeze the remaining learning-rate, sampling, target-weight and probe contracts before execution.",
+        "why_projection_protection_is_a_candidate": "Fixed-TRAIN original/repaired-context counterfactuals show a large raw image-reconstruction gradient change in the vMF projection; this is neither an Adam-step estimate nor proof of the cause of road-metric regressions.",
+        "coarse_fine_supervision_routing": "Local task gradients motivate evaluating module-specific routing, but do not justify an untested automatic weighting or gradient-surgery change in this step.",
+        "next_stage_started": false,
+        "new_downstream_scores": false,
+        "new_confirmation_roles_opened": false,
+        "production_model_replaced": false
+      },
+      "new_downstream_scores": false,
+      "new_confirmation_roles_opened": false,
+      "first_phase_tests": {
+        "passed": 451,
+        "skipped": 2,
+        "seconds": 409.28,
+        "git_sha": "4236ec110ff7550220e41a26773f55a07b34fbe5",
+        "log": "outputs/annual_targets/head_warmup_checks_20261017/pytest_current.log"
+      }
     }
   },
   "verified_metrics": {
@@ -7696,11 +8119,1096 @@
       },
       "units": "Scores and differences are fractions; multiply by100 for percentage points.",
       "independent_manual_accuracy_claim": false
+    },
+    "frozen_target_head_warmup_20261017": {
+      "evidence": [
+        "E23",
+        "E24"
+      ],
+      "status": "completed",
+      "model_optimizer_updates": 0,
+      "head_updates_per_seed": 4096,
+      "shared_feature_exposures": 131072,
+      "gradient_and_training_summary": {
+        "schema": "xuannv.frozen-target-head-summary.v1",
+        "plan_sha256": "c7114d638a6e566a058e14419a9cd975722f9a4dcd7b77193e22d6a9223d53c2",
+        "gradients_sha256": "bfdd546f91f0bd532898fa82b7883a30ba7a9d3e5e512f1b361a732200c5db91",
+        "head_verification_sha256": "734c20c80ce774f750814734ce6215a9a2dcb9b1120866eb37a7c9ffbea30faa",
+        "model_updates": 0,
+        "head_updates_per_seed": 4096,
+        "head_seeds_are_initializations_only": true,
+        "fixed_training_records": 6,
+        "fixed_head_year_cases": 4,
+        "fixed_training_weighted_task_loss_means": {
+          "dem_elevation": {
+            "initial": 0.04384392686188221,
+            "midpoint": 0.018660216592252254,
+            "final": 0.019343883264809847,
+            "relative_initial_to_final": -0.5588013061478905,
+            "relative_midpoint_to_final": 0.036637660081686896,
+            "improved_cases": 4,
+            "cases": 4,
+            "at1024": 0.020003220066428185,
+            "relative_1024_to4096": -0.0329615331645986
+          },
+          "dem_slope": {
+            "initial": 0.0004359230588306673,
+            "midpoint": 0.0006690390437142923,
+            "final": 0.0006463549652835354,
+            "relative_initial_to_final": 0.4827271744177444,
+            "relative_midpoint_to_final": -0.03390546283341267,
+            "improved_cases": 0,
+            "cases": 4,
+            "at1024": 0.0006389009795384482,
+            "relative_1024_to4096": 0.011666887332794751
+          },
+          "worldcover": {
+            "initial": 0.08527186512947083,
+            "midpoint": 0.04593383241444826,
+            "final": 0.04125112108886242,
+            "relative_initial_to_final": -0.5162399576199066,
+            "relative_midpoint_to_final": -0.10194471219677548,
+            "improved_cases": 4,
+            "cases": 4,
+            "at1024": 0.05671492498368025,
+            "relative_1024_to4096": -0.2726584562928991
+          },
+          "clcd": {
+            "initial": 0.033090563490986824,
+            "midpoint": 0.019662524573504925,
+            "final": 0.016648964025080204,
+            "relative_initial_to_final": -0.4968667115742821,
+            "relative_midpoint_to_final": -0.153264172012045,
+            "improved_cases": 4,
+            "cases": 4,
+            "at1024": 0.02502755681052804,
+            "relative_1024_to4096": -0.33477469850046704
+          },
+          "nightlights": {
+            "initial": 0.9228710830211639,
+            "midpoint": 0.9001190960407257,
+            "final": 0.9006774574518204,
+            "relative_initial_to_final": -0.024048457013832514,
+            "relative_midpoint_to_final": 0.0006203194816671864,
+            "improved_cases": 4,
+            "cases": 4,
+            "at1024": 0.9006205350160599,
+            "relative_1024_to4096": 6.320357303368773e-05
+          },
+          "osm_semantic": {
+            "initial": 0.017361531499773264,
+            "midpoint": 0.016821851953864098,
+            "final": 0.01721310568973422,
+            "relative_initial_to_final": -0.008549119646557801,
+            "relative_midpoint_to_final": 0.02325866004190158,
+            "improved_cases": 2,
+            "cases": 4,
+            "at1024": 0.016904398798942566,
+            "relative_1024_to4096": 0.01826192664189663
+          },
+          "osm_structure": {
+            "initial": 0.017339639365673065,
+            "midpoint": 0.021758451126515865,
+            "final": 0.019526635762304068,
+            "relative_initial_to_final": 0.12612698283451929,
+            "relative_midpoint_to_final": -0.10257234539511884,
+            "improved_cases": 0,
+            "cases": 4,
+            "at1024": 0.024289406836032867,
+            "relative_1024_to4096": -0.1960842891668857
+          }
+        },
+        "gradient_summary": {
+          "embedding": {
+            "initial": {
+              "median_norms": {
+                "lowres_reconstruction": 0.016596783883869648,
+                "highres_reconstruction": 0.0010497287148609757,
+                "uniformity_epoch0": 0.0001155321479018312,
+                "image": 0.016888693906366825,
+                "uniformity_full": 0.001156050362624228,
+                "dem_elevation": 5.437267464003526e-05,
+                "dem_slope": 1.365353500659694e-05,
+                "worldcover": 5.135555147717241e-05,
+                "clcd": 1.8927133169199806e-05,
+                "nightlights": 5.9276346291881055e-05,
+                "osm_semantic": 2.8518097678897902e-05,
+                "osm_structure": 0.00011984903539996594,
+                "auxiliary_total": 0.00016186481661861762,
+                "combined_epoch0": 0.01689813658595085
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.009056689217686653,
+                0.010745194740593433,
+                0.008574380539357662,
+                0.010102576576173306
+              ],
+              "auxiliary_image_cosines": [
+                0.027171315625309944,
+                0.05339987203478813,
+                0.029038602486252785,
+                0.05809863284230232
+              ],
+              "negative_auxiliary_image_cosines": 0,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 0,
+                "dem_slope": 2,
+                "worldcover": 2,
+                "clcd": 2,
+                "nightlights": 2,
+                "osm_semantic": 3,
+                "osm_structure": 4
+              }
+            },
+            "midpoint": {
+              "median_norms": {
+                "lowres_reconstruction": 0.016596783883869648,
+                "highres_reconstruction": 0.0010497287148609757,
+                "uniformity_epoch0": 0.0001155321479018312,
+                "image": 0.016888693906366825,
+                "uniformity_full": 0.001156050362624228,
+                "dem_elevation": 0.0006749735039193183,
+                "dem_slope": 2.0736167243740056e-05,
+                "worldcover": 0.0007618116505909711,
+                "clcd": 0.00028055705479346216,
+                "nightlights": 0.00011076086957473308,
+                "osm_semantic": 0.00031223839323502034,
+                "osm_structure": 0.002070568152703345,
+                "auxiliary_total": 0.0025077827740460634,
+                "combined_epoch0": 0.017212663777172565
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.1539064198732376,
+                0.1540904939174652,
+                0.14287449419498444,
+                0.14316533505916595
+              ],
+              "auxiliary_image_cosines": [
+                0.056353889405727386,
+                0.054942503571510315,
+                0.061922330409288406,
+                0.06061922013759613
+              ],
+              "negative_auxiliary_image_cosines": 0,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 0,
+                "dem_slope": 0,
+                "worldcover": 0,
+                "clcd": 0,
+                "nightlights": 0,
+                "osm_semantic": 4,
+                "osm_structure": 4
+              }
+            },
+            "final": {
+              "median_norms": {
+                "lowres_reconstruction": 0.016596783883869648,
+                "highres_reconstruction": 0.0010497287148609757,
+                "uniformity_epoch0": 0.0001155321479018312,
+                "image": 0.016888693906366825,
+                "uniformity_full": 0.001156050362624228,
+                "dem_elevation": 0.0007147039868868887,
+                "dem_slope": 2.095341096719494e-05,
+                "worldcover": 0.0010203232523053885,
+                "clcd": 0.00036659535544458777,
+                "nightlights": 0.00011318194810883142,
+                "osm_semantic": 0.0004632877098629251,
+                "osm_structure": 0.0027739478973671794,
+                "auxiliary_total": 0.0032848670380190015,
+                "combined_epoch0": 0.017387736588716507
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.20267489552497864,
+                0.2024696320295334,
+                0.18667060136795044,
+                0.18659336864948273
+              ],
+              "auxiliary_image_cosines": [
+                0.05490310862660408,
+                0.05425490066409111,
+                0.06310433894395828,
+                0.06249053403735161
+              ],
+              "negative_auxiliary_image_cosines": 0,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 0,
+                "dem_slope": 0,
+                "worldcover": 0,
+                "clcd": 0,
+                "nightlights": 0,
+                "osm_semantic": 4,
+                "osm_structure": 4
+              }
+            }
+          },
+          "highres": {
+            "initial": {
+              "median_norms": {
+                "lowres_reconstruction": 0.027533596847206354,
+                "highres_reconstruction": 0.10429608076810837,
+                "uniformity_epoch0": 0.006085800472646952,
+                "image": 0.1035388633608818,
+                "uniformity_full": 0.06085799168795347,
+                "dem_elevation": 0.0020362708892207593,
+                "dem_slope": 0.0004174188507022336,
+                "worldcover": 0.0014612730592489243,
+                "clcd": 0.0005478146485984325,
+                "nightlights": 0.0025871683610603213,
+                "osm_semantic": 8.102290939859813e-05,
+                "osm_structure": 0.00015731368694105186,
+                "auxiliary_total": 0.0049073961563408375,
+                "combined_epoch0": 0.1012929268181324
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.07879914343357086,
+                0.0712098702788353,
+                0.02317093126475811,
+                0.013903265818953514
+              ],
+              "auxiliary_image_cosines": [
+                -0.8408588171005249,
+                0.7188208699226379,
+                -0.64537513256073,
+                0.1709086298942566
+              ],
+              "negative_auxiliary_image_cosines": 2,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 3,
+                "dem_slope": 2,
+                "worldcover": 1,
+                "clcd": 3,
+                "nightlights": 2,
+                "osm_semantic": 2,
+                "osm_structure": 3
+              }
+            },
+            "midpoint": {
+              "median_norms": {
+                "lowres_reconstruction": 0.027533596847206354,
+                "highres_reconstruction": 0.10429608076810837,
+                "uniformity_epoch0": 0.006085800472646952,
+                "image": 0.1035388633608818,
+                "uniformity_full": 0.06085799168795347,
+                "dem_elevation": 0.013705235032830387,
+                "dem_slope": 0.00037511031405301765,
+                "worldcover": 0.008243402931839228,
+                "clcd": 0.004567417083308101,
+                "nightlights": 0.0029690942028537393,
+                "osm_semantic": 0.0006243189127417281,
+                "osm_structure": 0.0006184702360769734,
+                "auxiliary_total": 0.023554611252620816,
+                "combined_epoch0": 0.11231304705142975
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.4054955244064331,
+                0.4021570682525635,
+                0.04965072125196457,
+                0.04980801045894623
+              ],
+              "auxiliary_image_cosines": [
+                0.21103142201900482,
+                0.21933916211128235,
+                -0.41533777117729187,
+                -0.4144914150238037
+              ],
+              "negative_auxiliary_image_cosines": 2,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 2,
+                "dem_slope": 2,
+                "worldcover": 0,
+                "clcd": 2,
+                "nightlights": 2,
+                "osm_semantic": 2,
+                "osm_structure": 2
+              }
+            },
+            "final": {
+              "median_norms": {
+                "lowres_reconstruction": 0.027533596847206354,
+                "highres_reconstruction": 0.10429608076810837,
+                "uniformity_epoch0": 0.006085800472646952,
+                "image": 0.1035388633608818,
+                "uniformity_full": 0.06085799168795347,
+                "dem_elevation": 0.014683505287393928,
+                "dem_slope": 0.0004421645571710542,
+                "worldcover": 0.006674129224848002,
+                "clcd": 0.0034705731668509543,
+                "nightlights": 0.0030501233995892107,
+                "osm_semantic": 0.0009853318915702403,
+                "osm_structure": 0.0007864223407523241,
+                "auxiliary_total": 0.021969085792079568,
+                "combined_epoch0": 0.11155799403786659
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.3892316520214081,
+                0.3882899880409241,
+                0.03302338719367981,
+                0.03288263827562332
+              ],
+              "auxiliary_image_cosines": [
+                0.1697961837053299,
+                0.1699138879776001,
+                -0.29759135842323303,
+                -0.2958029806613922
+              ],
+              "negative_auxiliary_image_cosines": 2,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 4,
+                "dem_slope": 2,
+                "worldcover": 0,
+                "clcd": 2,
+                "nightlights": 0,
+                "osm_semantic": 2,
+                "osm_structure": 2
+              }
+            }
+          },
+          "fusion": {
+            "initial": {
+              "median_norms": {
+                "lowres_reconstruction": 0.140181764960289,
+                "highres_reconstruction": 0.1453080102801323,
+                "uniformity_epoch0": 0.01856302353553474,
+                "image": 0.19985971599817276,
+                "uniformity_full": 0.18563025444746017,
+                "dem_elevation": 0.009642155608162284,
+                "dem_slope": 0.0011751388665288687,
+                "worldcover": 0.0053713537054136395,
+                "clcd": 0.0014790554123464972,
+                "nightlights": 0.012450420763343573,
+                "osm_semantic": 0.00023464165860787034,
+                "osm_structure": 0.0007704374293098226,
+                "auxiliary_total": 0.016204762738198042,
+                "combined_epoch0": 0.2002459093928337
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.08239149302244186,
+                0.1165093258023262,
+                0.05792704224586487,
+                0.07845258712768555
+              ],
+              "auxiliary_image_cosines": [
+                -0.05708407610654831,
+                0.2774949073791504,
+                -0.36288073658943176,
+                -0.29466819763183594
+              ],
+              "negative_auxiliary_image_cosines": 3,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 3,
+                "dem_slope": 4,
+                "worldcover": 1,
+                "clcd": 3,
+                "nightlights": 2,
+                "osm_semantic": 2,
+                "osm_structure": 3
+              }
+            },
+            "midpoint": {
+              "median_norms": {
+                "lowres_reconstruction": 0.140181764960289,
+                "highres_reconstruction": 0.1453080102801323,
+                "uniformity_epoch0": 0.01856302353553474,
+                "image": 0.19985971599817276,
+                "uniformity_full": 0.18563025444746017,
+                "dem_elevation": 0.05727556813508272,
+                "dem_slope": 0.0020211375085636973,
+                "worldcover": 0.035210164031013846,
+                "clcd": 0.01923374179750681,
+                "nightlights": 0.016453613992780447,
+                "osm_semantic": 0.0022074454464018345,
+                "osm_structure": 0.0024688959238119423,
+                "auxiliary_total": 0.0973535105586052,
+                "combined_epoch0": 0.24150318652391434
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.6395538449287415,
+                0.6342034935951233,
+                0.19219374656677246,
+                0.19070640206336975
+              ],
+              "auxiliary_image_cosines": [
+                0.2329767346382141,
+                0.2326829880475998,
+                -0.22159461677074432,
+                -0.22416216135025024
+              ],
+              "negative_auxiliary_image_cosines": 2,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 2,
+                "dem_slope": 2,
+                "worldcover": 0,
+                "clcd": 2,
+                "nightlights": 2,
+                "osm_semantic": 2,
+                "osm_structure": 2
+              }
+            },
+            "final": {
+              "median_norms": {
+                "lowres_reconstruction": 0.140181764960289,
+                "highres_reconstruction": 0.1453080102801323,
+                "uniformity_epoch0": 0.01856302353553474,
+                "image": 0.19985971599817276,
+                "uniformity_full": 0.18563025444746017,
+                "dem_elevation": 0.06388222333043814,
+                "dem_slope": 0.002334803924895823,
+                "worldcover": 0.03057755110785365,
+                "clcd": 0.015790594974532723,
+                "nightlights": 0.01734811207279563,
+                "osm_semantic": 0.003957088687457144,
+                "osm_structure": 0.0026232567615807056,
+                "auxiliary_total": 0.09858348034322262,
+                "combined_epoch0": 0.24006813019514084
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.649787962436676,
+                0.6485704779624939,
+                0.18188169598579407,
+                0.18157489597797394
+              ],
+              "auxiliary_image_cosines": [
+                0.19605037569999695,
+                0.19423870742321014,
+                -0.19244146347045898,
+                -0.19402171671390533
+              ],
+              "negative_auxiliary_image_cosines": 2,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 2,
+                "dem_slope": 2,
+                "worldcover": 0,
+                "clcd": 2,
+                "nightlights": 2,
+                "osm_semantic": 2,
+                "osm_structure": 0
+              }
+            }
+          },
+          "vmf": {
+            "initial": {
+              "median_norms": {
+                "lowres_reconstruction": 52.26885414123535,
+                "highres_reconstruction": 2.2168678045272827,
+                "uniformity_epoch0": 0.12104414403438568,
+                "image": 53.1846923828125,
+                "uniformity_full": 1.210441380739212,
+                "dem_elevation": 0.11530878767371178,
+                "dem_slope": 0.015070198103785515,
+                "worldcover": 0.05825755558907986,
+                "clcd": 0.020107412710785866,
+                "nightlights": 0.12475189939141273,
+                "osm_semantic": 0.0017761128256097436,
+                "osm_structure": 0.012517057359218597,
+                "auxiliary_total": 0.19911011308431625,
+                "combined_epoch0": 53.212188720703125
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.0033484783489257097,
+                0.003941748756915331,
+                0.0035505560226738453,
+                0.004199654795229435
+              ],
+              "auxiliary_image_cosines": [
+                0.13370442390441895,
+                0.21835969388484955,
+                0.12437328696250916,
+                0.21584416925907135
+              ],
+              "negative_auxiliary_image_cosines": 0,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 0,
+                "dem_slope": 2,
+                "worldcover": 2,
+                "clcd": 2,
+                "nightlights": 2,
+                "osm_semantic": 4,
+                "osm_structure": 4
+              }
+            },
+            "midpoint": {
+              "median_norms": {
+                "lowres_reconstruction": 52.26885414123535,
+                "highres_reconstruction": 2.2168678045272827,
+                "uniformity_epoch0": 0.12104414403438568,
+                "image": 53.1846923828125,
+                "uniformity_full": 1.210441380739212,
+                "dem_elevation": 1.3968294262886047,
+                "dem_slope": 0.039218999445438385,
+                "worldcover": 1.100470244884491,
+                "clcd": 0.4622464030981064,
+                "nightlights": 0.2349676862359047,
+                "osm_semantic": 0.0770554207265377,
+                "osm_structure": 0.4259600341320038,
+                "auxiliary_total": 2.6533275842666626,
+                "combined_epoch0": 53.794769287109375
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.04978589341044426,
+                0.04972713813185692,
+                0.050004616379737854,
+                0.04998946934938431
+              ],
+              "auxiliary_image_cosines": [
+                0.20221540331840515,
+                0.19686998426914215,
+                0.22212322056293488,
+                0.21756209433078766
+              ],
+              "negative_auxiliary_image_cosines": 0,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 0,
+                "dem_slope": 0,
+                "worldcover": 0,
+                "clcd": 0,
+                "nightlights": 0,
+                "osm_semantic": 4,
+                "osm_structure": 4
+              }
+            },
+            "final": {
+              "median_norms": {
+                "lowres_reconstruction": 52.26885414123535,
+                "highres_reconstruction": 2.2168678045272827,
+                "uniformity_epoch0": 0.12104414403438568,
+                "image": 53.1846923828125,
+                "uniformity_full": 1.210441380739212,
+                "dem_elevation": 1.4788261651992798,
+                "dem_slope": 0.039043793454766273,
+                "worldcover": 1.497519850730896,
+                "clcd": 0.6432709991931915,
+                "nightlights": 0.24037868529558182,
+                "osm_semantic": 0.10445922985672951,
+                "osm_structure": 0.5908046364784241,
+                "auxiliary_total": 3.3541845083236694,
+                "combined_epoch0": 54.03195762634277
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.06361639499664307,
+                0.06360546499490738,
+                0.06253040581941605,
+                0.06254076212644577
+              ],
+              "auxiliary_image_cosines": [
+                0.21163594722747803,
+                0.20874597132205963,
+                0.24314996600151062,
+                0.24070774018764496
+              ],
+              "negative_auxiliary_image_cosines": 0,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 0,
+                "dem_slope": 0,
+                "worldcover": 0,
+                "clcd": 0,
+                "nightlights": 0,
+                "osm_semantic": 4,
+                "osm_structure": 4
+              }
+            }
+          },
+          "stp_probe": {
+            "initial": {
+              "median_norms": {
+                "lowres_reconstruction": 0.3676348924636841,
+                "highres_reconstruction": 0.050572311505675316,
+                "uniformity_epoch0": 0.020533885806798935,
+                "image": 0.3913274258375168,
+                "uniformity_full": 0.20533885061740875,
+                "dem_elevation": 0.009003355167806149,
+                "dem_slope": 0.001757483638357371,
+                "worldcover": 0.00698616192676127,
+                "clcd": 0.00248307385481894,
+                "nightlights": 0.011741289403289557,
+                "osm_semantic": 0.0003733752964762971,
+                "osm_structure": 0.0013152681640349329,
+                "auxiliary_total": 0.01725963596254587,
+                "combined_epoch0": 0.39636608958244324
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.04724837467074394,
+                0.04077131673693657,
+                0.03894668072462082,
+                0.05079895257949829
+              ],
+              "auxiliary_image_cosines": [
+                0.41088470816612244,
+                0.02042595110833645,
+                0.02800578996539116,
+                0.021084662526845932
+              ],
+              "negative_auxiliary_image_cosines": 0,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 2,
+                "dem_slope": 3,
+                "worldcover": 2,
+                "clcd": 1,
+                "nightlights": 1,
+                "osm_semantic": 0,
+                "osm_structure": 2
+              }
+            },
+            "midpoint": {
+              "median_norms": {
+                "lowres_reconstruction": 0.3676348924636841,
+                "highres_reconstruction": 0.050572311505675316,
+                "uniformity_epoch0": 0.020533885806798935,
+                "image": 0.3913274258375168,
+                "uniformity_full": 0.20533885061740875,
+                "dem_elevation": 0.06151101738214493,
+                "dem_slope": 0.0019972569425590336,
+                "worldcover": 0.052808523178100586,
+                "clcd": 0.02357378415763378,
+                "nightlights": 0.011922320816665888,
+                "osm_semantic": 0.004528731340542436,
+                "osm_structure": 0.009766590781509876,
+                "auxiliary_total": 0.11681000143289566,
+                "combined_epoch0": 0.4042041599750519
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.25582724809646606,
+                0.2560580372810364,
+                0.34112024307250977,
+                0.3435440957546234
+              ],
+              "auxiliary_image_cosines": [
+                0.08175048977136612,
+                0.07540816068649292,
+                -0.12706191837787628,
+                -0.12965618073940277
+              ],
+              "negative_auxiliary_image_cosines": 2,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 0,
+                "dem_slope": 2,
+                "worldcover": 4,
+                "clcd": 4,
+                "nightlights": 4,
+                "osm_semantic": 2,
+                "osm_structure": 4
+              }
+            },
+            "final": {
+              "median_norms": {
+                "lowres_reconstruction": 0.3676348924636841,
+                "highres_reconstruction": 0.050572311505675316,
+                "uniformity_epoch0": 0.020533885806798935,
+                "image": 0.3913274258375168,
+                "uniformity_full": 0.20533885061740875,
+                "dem_elevation": 0.06246342882514,
+                "dem_slope": 0.0020553201902657747,
+                "worldcover": 0.05357666313648224,
+                "clcd": 0.023070418275892735,
+                "nightlights": 0.011999343056231737,
+                "osm_semantic": 0.007100118789821863,
+                "osm_structure": 0.010823445860296488,
+                "auxiliary_total": 0.11836061999201775,
+                "combined_epoch0": 0.4084172546863556
+              },
+              "auxiliary_to_image_norm_ratios": [
+                0.24919690191745758,
+                0.2489728331565857,
+                0.3559533953666687,
+                0.3566310703754425
+              ],
+              "auxiliary_image_cosines": [
+                0.1215042769908905,
+                0.11747119575738907,
+                -0.10070297122001648,
+                -0.1014581099152565
+              ],
+              "negative_auxiliary_image_cosines": 2,
+              "defined_cases": 4,
+              "per_task_negative_image_cosines": {
+                "dem_elevation": 0,
+                "dem_slope": 2,
+                "worldcover": 4,
+                "clcd": 4,
+                "nightlights": 4,
+                "osm_semantic": 0,
+                "osm_structure": 4
+              }
+            }
+          }
+        },
+        "context_comparison": {
+          "embedding": [
+            {
+              "year": 2020,
+              "context_pooling": false,
+              "image_norm": 0.005094260908663273,
+              "uniformity_epoch0_norm": 0.00011333017755532637,
+              "uniformity_full_norm": 0.0011347477557137609
+            },
+            {
+              "year": 2020,
+              "context_pooling": true,
+              "image_norm": 0.016740815714001656,
+              "uniformity_epoch0_norm": 0.00012127593072364107,
+              "uniformity_full_norm": 0.0012141746701672673
+            },
+            {
+              "year": 2021,
+              "context_pooling": false,
+              "image_norm": 0.005289992317557335,
+              "uniformity_epoch0_norm": 0.00010274073429172859,
+              "uniformity_full_norm": 0.001028150087222457
+            },
+            {
+              "year": 2021,
+              "context_pooling": true,
+              "image_norm": 0.017036572098731995,
+              "uniformity_epoch0_norm": 0.00010978836508002132,
+              "uniformity_full_norm": 0.0010979260550811887
+            }
+          ],
+          "highres": [
+            {
+              "year": 2020,
+              "context_pooling": false,
+              "image_norm": 0.10904432833194733,
+              "uniformity_epoch0_norm": 0.009928768500685692,
+              "uniformity_full_norm": 0.09928769618272781
+            },
+            {
+              "year": 2020,
+              "context_pooling": true,
+              "image_norm": 0.10442795604467392,
+              "uniformity_epoch0_norm": 0.009429794736206532,
+              "uniformity_full_norm": 0.09429791569709778
+            },
+            {
+              "year": 2021,
+              "context_pooling": false,
+              "image_norm": 0.09898868203163147,
+              "uniformity_epoch0_norm": 0.0025322153232991695,
+              "uniformity_full_norm": 0.02532215416431427
+            },
+            {
+              "year": 2021,
+              "context_pooling": true,
+              "image_norm": 0.10264977067708969,
+              "uniformity_epoch0_norm": 0.002741806209087372,
+              "uniformity_full_norm": 0.027418067678809166
+            }
+          ],
+          "fusion": [
+            {
+              "year": 2020,
+              "context_pooling": false,
+              "image_norm": 0.23596157133579254,
+              "uniformity_epoch0_norm": 0.028310265392065048,
+              "uniformity_full_norm": 0.2831026315689087
+            },
+            {
+              "year": 2020,
+              "context_pooling": true,
+              "image_norm": 0.2666987478733063,
+              "uniformity_epoch0_norm": 0.02964603714644909,
+              "uniformity_full_norm": 0.2964603900909424
+            },
+            {
+              "year": 2021,
+              "context_pooling": false,
+              "image_norm": 0.12258633226156235,
+              "uniformity_epoch0_norm": 0.007047190330922604,
+              "uniformity_full_norm": 0.07047192007303238
+            },
+            {
+              "year": 2021,
+              "context_pooling": true,
+              "image_norm": 0.13302068412303925,
+              "uniformity_epoch0_norm": 0.00748000992462039,
+              "uniformity_full_norm": 0.07480011880397797
+            }
+          ],
+          "vmf": [
+            {
+              "year": 2020,
+              "context_pooling": false,
+              "image_norm": 0.5557898283004761,
+              "uniformity_epoch0_norm": 0.027521952986717224,
+              "uniformity_full_norm": 0.27521950006484985
+            },
+            {
+              "year": 2020,
+              "context_pooling": true,
+              "image_norm": 52.53104782104492,
+              "uniformity_epoch0_norm": 0.09242844581604004,
+              "uniformity_full_norm": 0.9242847561836243
+            },
+            {
+              "year": 2021,
+              "context_pooling": false,
+              "image_norm": 0.651287317276001,
+              "uniformity_epoch0_norm": 0.050470996648073196,
+              "uniformity_full_norm": 0.5047097206115723
+            },
+            {
+              "year": 2021,
+              "context_pooling": true,
+              "image_norm": 53.83833694458008,
+              "uniformity_epoch0_norm": 0.14965984225273132,
+              "uniformity_full_norm": 1.4965980052947998
+            }
+          ],
+          "stp_probe": [
+            {
+              "year": 2020,
+              "context_pooling": false,
+              "image_norm": 0.09343932569026947,
+              "uniformity_epoch0_norm": 0.015200215391814709,
+              "uniformity_full_norm": 0.15200214087963104
+            },
+            {
+              "year": 2020,
+              "context_pooling": true,
+              "image_norm": 0.39217668771743774,
+              "uniformity_epoch0_norm": 0.014205597341060638,
+              "uniformity_full_norm": 0.14205598831176758
+            },
+            {
+              "year": 2021,
+              "context_pooling": false,
+              "image_norm": 0.14961561560630798,
+              "uniformity_epoch0_norm": 0.028301335871219635,
+              "uniformity_full_norm": 0.28301337361335754
+            },
+            {
+              "year": 2021,
+              "context_pooling": true,
+              "image_norm": 0.3904781639575958,
+              "uniformity_epoch0_norm": 0.02686217427253723,
+              "uniformity_full_norm": 0.2686217129230499
+            }
+          ]
+        },
+        "warmup_global_annual_exposures": 98304,
+        "wall_seconds": 1134.3367886729538,
+        "scope": "Equal mean of2fixed training batches(years)×2head initializations. Historical support-selected positions, one fixed mask/noise seed, FP32 training-mode diagnostic. Not a dataset mean, convergence proof, independent accuracy or causal attribution.",
+        "new_downstream_scores": false,
+        "production_model_replaced": false,
+        "main_model_unfrozen": false,
+        "stage_steps": {
+          "initial": 0,
+          "midpoint": 2048,
+          "final": 4096
+        },
+        "epoch_metrics": [
+          {
+            "data_epoch": 2,
+            "batches": 512,
+            "global_batch_objective_means": {
+              "42": {
+                "target_clcd": 0.7524839781690389,
+                "target_dem_elevation": 0.5327624239725992,
+                "target_dem_slope": 0.07764735270029632,
+                "target_nightlights": 0.3819450249502552,
+                "target_osm_semantic": 0.49784744129283354,
+                "target_osm_structure": 0.21046110394672723,
+                "target_worldcover": 0.7877655663760379,
+                "weighted_total": 0.09775098986010577
+              },
+              "17": {
+                "target_clcd": 0.7514801307115704,
+                "target_dem_elevation": 0.532937448238954,
+                "target_dem_slope": 0.07765259175357642,
+                "target_nightlights": 0.3819446816778509,
+                "target_osm_semantic": 0.4985311842756346,
+                "target_osm_structure": 0.21215932825725758,
+                "target_worldcover": 0.7861324412515387,
+                "weighted_total": 0.09774535814878621
+              }
+            }
+          },
+          {
+            "data_epoch": 3,
+            "batches": 512,
+            "global_batch_objective_means": {
+              "42": {
+                "target_clcd": 0.6687847345019691,
+                "target_dem_elevation": 0.5213264062767848,
+                "target_dem_slope": 0.0775481215241598,
+                "target_nightlights": 0.3826265215102467,
+                "target_osm_semantic": 0.4926261017099023,
+                "target_osm_structure": 0.20561286229349207,
+                "target_worldcover": 0.7078303112648427,
+                "weighted_total": 0.09302166955370918
+              },
+              "17": {
+                "target_clcd": 0.6681252723210491,
+                "target_dem_elevation": 0.5215303599252366,
+                "target_dem_slope": 0.07754942422616296,
+                "target_nightlights": 0.38263445268239593,
+                "target_osm_semantic": 0.49298406491288915,
+                "target_osm_structure": 0.20667016956576845,
+                "target_worldcover": 0.7067218432202935,
+                "weighted_total": 0.09301693073288328
+              }
+            }
+          },
+          {
+            "data_epoch": 4,
+            "batches": 512,
+            "global_batch_objective_means": {
+              "42": {
+                "target_clcd": 0.6183826243504882,
+                "target_dem_elevation": 0.5198786206892692,
+                "target_dem_slope": 0.0776222255299217,
+                "target_nightlights": 0.38207978874561377,
+                "target_osm_semantic": 0.476990821713116,
+                "target_osm_structure": 0.18964949824294308,
+                "target_worldcover": 0.6596844652667642,
+                "weighted_total": 0.08970606016864632
+              },
+              "17": {
+                "target_clcd": 0.6178930249880068,
+                "target_dem_elevation": 0.5199766687583178,
+                "target_dem_slope": 0.07762424468091922,
+                "target_nightlights": 0.3820819132088218,
+                "target_osm_semantic": 0.47729916556272656,
+                "target_osm_structure": 0.19040869463060517,
+                "target_worldcover": 0.6589003560948186,
+                "weighted_total": 0.089702009200555
+              }
+            }
+          },
+          {
+            "data_epoch": 5,
+            "batches": 512,
+            "global_batch_objective_means": {
+              "42": {
+                "target_clcd": 0.5838403850793839,
+                "target_dem_elevation": 0.5196601137286052,
+                "target_dem_slope": 0.07754672715964261,
+                "target_nightlights": 0.3823668600743986,
+                "target_osm_semantic": 0.4763215560815297,
+                "target_osm_structure": 0.18600895020063035,
+                "target_worldcover": 0.6278949431143701,
+                "weighted_total": 0.08797240626670827
+              },
+              "17": {
+                "target_clcd": 0.5834786258055829,
+                "target_dem_elevation": 0.5197007112437859,
+                "target_dem_slope": 0.07754742127144709,
+                "target_nightlights": 0.382379299189779,
+                "target_osm_semantic": 0.476468444801867,
+                "target_osm_structure": 0.1868498207841185,
+                "target_worldcover": 0.6273126627784222,
+                "weighted_total": 0.08797354684593302
+              }
+            }
+          },
+          {
+            "data_epoch": 6,
+            "batches": 512,
+            "global_batch_objective_means": {
+              "42": {
+                "target_clcd": 0.5605988131719641,
+                "target_dem_elevation": 0.519539003027603,
+                "target_dem_slope": 0.0775703468680149,
+                "target_nightlights": 0.38163304476620397,
+                "target_osm_semantic": 0.4675436261459254,
+                "target_osm_structure": 0.17792185192229226,
+                "target_worldcover": 0.6060519426246174,
+                "weighted_total": 0.08639635296924106
+              },
+              "17": {
+                "target_clcd": 0.5603136001736857,
+                "target_dem_elevation": 0.5195613926043734,
+                "target_dem_slope": 0.07757086419587722,
+                "target_nightlights": 0.38162951325648464,
+                "target_osm_semantic": 0.4677299574832432,
+                "target_osm_structure": 0.1786280725209508,
+                "target_worldcover": 0.6056142328307033,
+                "weighted_total": 0.08639979291074273
+              }
+            }
+          },
+          {
+            "data_epoch": 7,
+            "batches": 512,
+            "global_batch_objective_means": {
+              "42": {
+                "target_clcd": 0.5422715884051286,
+                "target_dem_elevation": 0.5200777920545079,
+                "target_dem_slope": 0.07747717861639103,
+                "target_nightlights": 0.3827254720017663,
+                "target_osm_semantic": 0.4624394641141407,
+                "target_osm_structure": 0.16917188776278635,
+                "target_worldcover": 0.5896156564704143,
+                "weighted_total": 0.08527506266789715
+              },
+              "17": {
+                "target_clcd": 0.542043054185342,
+                "target_dem_elevation": 0.520091938204132,
+                "target_dem_slope": 0.0774774353558314,
+                "target_nightlights": 0.3827106720782467,
+                "target_osm_semantic": 0.46264143561711535,
+                "target_osm_structure": 0.16958974220324308,
+                "target_worldcover": 0.5892837818828411,
+                "weighted_total": 0.08527534310982444
+              }
+            }
+          }
+        ],
+        "last_two_epoch_relative_changes": {
+          "dem_elevation": {
+            "42": 0.0010370521246048092,
+            "17": 0.0010211413074769915
+          },
+          "dem_slope": {
+            "42": -0.0012010807658549005,
+            "17": -0.0012044321152577808
+          },
+          "worldcover": {
+            "42": -0.027120259829582993,
+            "17": -0.026965104290122
+          },
+          "clcd": {
+            "42": -0.03269222898125135,
+            "17": -0.03260771464886836
+          },
+          "nightlights": {
+            "42": 0.0028625069305294737,
+            "17": 0.0028330063168764408
+          },
+          "osm_semantic": {
+            "42": -0.010916974901057919,
+            "17": -0.010879187412985325
+          },
+          "osm_structure": {
+            "42": -0.0491786931451651,
+            "17": -0.05059859959384405
+          }
+        },
+        "feature_exposures_all_phases": 131072,
+        "encoder_unchanged_all_phases": true
+      },
+      "independent_accuracy_claim": false,
+      "main_model_unfrozen": false,
+      "production_model_replaced": false
     }
   },
   "current_source_sha256": {
+    ".github/workflows/ci.yml": "f21ddba383e94f68f34afa3e7bb98a525c2df49c5a51f7f13b9f7b65b49ca5b5",
     "configs/production/annual5m_v1.yaml": "04e1fe066625a31e6e86497b0c58850835ae0db5ed2cafbac767a060d1a3e77f",
-    "docs/xuannv_annual5m_report.tex": "2058c4cb1f6d04029c2d1b82ffbd5b6c750bb4a31c9e53cc8b43bff2af143a82",
+    "docs/training-export-downstream.md": "b230737e58b4a777a6f28db9a1a6b1a8b8a264fc1f2dd0232d72b28881b40074",
+    "docs/xuannv_annual5m_report.tex": "eaeaaca3fca288e80ef83f92eca32de86203d3f8b254b60695978b8da88ac950",
     "src/xuannv_embedding/__init__.py": "6d0af358c736e931c7fc052318b50279e2a1b4751c99e3353ce6ddd276b4eb61",
     "src/xuannv_embedding/cli/__init__.py": "f254389ad1b425643b2a1efb9e71be2a6f1963c30e704ef1e1ab482c309af61b",
     "src/xuannv_embedding/cli/__main__.py": "df3e5a28c8aee974d2fc802c48372c015ba8558bc97768122d82822dee95405f",
@@ -7771,7 +9279,7 @@
     "src/xuannv_embedding/training/__init__.py": "3490f464594e1d0f98f86b4c69bb83baaa9d6b4efbca8b6db088b340c3b7eade",
     "src/xuannv_embedding/training/annual.py": "96a81f13c8eef97172bca96057dcdaac42723f07bdc71d70e71844651b0a88c9",
     "src/xuannv_embedding/training/annual_data.py": "2463e0627d5dcaa14279a14c1f6a1881098be4540d9d679416e4a7239d104cb3",
-    "src/xuannv_embedding/training/annual_experiments.py": "14355a5d432120db630b5a1c9e8a6fe893465beb31474ca71876d04856174036",
+    "src/xuannv_embedding/training/annual_experiments.py": "ea85d98768ff907e823fbccfbb696a3f31ee1d4558f30b4e02e203abf1849ac7",
     "src/xuannv_embedding/training/checkpoint.py": "fcd54ab17fe8501fc751fd17dffbbd57ce9e1cde2902b6b24d853aea9d49e12b",
     "src/xuannv_embedding/training/cli.py": "2e2b3f1140eebd87af426d55a121141a47189c89254d2383dd44b74d54bdf1f2",
     "src/xuannv_embedding/training/compatibility.py": "0e6814910e79f7f62718e877741f3f4e7e53bef043e6fbe4c69486bf0e63b0c9",
@@ -7783,11 +9291,15 @@
     "src/xuannv_embedding/training/runtime.py": "6469a80109d6a8a12fdeef8c934388669dc21ee7985494fc99e7398bdea81b15",
     "src/xuannv_embedding/training/target_comparison.py": "b7a453b6ad4033ad13babd058162e9aef6fe9744a23fe85f101d04d50c89a809",
     "src/xuannv_embedding/training/target_experiments.py": "02a96ebb0cf97316d3b9d7d91dda69baebecb74eea8e0afecc1025b5e021b76e",
+    "src/xuannv_embedding/training/target_gradients.py": "674ecd91b1df4f409c20be7db9072a8ce48b0b1abca946d5ca4356ad053fb081",
     "src/xuannv_embedding/training/target_supervision.py": "4d70ddae6a9ff63cd02602f01b79bd26736c26fd7b538f2fceedfa578ab00b42",
+    "src/xuannv_embedding/training/target_warmup.py": "5ddee2825f25a76c79058c65eab8669fcf1cf3277a26a8df83368b362200e4f9",
     "src/xuannv_embedding/utils/__init__.py": "2a3fe8b3b059aa5f2ba46912dec19c9198facf61a3c6c28c7cd6def37691d085",
     "src/xuannv_embedding/utils/geo.py": "058b947625c725da99c93045c66634ca23c25733759bbba6658286d1582ecfbf",
     "src/xuannv_embedding/utils/manifest.py": "69d84a9f982a4627ae53e58b13c05d2adce4cdfd60afe0dfdcf9daa51782d2b6",
-    "src/xuannv_embedding/utils/repository_policy.py": "c600fb5b48f511970137d7bdf5fc3367b94023d3690b57a7539cb1ed6545012f"
+    "src/xuannv_embedding/utils/repository_policy.py": "c600fb5b48f511970137d7bdf5fc3367b94023d3690b57a7539cb1ed6545012f",
+    "tests/test_cli_bootstrap.py": "f3c6716489821efc5e553598a5369551161f1116f8911e5ba0ea3adeccf0cd40",
+    "tests/test_target_warmup.py": "46b3e729ea6c9252ace493e1bd609fda10a6f0433aa7a4bddc00a7587247d91e"
   },
   "loader_samples_read": 600,
   "build": {
@@ -7797,10 +9309,10 @@
     "tex_bundle": "tlextras-2022.0r0",
     "fonts": "Fandol via TeX bundle; embedded in PDF",
     "binary_path": "/home/heyuhang/.local/bin/tectonic",
-    "last_build_log": "outputs/annual_targets/low_lr_checks_20261017/report_v1_15_build.log",
-    "quality_receipt": "outputs/annual_targets/low_lr_checks_20261017/pdf_verification.json"
+    "last_build_log": "outputs/annual_targets/head_warmup_extended_checks_20261017/report_v1_16_build.log",
+    "quality_receipt": "outputs/annual_targets/head_warmup_extended_checks_20261017/pdf_verification.json"
   },
-  "report_source_sha256": "2058c4cb1f6d04029c2d1b82ffbd5b6c750bb4a31c9e53cc8b43bff2af143a82",
+  "report_source_sha256": "eaeaaca3fca288e80ef83f92eca32de86203d3f8b254b60695978b8da88ac950",
   "runtime_status": {
     "annual_model_runtime_completed": true,
     "two_200_epoch_runs_completed": true,
@@ -7825,21 +9337,24 @@
     "local_multisource_effectiveness_comparison_completed": true,
     "new_confirmation_roles_opened": false,
     "low_lr_target_comparison_started": true,
-    "low_lr_target_comparison_completed": true
+    "low_lr_target_comparison_completed": true,
+    "frozen_target_head_warmup_completed": true,
+    "training_gradient_attribution_completed": true,
+    "main_model_updates_in_head_warmup": 0
   },
   "rendered_report": {
     "path": "docs/xuannv_annual5m_report.pdf",
-    "sha256": "2cdb9c614bf3c3e23643595cf9d24edf81628eae2635b7382af099b8841b0d87",
-    "bytes": 8587938
+    "sha256": "37498402c7785f48918be225fc1829012ba7c2d0d99e24bea897c7a20d881b8d",
+    "bytes": 8623163
   },
   "full_test_suite": {
-    "passed": 443,
+    "passed": 452,
     "skipped": 2,
     "warnings": 234,
-    "seconds": 312.1,
-    "git_sha": "8b2ec8dfda856a8930999b9e22ab430bde523b76",
-    "source_code_sha256": "08f76f6a73e78a8157ffd176956654664e7bbc5bc0d04806fb283e3ed2eace95",
-    "log": "outputs/annual_targets/comparison_checks_20261017/pytest_full.log",
+    "seconds": 439.84,
+    "git_sha": "dee3e173b7ee094c6f238cab692e4844f56a0a09",
+    "source_code_sha256": "9a6fd9d34379afb42415e750edbf4832d77886976de724bbefc23ab3869380d8",
+    "log": "outputs/annual_targets/head_warmup_extended_checks_20261017/pytest_full.log",
     "skip_reasons": [
       "local legacy production checkpoint unavailable",
       "omnicloudmask unavailable"
@@ -7847,43 +9362,43 @@
   },
   "verified_timezone": "Asia/Shanghai",
   "planned_next_stage": {
-    "status": "Low-LR paired comparison completed; next action follows the unchanged frozen rule.",
-    "section": "14.14",
-    "derived_excerpt": "outputs/annual_targets/low_lr_checks_20261017/result_excerpt.pdf",
+    "status": "Step1frozen readout prewarm and local gradient attribution completed; encoder notunfrozen.",
+    "section": "14.15",
+    "derived_excerpt": "outputs/annual_targets/head_warmup_extended_checks_20261017/result_excerpt.pdf",
     "excerpt_physical_pages_in_main_report": [
-      52,
-      53
+      54,
+      55
     ],
-    "decision": {
-      "recommend_longer_seven_target_training": false,
-      "production_model_promoted": false,
-      "rule": "Recommend longer supervised training only for positive semantic and fine deltas in both continuation seeds, with guardrails versus paired control and original_exact; fine gain must retain its sign in the second head seed. Otherwise retain control/original and diagnose before spending more.",
-      "confirmation_roles_opened": false
-    },
     "next_action": {
-      "status": "proposed_not_started",
-      "action": "Diagnose the common continued-training gradients on frozen training batches before any further learning-rate sweep or longer run.",
-      "optimizer_updates": 0,
-      "scope": "Use already frozen training positions. Measure separate image-reconstruction, uniformity and seven-target gradient norms and pairwise cosine on high-resolution fusion and the vMF output projection. Include the original versus repaired context-gradient path on the same batches. No new downstream score or confirmation roles.",
-      "reason": "At1e-5, both repaired controls and both supervised models still lose roadF1 relative to the original100M. The seed17fine gain reverses under the second head seed; neither semantic nor fine two-seed-mean spatialCI excludes0. Learning-rate reduction has not met the existing rule.",
-      "causal_limit": "The present comparison does not identify which loss or repaired gradient path causes road degradation. The proposed batch diagnostic cannot alone establish downstream accuracy.",
-      "retain_original100m": true,
-      "long_training_started": false,
-      "production_model_replaced": false,
-      "new_confirmation_roles_opened": false
+      "stage_completed": "Step 1: frozen-original100M target-head prewarm and fixed-TRAIN gradient attribution",
+      "stop_at_cumulative_head_steps": 4096,
+      "main_model_optimizer_updates": 0,
+      "head_status": "Deliver the bounded prewarm as a reproducible initialization; do not claim all heads converged. Full-traversal coverage and OSM losses are still falling.",
+      "head_checkpoint": "outputs/annual_targets/head_warmup_20261017/extended/heads.pt",
+      "head_initialization_seeds": [
+        42,
+        17
+      ],
+      "seeds_are_readout_initializations_not_independent_backbone_trials": true,
+      "next_step_recommendation": "Before another main-model short comparison, fix a shared vMF-projection protection policy for the repaired baseline and seven-target arm; initialize the seven-target arm from the warmed readouts. Keep original100M as the retention reference. Freeze the remaining learning-rate, sampling, target-weight and probe contracts before execution.",
+      "why_projection_protection_is_a_candidate": "Fixed-TRAIN original/repaired-context counterfactuals show a large raw image-reconstruction gradient change in the vMF projection; this is neither an Adam-step estimate nor proof of the cause of road-metric regressions.",
+      "coarse_fine_supervision_routing": "Local task gradients motivate evaluating module-specific routing, but do not justify an untested automatic weighting or gradient-surgery change in this step.",
+      "next_stage_started": false,
+      "new_downstream_scores": false,
+      "new_confirmation_roles_opened": false,
+      "production_model_replaced": false
     },
-    "teacher_default": false,
-    "EMA_default": false,
-    "comparison_plan": "outputs/annual_targets/comparison_20261017/next_low_lr_proposal/plan.json",
+    "head_checkpoint": "outputs/annual_targets/head_warmup_20261017/extended/heads.pt",
+    "head_checkpoint_sha256": "8e24b344c4145a4a2d8aaaa60e8675c654efe46ec88a8ce160cad31bb87caae7",
     "long_training_started": false,
     "production_model_replaced": false,
     "historical_previous_stage": {
-      "status": "Bounded paired comparison completed; next action is determined by the preregistered result.",
-      "section": "14.13",
-      "derived_excerpt": "outputs/annual_targets/comparison_checks_20261017/result_excerpt.pdf",
+      "status": "Low-LR paired comparison completed; next action follows the unchanged frozen rule.",
+      "section": "14.14",
+      "derived_excerpt": "outputs/annual_targets/low_lr_checks_20261017/result_excerpt.pdf",
       "excerpt_physical_pages_in_main_report": [
-        49,
-        51
+        52,
+        53
       ],
       "decision": {
         "recommend_longer_seven_target_training": false,
@@ -7893,139 +9408,171 @@
       },
       "next_action": {
         "status": "proposed_not_started",
-        "proposal_plan": "outputs/annual_targets/comparison_20261017/next_low_lr_proposal/plan.json",
-        "recommendation": "Retain the original100M production artifact. Test only a smaller learning rate for the existing model parameters before longer training; keep all7targets and their0.2total coefficient.",
-        "base_model_lr": 1e-05,
-        "previous_base_model_lr": 3e-05,
-        "auxiliary_head_absolute_lr": 0.0003,
-        "head_lr_multiplier": 30,
-        "budget": "Same8192paired positions,1024updates per recipe per continuation seed42/17; no larger dataset or model architecture change.",
-        "hypothesis": "Both controls lose road accuracy under the current continued-training recipe. A smaller model update may retain fine features while new readouts keep their previous absolute learning rate. This is a hypothesis, not an established causal attribution to learning rate.",
-        "scope": "Posthoc next-experiment proposal; no additional optimizer updates or primary-rule changes in this turn."
+        "action": "Diagnose the common continued-training gradients on frozen training batches before any further learning-rate sweep or longer run.",
+        "optimizer_updates": 0,
+        "scope": "Use already frozen training positions. Measure separate image-reconstruction, uniformity and seven-target gradient norms and pairwise cosine on high-resolution fusion and the vMF output projection. Include the original versus repaired context-gradient path on the same batches. No new downstream score or confirmation roles.",
+        "reason": "At1e-5, both repaired controls and both supervised models still lose roadF1 relative to the original100M. The seed17fine gain reverses under the second head seed; neither semantic nor fine two-seed-mean spatialCI excludes0. Learning-rate reduction has not met the existing rule.",
+        "causal_limit": "The present comparison does not identify which loss or repaired gradient path causes road degradation. The proposed batch diagnostic cannot alone establish downstream accuracy.",
+        "retain_original100m": true,
+        "long_training_started": false,
+        "production_model_replaced": false,
+        "new_confirmation_roles_opened": false
       },
       "teacher_default": false,
       "EMA_default": false,
-      "primary_artifact_seed": 42,
-      "historical_previous_two_arm_proposal": {
-        "status": "Seven-head engineering completed; next is one matched short control-versus-multisource comparison before longer training.",
-        "section": "14.12",
-        "derived_excerpt": "outputs/annual_targets/local_supervision_checks_20261016/current_progress_excerpt.pdf",
+      "comparison_plan": "outputs/annual_targets/comparison_20261017/next_low_lr_proposal/plan.json",
+      "long_training_started": false,
+      "production_model_replaced": false,
+      "historical_previous_stage": {
+        "status": "Bounded paired comparison completed; next action is determined by the preregistered result.",
+        "section": "14.13",
+        "derived_excerpt": "outputs/annual_targets/comparison_checks_20261017/result_excerpt.pdf",
         "excerpt_physical_pages_in_main_report": [
-          47,
-          48
+          49,
+          51
         ],
+        "decision": {
+          "recommend_longer_seven_target_training": false,
+          "production_model_promoted": false,
+          "rule": "Recommend longer supervised training only for positive semantic and fine deltas in both continuation seeds, with guardrails versus paired control and original_exact; fine gain must retain its sign in the second head seed. Otherwise retain control/original and diagnose before spending more.",
+          "confirmation_roles_opened": false
+        },
+        "next_action": {
+          "status": "proposed_not_started",
+          "proposal_plan": "outputs/annual_targets/comparison_20261017/next_low_lr_proposal/plan.json",
+          "recommendation": "Retain the original100M production artifact. Test only a smaller learning rate for the existing model parameters before longer training; keep all7targets and their0.2total coefficient.",
+          "base_model_lr": 1e-05,
+          "previous_base_model_lr": 3e-05,
+          "auxiliary_head_absolute_lr": 0.0003,
+          "head_lr_multiplier": 30,
+          "budget": "Same8192paired positions,1024updates per recipe per continuation seed42/17; no larger dataset or model architecture change.",
+          "hypothesis": "Both controls lose road accuracy under the current continued-training recipe. A smaller model update may retain fine features while new readouts keep their previous absolute learning rate. This is a hypothesis, not an established causal attribution to learning rate.",
+          "scope": "Posthoc next-experiment proposal; no additional optimizer updates or primary-rule changes in this turn."
+        },
         "teacher_default": false,
         "EMA_default": false,
         "primary_artifact_seed": 42,
-        "target_sources": [
-          "dem_elevation",
-          "dem_slope",
-          "worldcover",
-          "clcd",
-          "nightlights",
-          "osm_semantic",
-          "osm_structure"
-        ],
-        "arms": {
-          "control": "Corrected exactPAN and context pooling, original reconstruction and uniformity; no auxiliary labels.",
-          "multisource": "Identical corrected base plus7local target heads, total auxiliary coefficient0.2."
-        },
-        "prepared_configs": {
-          "multisource": {
-            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_20261016/multisource.yaml",
-            "sha256": "77e8a6c74a18b73df99a8933cffa0c61744d448503fa3a3f3b915e4d79536687"
-          },
-          "control": {
-            "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_20261016/control.yaml",
-            "sha256": "d382f8aac431aeb969e632d2416944b616d94d41b5e4f17088c3156aeb7c701e"
-          }
-        },
-        "manifest_scope": "Same frozen2048positions per year engineering manifests in both prepared configs; these are short-comparison templates, not a queued4096update screen.",
-        "matching_requirements": [
-          "Same original100M initialization",
-          "Same positions, seed, update count and masking",
-          "Same frozen evaluation protocol"
-        ],
-        "clcd_and_osm_evaluation_role": "Product-related development diagnostics after upstream supervision; cannot alone support an independent improvement claim.",
-        "historical_five_arm_plan": {
-          "status": "P1 engineering completed; P2/P3 held for remaining input provenance and independent evaluation requirements",
-          "section": 14,
-          "derived_excerpt": "outputs/annual_targets/prepare_20261016/next_stage_excerpt.pdf",
+        "historical_previous_two_arm_proposal": {
+          "status": "Seven-head engineering completed; next is one matched short control-versus-multisource comparison before longer training.",
+          "section": "14.12",
+          "derived_excerpt": "outputs/annual_targets/local_supervision_checks_20261016/current_progress_excerpt.pdf",
           "excerpt_physical_pages_in_main_report": [
-            38,
-            46
+            47,
+            48
           ],
           "teacher_default": false,
           "EMA_default": false,
           "primary_artifact_seed": 42,
-          "robustness_seed": 17,
-          "first_target_sources": [
+          "target_sources": [
             "dem_elevation",
-            "worldcover"
-          ],
-          "deferred_targets": [
             "dem_slope",
+            "worldcover",
             "clcd",
             "nightlights",
-            "osm"
+            "osm_semantic",
+            "osm_structure"
           ],
-          "clcd_initial_role": "Cross-product diagnostic only, not independent manual truth.",
           "arms": {
-            "R0": "ExactPAN coverage; legacy context; no auxiliary targets.",
-            "R1": "R0 plus corrected context pooling; no auxiliary targets.",
-            "D1": "R1 plus DEM elevation.",
-            "D2": "R1 plus WorldCover.",
-            "D3": "R1 plus DEM elevation and WorldCover."
+            "control": "Corrected exactPAN and context pooling, original reconstruction and uniformity; no auxiliary labels.",
+            "multisource": "Identical corrected base plus7local target heads, total auxiliary coefficient0.2."
           },
-          "screen": {
-            "annual_records": 16384,
-            "updates_per_run": 4096,
-            "global_batch": 32,
-            "exposures_per_run": 131072,
-            "seeds": [
-              17,
-              42
-            ],
-            "training_runs": 10
+          "prepared_configs": {
+            "multisource": {
+              "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_20261016/multisource.yaml",
+              "sha256": "77e8a6c74a18b73df99a8933cffa0c61744d448503fa3a3f3b915e4d79536687"
+            },
+            "control": {
+              "path": "/data/heyuhang/xuannv_embedding/outputs/annual_targets/local_supervision_20261016/control.yaml",
+              "sha256": "d382f8aac431aeb969e632d2416944b616d94d41b5e4f17088c3156aeb7c701e"
+            }
           },
-          "expanded_validation": {
-            "annual_records": 32768,
-            "updates_per_run": 8192,
-            "global_batch": 32,
-            "exposures_per_run": 262144,
-            "seeds": [
-              17,
-              42
-            ],
-            "training_runs": 4,
-            "arms": "R1 and one selected recipe, fresh initialization from the original checkpoint."
-          },
-          "rough_training_loop_GPU_hour_range": [
-            106,
-            120
+          "manifest_scope": "Same frozen2048positions per year engineering manifests in both prepared configs; these are short-comparison templates, not a queued4096update screen.",
+          "matching_requirements": [
+            "Same original100M initialization",
+            "Same positions, seed, update count and masking",
+            "Same frozen evaluation protocol"
           ],
-          "budget_limitation": "Linear extrapolation from prior22-25min/2048updates on8GPUs. Excludes added targetIO/compute,dataacceptance,initialization,smoke,evaluation,and original pretraining. Re-estimate after real128stepengineeringrun.",
-          "product_promotion_requires_new_spatial_confirmation": true,
-          "p0_acceptance_excerpt": "outputs/annual_targets/p0_20261016_verified/p0_acceptance_excerpt.pdf",
-          "final_experiment_plan": "outputs/annual_targets/experiments_20261016_final/plan.json",
-          "updated_training_loop_GPU_hour_estimate": {
-            "P2": 105.15531661113103,
-            "P3": 84.12425328890482,
-            "scope": "Linear estimate from one short D3 run; excludes initialization, prior failed run, diagnostics and evaluation. Not an upper bound for different data caches or target mixes."
+          "clcd_and_osm_evaluation_role": "Product-related development diagnostics after upstream supervision; cannot alone support an independent improvement claim.",
+          "historical_five_arm_plan": {
+            "status": "P1 engineering completed; P2/P3 held for remaining input provenance and independent evaluation requirements",
+            "section": 14,
+            "derived_excerpt": "outputs/annual_targets/prepare_20261016/next_stage_excerpt.pdf",
+            "excerpt_physical_pages_in_main_report": [
+              38,
+              46
+            ],
+            "teacher_default": false,
+            "EMA_default": false,
+            "primary_artifact_seed": 42,
+            "robustness_seed": 17,
+            "first_target_sources": [
+              "dem_elevation",
+              "worldcover"
+            ],
+            "deferred_targets": [
+              "dem_slope",
+              "clcd",
+              "nightlights",
+              "osm"
+            ],
+            "clcd_initial_role": "Cross-product diagnostic only, not independent manual truth.",
+            "arms": {
+              "R0": "ExactPAN coverage; legacy context; no auxiliary targets.",
+              "R1": "R0 plus corrected context pooling; no auxiliary targets.",
+              "D1": "R1 plus DEM elevation.",
+              "D2": "R1 plus WorldCover.",
+              "D3": "R1 plus DEM elevation and WorldCover."
+            },
+            "screen": {
+              "annual_records": 16384,
+              "updates_per_run": 4096,
+              "global_batch": 32,
+              "exposures_per_run": 131072,
+              "seeds": [
+                17,
+                42
+              ],
+              "training_runs": 10
+            },
+            "expanded_validation": {
+              "annual_records": 32768,
+              "updates_per_run": 8192,
+              "global_batch": 32,
+              "exposures_per_run": 262144,
+              "seeds": [
+                17,
+                42
+              ],
+              "training_runs": 4,
+              "arms": "R1 and one selected recipe, fresh initialization from the original checkpoint."
+            },
+            "rough_training_loop_GPU_hour_range": [
+              106,
+              120
+            ],
+            "budget_limitation": "Linear extrapolation from prior22-25min/2048updates on8GPUs. Excludes added targetIO/compute,dataacceptance,initialization,smoke,evaluation,and original pretraining. Re-estimate after real128stepengineeringrun.",
+            "product_promotion_requires_new_spatial_confirmation": true,
+            "p0_acceptance_excerpt": "outputs/annual_targets/p0_20261016_verified/p0_acceptance_excerpt.pdf",
+            "final_experiment_plan": "outputs/annual_targets/experiments_20261016_final/plan.json",
+            "updated_training_loop_GPU_hour_estimate": {
+              "P2": 105.15531661113103,
+              "P3": 84.12425328890482,
+              "scope": "Linear estimate from one short D3 run; excludes initialization, prior failed run, diagnostics and evaluation. Not an upper bound for different data caches or target mixes."
+            },
+            "engineering_model_not_a_selected_upgrade": true
           },
-          "engineering_model_not_a_selected_upgrade": true
+          "budget_note": "Historical five-arm P2/P3 budgets belong only to that archived proposal; no such queue started or budget assigned to the current two-arm quick comparison.",
+          "engineering_model_not_a_selected_upgrade": true,
+          "comparison_started": false,
+          "long_training_started": false
         },
-        "budget_note": "Historical five-arm P2/P3 budgets belong only to that archived proposal; no such queue started or budget assigned to the current two-arm quick comparison.",
-        "engineering_model_not_a_selected_upgrade": true,
-        "comparison_started": false,
-        "long_training_started": false
-      },
-      "comparison_plan": "outputs/annual_targets/comparison_20261017/plan.json",
-      "long_training_started": false,
-      "production_model_replaced": false
+        "comparison_plan": "outputs/annual_targets/comparison_20261017/plan.json",
+        "long_training_started": false,
+        "production_model_replaced": false
+      }
     }
   },
-  "source_provenance_note": "E1-E20 and every prior metric retain their historical identities. Low-LR training used commit44214fb, package digest08f76f6a unchanged from E20. Preparation-plan git_sha8b2ec8d is historical; actual checkpoint provenance44214fb is recorded separately. Four fresh original100M initializations; no teacher,EMA,new confirmation scoring or production promotion. Current changes update only the canonical report and evidence.",
+  "source_provenance_note": "E1-E22and every prior verified metric retain their historical objects. Firstheadwarmup used4236ec1/package699b6727; continuation to4096and finaldiagnostics useddee3e17/package9a6fd9d3. Original100Mweights remainedb15c237a throughout both phases and diagnostics. Onlyreadouts optimized; no newembeddingaccuracyclaim. Newpackage modules addfrozenreadouttraining/strictcontinuation/gradientmeasurement; existing modeland loss implementations unchanged.",
   "historical_full_test_suite": {
     "passed": 393,
     "skipped": 2,
@@ -8079,6 +9626,19 @@
         "local legacy production checkpoint unavailable",
         "omnicloudmask unavailable"
       ]
+    },
+    {
+      "passed": 443,
+      "skipped": 2,
+      "warnings": 234,
+      "seconds": 312.1,
+      "git_sha": "8b2ec8dfda856a8930999b9e22ab430bde523b76",
+      "source_code_sha256": "08f76f6a73e78a8157ffd176956654664e7bbc5bc0d04806fb283e3ed2eace95",
+      "log": "outputs/annual_targets/comparison_checks_20261017/pytest_full.log",
+      "skip_reasons": [
+        "local legacy production checkpoint unavailable",
+        "omnicloudmask unavailable"
+      ]
     }
   ],
   "historical_report_copies": [
@@ -8102,6 +9662,13 @@
       "archive_path": "outputs/annual_targets/low_lr_checks_20261017/prior_v1_14.pdf",
       "sha256": "5f5339c79f93356e0cb00545c7b70ee3de74f1be30ab3fa4d5e9bfe15d04c482",
       "note": "Earlier report receipts retain their byte identity; canonical path now contains v1.15."
+    },
+    {
+      "version": "1.15",
+      "original_path": "docs/xuannv_annual5m_report.pdf",
+      "archive_path": "outputs/annual_targets/head_warmup_checks_20261017/prior_v1_15.pdf",
+      "sha256": "2cdb9c614bf3c3e23643595cf9d24edf81628eae2635b7382af099b8841b0d87",
+      "note": "Earlier evidence is a historical snapshot; canonical report now containsv1.16."
     }
   ]
 }
