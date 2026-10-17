@@ -2,23 +2,24 @@
 
 ```json
 {
-  "stage": "candidate_complete",
-  "completed": {
+  "stage": "complete",
+  "winner": "faster_fusion",
+  "validation": {
+    "parent": {
+      "validation_macro_f1": 0.5272502829422989,
+      "selection": "validation_only"
+    },
     "continue_low_lr": {
-      "stage": "complete",
-      "utc": 1792236033.1275973,
       "validation_macro_f1": 0.5198749810366534
     },
     "protect_public": {
-      "stage": "complete",
-      "utc": 1792236013.2265046,
       "validation_macro_f1": 0.532822990777096
     },
     "faster_fusion": {
-      "stage": "complete",
-      "utc": 1792236090.1254928,
       "validation_macro_f1": 0.5332629472138632
     }
-  }
+  },
+  "overleaf_modified": false,
+  "restarts": {}
 }
 ```
