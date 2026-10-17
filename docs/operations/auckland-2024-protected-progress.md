@@ -2,47 +2,16 @@
 
 ```json
 {
-  "stage": "training_and_validation",
-  "utc": 1792272331.2003956,
-  "supervisor_pid": 219835,
-  "completed": {},
-  "restarts": {},
-  "active": {
-    "long_continuation": 219842,
-    "frozen_public": 219843,
-    "frozen_anchored": 219844
-  },
-  "progress": {
-    "long_continuation": [
-      {
-        "step": 800,
-        "validation_macro_f1": 0.5350040796971302
-      },
-      {
-        "step": 1600,
-        "validation_macro_f1": 0.5318494043371031
-      }
-    ],
-    "frozen_public": [
-      {
-        "step": 800,
-        "validation_macro_f1": 0.5229426322506436
-      },
-      {
-        "step": 1600,
-        "validation_macro_f1": 0.5436560323793582
-      }
-    ],
-    "frozen_anchored": [
-      {
-        "step": 800,
-        "validation_macro_f1": 0.5344566632321414
-      },
-      {
-        "step": 1600,
-        "validation_macro_f1": 0.537061551850658
-      }
-    ]
+  "stage": "candidate_complete",
+  "completed": {
+    "frozen_public": {
+      "stage": "complete",
+      "utc": 1792277062.3609512,
+      "validation_macro_f1": 0.5436560323793582,
+      "selected_step": 1600,
+      "completed_steps": 2400,
+      "registered_budget": 2400
+    }
   }
 }
 ```
