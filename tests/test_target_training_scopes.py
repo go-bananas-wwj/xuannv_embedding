@@ -1,5 +1,6 @@
 import copy
 import json
+from pathlib import Path
 
 import pytest
 from test_annual_targets import target_bundle  # noqa: F401
@@ -63,3 +64,78 @@ def test_every_scope_rejects_duplicate_positions_and_evaluation_overlap():
             changed[key] = bad
             with pytest.raises(ValueError):
                 training_positions(changed, scope)
+
+
+@pytest.mark.parametrize("scope,count", [("screen", 1), ("expanded", 2), ("allowed", 3)])
+def test_training_pool_uses_exact_frozen_positions_and_paired_years(tmp_path, scope, count):
+    import yaml
+    from test_annual_model import annual_config
+
+    from xuannv_embedding.data_process.target_audit import write_json
+    from xuannv_embedding.training.target_experiments import prepare_training_pool
+    from xuannv_embedding.utils.manifest import IndexedManifest, ManifestRecord, write_manifest
+
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    ids = [f"parent_32643:{100+i}:3200" for i in range(4)]
+    split = {
+        "screen_patch_ids": ids[:1],
+        "expanded_patch_ids": ids[:2],
+        "allowed_train_patch_ids": ids[:3],
+        "roles": {"development": [{"patch_id": ids[3]}]},
+    }
+    write_json(prepared / "experiment_splits.json", split)
+    write_json(
+        prepared / "preparation.json",
+        {
+            "splits_sha256": digest(prepared / "experiment_splits.json"),
+            "formal_training_released": False,
+        },
+    )
+    raw = annual_config().to_dict()
+    template = copy.deepcopy(raw["data"]["datasets"][0])
+    raw["data"]["datasets"] = []
+    bindings = []
+    for year in [2020, 2021]:
+        folder = tmp_path / str(year)
+        folder.mkdir()
+        (folder / "statistics").mkdir()
+        for name in ["summary.json", "sources.json"]:
+            (folder / name).write_text("{}")
+        path = folder / f"{year}.train.manifest.jsonl"
+        receipt = write_manifest(
+            path,
+            [
+                ManifestRecord(
+                    patch_id=p,
+                    region=f"national{year}",
+                    sources={"s2": None},
+                    provenance={"year": year},
+                )
+                for p in ids
+            ],
+            months=[f"{year}-{m:02}" for m in range(1, 13)],
+            generator_version="fixture",
+        )
+        bindings.append({"path": str(path), "sha256": receipt.sha256})
+        dataset = copy.deepcopy(template)
+        dataset.update(
+            region=f"national{year}",
+            manifest_path=str(path),
+            patch_grid_path=str(path),
+            statistics_dir=str(folder / "statistics"),
+            source_map={name: name for name in raw["model"]["input_sources"]},
+        )
+        raw["data"]["datasets"].append(dataset)
+    initial = tmp_path / "original.yaml"
+    initial.write_text(yaml.safe_dump(raw))
+    write_json(
+        prepared / "pretraining_split_binding.json",
+        {"config_sha256": digest(initial), "original_pretraining_manifests": bindings},
+    )
+    result = prepare_training_pool(prepared, initial, tmp_path / "pool", scope=scope)
+    assert not result["training_started"] and not result["formal_training_released"]
+    assert result["unique_positions"] == count
+    for row in result["manifests"]:
+        assert {r.patch_id for r in IndexedManifest(Path(row["path"]))} == set(ids[:count])
+        assert row["records"] == count

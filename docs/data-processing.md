@@ -104,6 +104,11 @@ xuannv data targets-local --prepared-root /path/native_ready --target-root /path
 扩大训练范围后必须使用新缓存的准备SHA及本scope的DSM统计量；旧screen预热头的输入/目标
 合同不能直接冒充allowed合同。需要在新合同下重新预热，或另做有来源记录的显式转换。
 
+`xuannv experiment prepare-training-pool --prepared-root /path/ready --initial-config
+/path/original.yaml --output /path/new/pool --scope allowed` 从绑定的原始双年训练清单物化
+对应训练位置，保存manifest、sidecar、原输入统计量链接及摘要。不选择训练配方或启动模型，
+并再次拒绝训练与任一冻结评测角色交叉。
+
 ## 全国不变量
 
 - `parent_key = EPSG:grid_col:grid_row`，同一父格只能有一个 owner UTM zone；

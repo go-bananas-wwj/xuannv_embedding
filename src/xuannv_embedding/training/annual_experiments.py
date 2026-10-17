@@ -979,6 +979,17 @@ def prepare_local_supervision(args):
     )
 
 
+def prepare_training_pool(args):
+    from xuannv_embedding.training.target_experiments import prepare_training_pool as prepare
+
+    result = prepare(args.prepared_root, args.initial_config, args.output, scope=args.scope)
+    print(
+        json.dumps(
+            {"frozen_training_positions": result["unique_positions"], "training_started": False}
+        )
+    )
+
+
 def prepare_target_comparison(args):
     from xuannv_embedding.training.target_comparison import prepare_comparison
 
@@ -1004,6 +1015,14 @@ def main(argv=None) -> int:
         command.add_argument(f"--{name}", required=True, type=Path)
     command.add_argument("--workers", type=int, default=4)
     command.set_defaults(handler=prepare_local_supervision)
+    command = commands.add_parser(
+        "prepare-training-pool",
+        help="Materialize a frozen training scope without choosing a recipe",
+    )
+    for name in ("prepared-root", "initial-config", "output"):
+        command.add_argument(f"--{name}", required=True, type=Path)
+    command.add_argument("--scope", choices=["screen", "expanded", "allowed"], default="allowed")
+    command.set_defaults(handler=prepare_training_pool)
     command = commands.add_parser(
         "prepare-target-comparison", help="Freeze a bounded two-recipe, two-seed comparison"
     )

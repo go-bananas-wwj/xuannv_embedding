@@ -58,7 +58,13 @@ main(['data', COMMAND, '--help'])
 
 
 @pytest.mark.parametrize(
-    "command", ["prepare-targets", "prepare-multisource", "prepare-target-comparison"]
+    "command",
+    [
+        "prepare-targets",
+        "prepare-multisource",
+        "prepare-target-comparison",
+        "prepare-training-pool",
+    ],
 )
 def test_supervised_experiment_preparation_help(command) -> None:
     result = subprocess.run(

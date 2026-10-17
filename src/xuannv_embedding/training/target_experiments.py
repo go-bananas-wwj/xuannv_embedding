@@ -9,6 +9,98 @@ from pathlib import Path
 from xuannv_embedding.data_process.target_audit import digest, write_json
 
 
+def prepare_training_pool(prepared: Path, initial_config: Path, output: Path, *, scope="allowed"):
+    """Materialize a frozen training pool without selecting objectives or starting training."""
+    from xuannv_embedding.config import Config
+    from xuannv_embedding.data.target_contract import training_positions
+    from xuannv_embedding.utils.manifest import IndexedManifest, write_manifest
+
+    if output.exists():
+        raise FileExistsError("Training-pool output must be new")
+    preparation = json.loads((prepared / "preparation.json").read_text())
+    if digest(prepared / "experiment_splits.json") != preparation["splits_sha256"]:
+        raise ValueError("Frozen target experiment split changed")
+    split = json.loads((prepared / "experiment_splits.json").read_text())
+    wanted = set(training_positions(split, scope))
+    binding = json.loads((prepared / "pretraining_split_binding.json").read_text())
+    if digest(initial_config) != binding["config_sha256"]:
+        raise ValueError("Original pretraining configuration identity changed")
+    config = Config.from_yaml(initial_config)
+    if output.resolve().is_relative_to(prepared.resolve()) or any(
+        output.resolve().is_relative_to(row.manifest_path.parent.resolve())
+        for row in config.data.datasets
+    ):
+        raise ValueError("Training pool must not modify its frozen source roots")
+    output.mkdir(parents=True)
+    manifests, assets = [], {}
+    for dataset in config.data.datasets:
+        source = dataset.manifest_path
+        expected = next(
+            row["sha256"]
+            for row in binding["original_pretraining_manifests"]
+            if row["path"] == str(source)
+        )
+        if digest(source) != expected:
+            raise ValueError("Original pretraining manifest changed")
+        records = IndexedManifest(source)
+        chosen = [row for row in records if row.patch_id in wanted]
+        if len(chosen) != len(wanted) or {row.patch_id for row in chosen} != wanted:
+            raise ValueError("Frozen training positions lack paired annual observations")
+        directory = output / "data" / dataset.region
+        directory.mkdir(parents=True)
+        for name in ("summary.json", "sources.json", "statistics"):
+            (directory / name).symlink_to(
+                (source.parent / name).resolve(), target_is_directory=name == "statistics"
+            )
+        path = directory / source.name
+        receipt = write_manifest(
+            path,
+            chosen,
+            months=records.meta.months,
+            generator_version="frozen-target-training-pool-v1",
+        )
+        manifests.append(
+            {
+                "region": dataset.region,
+                "year": chosen[0].provenance["year"],
+                "path": str(path.resolve()),
+                "sha256": receipt.sha256,
+                "records": len(chosen),
+                "statistics_dir": str(directory / "statistics"),
+            }
+        )
+        assets[str(source)] = expected
+        for path in [
+            source.parent / "summary.json",
+            source.parent / "sources.json",
+            *sorted((source.parent / "statistics").glob("*_stats.json")),
+        ]:
+            assets[str(path.resolve())] = digest(path)
+    for path in [
+        prepared / "preparation.json",
+        prepared / "experiment_splits.json",
+        prepared / "pretraining_split_binding.json",
+        initial_config,
+    ]:
+        assets[str(path.resolve())] = digest(path)
+    result = {
+        "schema": "xuannv.frozen-training-pool.v1",
+        "scope": scope,
+        "training_started": False,
+        "unique_positions": len(wanted),
+        "formal_training_released": preparation["formal_training_released"],
+        "preparation_sha256": digest(prepared / "preparation.json"),
+        "manifests": manifests,
+        "assets": assets,
+        "input_normalization": (
+            "Preserve original pretrained input statistics; "
+            "target normalization is scope-specific."
+        ),
+    }
+    write_json(output / "plan.json", result)
+    return result
+
+
 def prepare_experiments(
     prepared: Path, target_root: Path, initial_config: Path, output: Path
 ) -> dict:
