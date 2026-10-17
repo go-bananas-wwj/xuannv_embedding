@@ -4,8 +4,8 @@ Generated from registered local artifacts; no runtime payloads are published.
 
 ```json
 {
-  "stage": "export_highres",
-  "updated_utc": "2026-10-17T05:20:27.499594+00:00",
+  "stage": "evaluation_complete",
+  "updated_utc": "2026-10-17T05:36:40.041855+00:00",
   "models": {
     "public": {
       "state": "complete",
@@ -35,7 +35,7 @@ Generated from registered local artifacts; no runtime payloads are published.
     70,
     71
   ],
-  "classification_jobs_complete": 160,
+  "classification_jobs_complete": 215,
   "classification_jobs_total": 215,
   "overleaf_modified": false
 }
