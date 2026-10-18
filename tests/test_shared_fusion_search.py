@@ -276,3 +276,43 @@ def test_shared_plan_requires_context_in_all_regions_before_scoring(tmp_path, mi
     else:
         _, actual, _ = read_plan(sp)
         assert len(actual) == 3
+
+
+def test_shared_public_control_reallocates_all_64_channels_to_available_sources(tmp_path):
+    plan, region, _, _ = fixture_inputs(tmp_path)
+    terrain = tmp_path / "terrain.npy"
+    np.save(terrain, np.random.default_rng(44).normal(size=(22, 5, 2, 2)).astype(np.float32))
+    region["terrain"] = {
+        **ref(terrain),
+        "layout": "nchw",
+        "index_sha256": region["index"]["sha256"],
+    }
+    recipe = {
+        "name": "public_reallocated",
+        "kind": "blocks",
+        "sources": ["public", "raw", "terrain"],
+        "dimensions": [32, 28, 4],
+        "unit_branches": [True, True, False],
+        "unit_output": False,
+    }
+    regions = [{**region, "name": name} for name in ["a", "b", "c"]]
+    rp, ap, sp = tmp_path / "regions.json", tmp_path / "anchor.json", tmp_path / "plan.json"
+    dump(rp, {"regions": regions})
+    dump(
+        ap,
+        {
+            "state": "complete",
+            "selection_uses_validation_only": True,
+            "values": {
+                r["name"]: {h: {"aef": 0.6, "public": 0.5} for h in ["mlp", "conv3x3"]}
+                for r in regions
+            },
+        },
+    )
+    plan.update(schema="shared-fusion-search-v1", regions=ref(rp), anchor=ref(ap), recipes=[recipe])
+    dump(sp, plan)
+    read_plan(sp)
+    path = export_candidate(plan, region, recipe)
+    assert np.load(path).shape == (22, 64, 2, 2)
+    header = json.loads((path.parent / "identity.json").read_text())
+    assert set(header["sources"]) == {"public", "raw", "terrain"}

@@ -118,6 +118,7 @@ def read_plan(path):
                 or recipe["sources"]
                 not in [
                     ["public", "semantic", "raw"],
+                    ["public", "raw", "terrain"],
                     ["public", "semantic", "raw", "terrain"],
                     ["public", "semantic", "raw", "context"],
                 ]
