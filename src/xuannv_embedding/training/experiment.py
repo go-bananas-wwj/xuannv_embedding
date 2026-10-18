@@ -534,6 +534,10 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "annual-public-observations":
+        from xuannv_embedding.data_process.annual_public import main as annual_main
+
+        return annual_main(forwarded[1:])
     if forwarded and forwarded[0] == "shared-fusion":
         from xuannv_embedding.training.shared_fusion_search import main as shared_main
 
@@ -576,6 +580,9 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser(
+        "annual-public-observations", help="按质量与地理索引合成十二个月公共观测", add_help=False
+    )
     sub.add_parser("shared-fusion", help="按最弱区域验证收益选择共同融合配方", add_help=False)
     sub.add_parser("public-statistics", help="按波段名称汇总公开时序观测", add_help=False)
     sub.add_parser("fusion-transfer", help="固定融合配方的跨区域评测", add_help=False)
