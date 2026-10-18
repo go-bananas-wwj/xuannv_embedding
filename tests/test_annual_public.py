@@ -188,3 +188,68 @@ def test_annual_public_rejects_dates_outside_window_and_corrupted_cached_samples
         f.write(b"changed")
     with pytest.raises(ValueError, match="cached sample identity"):
         annual_public.export(path)
+
+
+def test_annual_public_accepts_only_proven_companion_masks_for_legacy_quality(tmp_path):
+    path, spec = fixture_spec(tmp_path)
+    proof = tmp_path / "proof.json"
+    dump(
+        proof,
+        {
+            "state": "complete",
+            "source": "s2",
+            "companion_validated": True,
+            "mask_semantics": "quality_validity_before_category_write",
+            "pixels_checked": 4,
+        },
+    )
+    values = np.full((12, 2, 2), 2, np.float32)
+    values[-1] = -9999
+    raster = write_raster(tmp_path / "legacy_scl.tif", PUBLIC_BANDS["s2"] + ["SCL"], values)
+    mask = np.ones((1, 2, 2), np.float32)
+    mask[0, 0, 1] = 0
+    valid = write_raster(tmp_path / "known_mask.tif", ["valid"], mask)
+    cpath = spec["catalogues"]["s2"]["path"]
+    catalogue = json.loads(Path(cpath).read_text())
+    catalogue["records"][0]["observations"][0].update(raster=raster, companion_mask=valid)
+    dump(cpath, catalogue)
+    spec["catalogues"]["s2"] = reference(cpath)
+    spec["validated_companions"] = {"s2": reference(proof)}
+    dump(path, spec)
+    annual_public.export(path)
+    with np.load(tmp_path / "output/samples/tile_a.npz") as data:
+        np.testing.assert_array_equal(data["s2_valid"][0], [[True, False], [True, True]])
+        assert data["s2"][0, 0, 1, 1] == 2
+
+
+def test_annual_public_rejects_unverified_or_absent_companion_override(tmp_path):
+    path, spec = fixture_spec(tmp_path)
+    proof = tmp_path / "bad_proof.json"
+    dump(
+        proof,
+        {
+            "state": "mismatch",
+            "source": "s2",
+            "companion_validated": False,
+            "mask_semantics": "quality_validity_before_category_write",
+            "pixels_checked": 4,
+        },
+    )
+    spec["validated_companions"] = {"s2": reference(proof)}
+    dump(path, spec)
+    with pytest.raises(ValueError, match="proof"):
+        annual_public.export(path)
+    dump(
+        proof,
+        {
+            "state": "complete",
+            "source": "s2",
+            "companion_validated": True,
+            "mask_semantics": "quality_validity_before_category_write",
+            "pixels_checked": 4,
+        },
+    )
+    spec["validated_companions"] = {"s2": reference(proof)}
+    dump(path, spec)
+    with pytest.raises(ValueError, match="requires.*companion"):
+        annual_public.export(path)

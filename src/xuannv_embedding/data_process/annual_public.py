@@ -51,7 +51,9 @@ def geography_matches(crs, bounds, record):
     )
 
 
-def read_observation(observation, record, source, size):
+def read_observation(observation, record, source, size, *, trust_companion=False):
+    if trust_companion and observation["companion_mask"] is None:
+        raise ValueError("Validated legacy input requires a companion mask")
     with rasterio.open(verified(observation["raster"])) as raster:
         if (raster.height, raster.width) != (size, size) or not geography_matches(
             raster.crs, raster.bounds, record
@@ -67,7 +69,7 @@ def read_observation(observation, record, source, size):
         valid = (raster.dataset_mask() > 0) & np.isfinite(physical).all(0)
         if raster.nodata is not None:
             valid &= np.all(physical != raster.nodata, axis=0)
-        if source in QUALITY:
+        if source in QUALITY and not trust_companion:
             qa = values[names.index(QUALITY[source])]
             integral = np.isfinite(qa) & (qa == np.rint(qa)) & (qa >= 0) & (qa <= 65535)
             clean = np.where(integral, qa, 0).astype(np.uint16)
@@ -86,7 +88,7 @@ def read_observation(observation, record, source, size):
     return physical, valid
 
 
-def monthly_composites(record, source, months, size):
+def monthly_composites(record, source, months, size, *, trust_companion=False):
     channels = len(PUBLIC_BANDS[source])
     sums = np.zeros((12, channels, size, size), np.float64)
     counts = np.zeros((12, size, size), np.uint32)
@@ -104,7 +106,9 @@ def monthly_composites(record, source, months, size):
             raise ValueError("Duplicate observation or date outside the registered months")
         seen.add(key)
         i = months.index(month)
-        values, valid = read_observation(observation, record, source, size)
+        values, valid = read_observation(
+            observation, record, source, size, trust_companion=trust_companion
+        )
         sums[i] += np.where(valid[None], values, 0)
         counts[i] += valid
     frames = (sums / np.maximum(counts[:, None], 1)).astype(np.float32)
@@ -116,7 +120,18 @@ def monthly_composites(record, source, months, size):
 def load_spec(path):
     spec = json.loads(Path(path).read_text())
     if (
-        set(spec) != {"schema", "index", "catalogues", "months", "bands", "size", "output"}
+        not {"schema", "index", "catalogues", "months", "bands", "size", "output"}.issubset(spec)
+        or set(spec)
+        - {
+            "schema",
+            "index",
+            "catalogues",
+            "months",
+            "bands",
+            "size",
+            "output",
+            "validated_companions",
+        }
         or spec["schema"] != "annual-public-observations-v1"
         or type(spec["size"]) is not int
         or not 1 <= spec["size"] <= 512
@@ -124,6 +139,20 @@ def load_spec(path):
         or set(spec["catalogues"]) != set(PUBLIC_BANDS)
     ):
         raise ValueError("Invalid annual public observation specification")
+    companions = spec.get("validated_companions", {})
+    if not isinstance(companions, dict) or set(companions) - set(QUALITY):
+        raise ValueError("Invalid companion validation proof sources")
+    for source, proof_ref in companions.items():
+        proof = json.loads(verified(proof_ref).read_text())
+        if (
+            proof.get("state") != "complete"
+            or proof.get("source") != source
+            or proof.get("companion_validated") is not True
+            or proof.get("mask_semantics") != "quality_validity_before_category_write"
+            or type(proof.get("pixels_checked")) is not int
+            or proof["pixels_checked"] < 1
+        ):
+            raise ValueError("Missing or failed companion validation proof")
     validate_months(spec["months"])
     index = json.loads(verified(spec["index"]).read_text())
     records = index["records"]
@@ -186,7 +215,11 @@ def export(path):
             stored, counts = {}, {}
             for source in PUBLIC_BANDS:
                 frames, valid = monthly_composites(
-                    catalogues[source][i], source, spec["months"], spec["size"]
+                    catalogues[source][i],
+                    source,
+                    spec["months"],
+                    spec["size"],
+                    trust_companion=source in spec.get("validated_companions", {}),
                 )
                 stored[source], stored[source + "_valid"] = frames, valid
                 counts[source] = valid.sum(axis=(1, 2)).tolist()
@@ -219,7 +252,8 @@ def export(path):
         {
             "months": spec["months"],
             "monthly_valid_pixels": {s: v.tolist() for s, v in totals.items()},
-            "quality": "named SCL/QA bits intersect finite physical bands and companion masks",
+            "quality": "named SCL/QA bits or independently validated companion, intersect finite physical bands",
+            "validated_companions": spec.get("validated_companions", {}),
             "missing_months": "zero values and false validity, never duplicated acquisitions",
             "aggregation": "per-pixel monthly mean of valid observations in archive units",
             "labels_used": False,
