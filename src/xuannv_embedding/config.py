@@ -673,8 +673,10 @@ def _parse_training(value: Any, model: ModelConfig) -> TrainingConfig:
     anchor_mode = _string(
         raw.get("annual_feature_anchor_mode", "native"), "training.annual_feature_anchor_mode"
     )
-    if anchor_mode not in {"native", "highpass_10m"}:
-        raise ConfigError("training.annual_feature_anchor_mode must be native or highpass_10m")
+    if anchor_mode not in {"native", "highpass_10m", "weighted_10m"}:
+        raise ConfigError(
+            "training.annual_feature_anchor_mode must be native, highpass_10m or weighted_10m"
+        )
     tasks_raw = raw.get("semantic_probe_tasks", [])
     if not isinstance(tasks_raw, list):
         raise ConfigError("training.semantic_probe_tasks 必须是字符串列表")

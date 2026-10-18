@@ -191,8 +191,11 @@ class AnnualLoss(nn.Module):
         if not isinstance(self.feature_anchor_mode, str) or self.feature_anchor_mode not in {
             "native",
             "highpass_10m",
+            "weighted_10m",
         }:
-            raise ValueError("Annual feature anchor mode must be native or highpass_10m")
+            raise ValueError(
+                "Annual feature anchor mode must be native, highpass_10m or weighted_10m"
+            )
         self.latent_pool_factors = config.training.latent_prediction_pool_factors
         self.view_consistency_weight = config.training.view_consistency_weight
         self.view_pool_factors = config.training.view_consistency_pool_factors
@@ -341,11 +344,12 @@ class AnnualLoss(nn.Module):
                     "Annual feature anchor requires clean student and frozen reference"
                 )
             support = anchor_output.validity_mask[:, 0] & teacher_output.validity_mask[:, 0]
-            anchor_loss = (
-                native_feature_anchor_loss
-                if self.feature_anchor_mode == "native"
-                else highpass_feature_anchor_loss
-            )
+            if self.feature_anchor_mode == "native":
+                anchor_loss = native_feature_anchor_loss
+            elif self.feature_anchor_mode == "highpass_10m":
+                anchor_loss = highpass_feature_anchor_loss
+            else:
+                anchor_loss = weighted_feature_anchor_loss
             anchor = anchor_loss(
                 anchor_output.embedding_map[:, 0], teacher_output.embedding_map[:, 0], support
             )
@@ -424,6 +428,20 @@ def highpass_feature_anchor_loss(student, reference, support):
         return clean - mean[..., : values.shape[-2], : values.shape[-1]]
 
     return native_feature_anchor_loss(residual(student), residual(reference.detach()), support)
+
+
+def weighted_feature_anchor_loss(student, reference, support):
+    """Keep the fine penalty and add one tenth of its orthogonal block-mean term.
+
+    On the same valid support, native error = block-mean error + highpass error.
+    The fixed composition 0.1 * native + 0.9 * highpass therefore assigns weights
+    0.1 and 1 to those two terms, respectively. It adds no normalization or model
+    parameters. Both constituent means use the existing global DDP pixel count;
+    the reference is detached in each. The coefficient is fixed by this mode.
+    """
+    whole = native_feature_anchor_loss(student, reference, support)
+    fine = highpass_feature_anchor_loss(student, reference, support)
+    return 0.1 * whole + 0.9 * fine
 
 
 def multiscale_latent_loss(student, teacher, support, pool_factors=None):
