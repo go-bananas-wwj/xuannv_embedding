@@ -124,3 +124,31 @@ as the parent. Query only a new validation winner. AEF and public-PCA48 controls
 exactly the selected spatial filter. This tests a limited increase in context with
 partial detail preservation; it does not assert that wider pooling benefits height
 regression. Keep the first accepted archive and both completed search records.
+
+## Complementary public statistics: registered follow-up
+
+The four wider-context candidates also failed the validation criterion; no query
+suite was run. Retain `wide_k9` and the original read-only anchor.
+
+Next test information complementarity using the already prepared 95-channel public
+spectral/seasonal statistics (annual per-band mean/std/min/max, availability and
+vegetation/water-index statistics). These are the same three public satellite inputs,
+with no new sensors or ground-truth maps. Fit StandardScaler and PCA only to the fixed
+unlabeled image positions, save every parameter and preserve missing-source zeros.
+
+Register eight 64D cases: public/semantic/raw dimensions 40/16/8, 32/16/16 or 32/24/8,
+each with joint 5x5 or 9x9 context (six cases). Also test 40/16/8 and 32/16/16 with
+public/semantic/raw branch kernels 9/9/1 and no final averaging (two cases). Keep the
+same archived validation reference, validated parent, readout rules and acceptance.
+Only a new validation winner gets query scoring. The no-high-resolution control keeps
+both public encoder features and the exact raw-statistics branch; only semantic image
+features are zeroed. Existing matching AEF controls at 1/5/9 cells are reused.
+
+Before any complementary-statistics readout is trained, align its selection rule
+with the stated new goal: require positive MLP and CNN validation gains, then maximize
+their mean gain (ties use the smaller gain). Candidates sacrificing either head rank
+below every joint improvement. The original archived validation anchor remains fixed.
+A validation-only audit of all completed refinement candidates still selects `wide_k9`
+under this rule. No query result or new raw-source readout determined this change.
+Earlier published rounds retain their recorded balanced-minimum criterion. This
+prospective selection change and all adaptation remain explicit in the study record.
