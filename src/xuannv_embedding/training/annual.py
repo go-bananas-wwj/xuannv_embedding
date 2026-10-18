@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import date
 
 import torch
+import torch.nn.functional as F
 from torch import distributed, nn
 
 from xuannv_embedding.models.annual import masked_resample, visibility_coverage
@@ -186,6 +187,12 @@ class AnnualLoss(nn.Module):
         self.warmup = config.training.uniformity_warmup_epochs
         self.latent_prediction_weight = config.training.latent_prediction_weight
         self.feature_anchor_weight = config.training.annual_feature_anchor_weight
+        self.feature_anchor_mode = config.training.annual_feature_anchor_mode
+        if not isinstance(self.feature_anchor_mode, str) or self.feature_anchor_mode not in {
+            "native",
+            "highpass_10m",
+        }:
+            raise ValueError("Annual feature anchor mode must be native or highpass_10m")
         self.latent_pool_factors = config.training.latent_prediction_pool_factors
         self.view_consistency_weight = config.training.view_consistency_weight
         self.view_pool_factors = config.training.view_consistency_pool_factors
@@ -334,7 +341,12 @@ class AnnualLoss(nn.Module):
                     "Annual feature anchor requires clean student and frozen reference"
                 )
             support = anchor_output.validity_mask[:, 0] & teacher_output.validity_mask[:, 0]
-            anchor = native_feature_anchor_loss(
+            anchor_loss = (
+                native_feature_anchor_loss
+                if self.feature_anchor_mode == "native"
+                else highpass_feature_anchor_loss
+            )
+            anchor = anchor_loss(
                 anchor_output.embedding_map[:, 0], teacher_output.embedding_map[:, 0], support
             )
             weighted_anchor = self.feature_anchor_weight * anchor
@@ -386,6 +398,32 @@ def native_feature_anchor_loss(student, reference, support):
         mean = totals[0] / denominator
         return proxy + (mean - proxy.detach())
     return numerator / count.clamp(min=1)
+
+
+def highpass_feature_anchor_loss(student, reference, support):
+    """Retain within-10m detail while leaving each valid block mean unconstrained.
+
+    The feature grid is native 5m. Both views use the same support-weighted 2x2
+    projection, so whole feature error decomposes into block-mean and residual
+    errors. This loss keeps only the residual term with no extra normalization.
+    Partial edge blocks and missing pixels use only their actual valid support.
+    """
+    if student.shape != reference.shape or student.ndim != 4:
+        raise ValueError("Highpass anchor feature maps must have the same BCHW shape")
+    if support.shape != (student.shape[0], 1, *student.shape[-2:]):
+        raise ValueError("Highpass anchor validity must have shape B1HW")
+    mask = support.float()
+    count = F.avg_pool2d(mask, 2, stride=2, ceil_mode=True, count_include_pad=False)
+
+    def residual(values):
+        clean = torch.where(mask > 0, values.float(), 0.0)
+        pooled = F.avg_pool2d(
+            clean * mask, 2, stride=2, ceil_mode=True, count_include_pad=False
+        ) / count.clamp(min=1e-6)
+        mean = pooled.repeat_interleave(2, -2).repeat_interleave(2, -1)
+        return clean - mean[..., : values.shape[-2], : values.shape[-1]]
+
+    return native_feature_anchor_loss(residual(student), residual(reference.detach()), support)
 
 
 def multiscale_latent_loss(student, teacher, support, pool_factors=None):

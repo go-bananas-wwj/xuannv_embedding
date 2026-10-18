@@ -154,6 +154,7 @@ def test_prepare_from_legacy_config_preserves_native_pan_and_resets_control_targ
         statistics_dir=str(data / "statistics"),
     )
     raw["training"]["annual_feature_anchor_weight"] = 10.0
+    raw["training"]["annual_feature_anchor_mode"] = "highpass_10m"
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.safe_dump(raw))
     checkpoint = tmp_path / "checkpoint.pt"

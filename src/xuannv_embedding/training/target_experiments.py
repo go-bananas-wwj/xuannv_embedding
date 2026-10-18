@@ -227,6 +227,7 @@ def prepare_experiments(
                     gradient_checkpointing=True,
                     latent_prediction_weight=0.0,
                     annual_feature_anchor_weight=0.0,
+                    annual_feature_anchor_mode="native",
                     view_consistency_weight=0.0,
                 )
                 if weights:

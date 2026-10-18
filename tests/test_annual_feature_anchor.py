@@ -123,8 +123,10 @@ def test_anchor_uses_clean_deterministic_student_and_frozen_reference_without_a_
     assert all(torch.equal(v, before[k]) for k, v in teacher.state_dict().items())
 
 
-def test_disabled_anchor_does_not_change_parameters_or_run_an_extra_student_view():
+@pytest.mark.parametrize("mode", ["native", "highpass_10m"])
+def test_disabled_anchor_does_not_change_parameters_or_run_an_extra_student_view(mode):
     cfg = anchor_config()
+    cfg = replace(cfg, training=replace(cfg.training, annual_feature_anchor_mode=mode))
     disabled = replace(cfg, training=replace(cfg.training, annual_feature_anchor_weight=0))
     torch.manual_seed(11)
     system = build_training_system(disabled)
@@ -175,9 +177,11 @@ def test_anchor_configuration_and_reference_contract_are_strict(tmp_path):
     )
 
 
-def test_anchor_named_optimizer_and_scheduler_resume_reproduce_the_next_update(tmp_path):
+@pytest.mark.parametrize("mode", ["native", "highpass_10m"])
+def test_anchor_named_optimizer_and_scheduler_resume_reproduce_the_next_update(tmp_path, mode):
     torch.manual_seed(33)
     cfg = anchor_config()
+    cfg = replace(cfg, training=replace(cfg.training, annual_feature_anchor_mode=mode))
     system = build_training_system(cfg)
     reference = copy.deepcopy(system.model)
     system.set_teacher(copy.deepcopy(reference))
@@ -249,13 +253,17 @@ def test_anchor_named_optimizer_and_scheduler_resume_reproduce_the_next_update(t
     assert all(p.grad is None for p in restored.teacher_model.parameters())
 
 
-def test_heldout_reconstruction_does_not_include_training_feature_anchor(tmp_path, monkeypatch):
+@pytest.mark.parametrize("mode", ["native", "highpass_10m"])
+def test_heldout_reconstruction_does_not_include_training_feature_anchor(
+    tmp_path, monkeypatch, mode
+):
     import json
     from types import SimpleNamespace
 
     from xuannv_embedding.training import annual_data, annual_experiments
 
     cfg = anchor_config()
+    cfg = replace(cfg, training=replace(cfg.training, annual_feature_anchor_mode=mode))
     cfg = replace(cfg, data=replace(cfg.data, datasets=cfg.data.datasets[:1]))
     system = build_training_system(cfg).eval()
     raw = raw_batch(32)
