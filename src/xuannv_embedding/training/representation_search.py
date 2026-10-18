@@ -81,7 +81,7 @@ def unit(values):
 
 
 def _spatial_options(recipe, branches):
-    allowed = {1, 3, 5, 7, 9}
+    allowed = {1, 3, 5, 7, 9, 11, 13}
     kernel = recipe.get("post_pool", 1)
     if type(kernel) is not int or kernel not in allowed:
         raise ValueError("Spatial pooling must be an odd registered neighborhood size")

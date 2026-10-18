@@ -207,3 +207,11 @@ def test_improvement_validation_anchor_stays_fixed_when_parent_changes(tmp_path)
     spec["improvement"]["validation"]["sha256"] = sha(path)
     with pytest.raises(ValueError, match="validation"):
         improvement_validation_reference(spec)
+
+
+@pytest.mark.parametrize("kernel", [11, 13])
+def test_large_context_preserves_unit_constant_features_at_tile_edges(kernel):
+    values = np.ones((64, 15, 15), np.float32)
+    result = compose_tile({"kind": "identity", "post_pool": kernel}, [values], [])
+    assert result.shape == values.shape
+    assert np.allclose(result, 1 / 8)
