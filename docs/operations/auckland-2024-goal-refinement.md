@@ -77,3 +77,19 @@ Source-strength settings are diagnostic: per-channel support-set standardization
 largely cancels constant branch scaling where both branches are fully observed.
 Any difference must be interpreted through missing-source normalization and spatial
 geometry, rather than claimed as new information from multiplying a constant.
+
+## Conditional multiscale follow-up, not launched
+
+The twelve completed validation cases selected 9x9 joint averaging. Increasing the
+local residual did not improve the balanced criterion. If its full query result fails
+the new 0.5-point goal, test preserving two scales as separate coordinates instead of
+averaging them into one vector. This addresses information loss without new imagery.
+
+For each kernel 5 or 9, allocate public-local/public-context/semantic-local/semantic-
+context dimensions as 24/16/16/8, 16/16/16/16, 16/24/8/16 or 32/16/8/8. Each totals
+64 dimensions. Fit PCA only on the same unlabeled positions, apply kernels 1/k/1/k
+within tiles, normalize branches and concatenate. There is no extra joint pooling.
+Keep the previous best validation candidate eligible with its cached readouts; rank
+all candidates against the same archived validation anchor. Only a newly selected
+candidate receives new query fits. Do not use the first wave's query scores to choose
+the dimensional allocations or the multiscale winner.
