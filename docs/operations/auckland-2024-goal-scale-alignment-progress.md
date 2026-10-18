@@ -2,8 +2,10 @@
 
 ```json
 {
-  "stage": "validation",
-  "completed": {
+  "stage": "complete",
+  "winner": "scale05_p40_s24_k13",
+  "acceptance_met": true,
+  "validation": {
     "scale05_p48_s16_k5": {
       "validation_macro_f1": 0.6097304877774153,
       "minimum_margin": 0.008351476963772586,
@@ -76,6 +78,7 @@
         "conv3x3": 0.5842753938892059
       }
     }
-  }
+  },
+  "overleaf_modified": false
 }
 ```
