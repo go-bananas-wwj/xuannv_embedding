@@ -534,6 +534,14 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "shared-fusion":
+        from xuannv_embedding.training.shared_fusion_search import main as shared_main
+
+        return shared_main(forwarded[1:])
+    if forwarded and forwarded[0] == "public-statistics":
+        from xuannv_embedding.export.public_statistics import main as statistics_main
+
+        return statistics_main(forwarded[1:])
     if forwarded and forwarded[0] == "fusion-transfer":
         from xuannv_embedding.training.fusion_transfer import main as transfer_main
 
@@ -568,6 +576,8 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("shared-fusion", help="按最弱区域验证收益选择共同融合配方", add_help=False)
+    sub.add_parser("public-statistics", help="按波段名称汇总公开时序观测", add_help=False)
     sub.add_parser("fusion-transfer", help="固定融合配方的跨区域评测", add_help=False)
     sub.add_parser("representation-search", help="固定维度融合的验证集搜索", add_help=False)
     sub.add_parser("semantic-features", help="静态高分语义特征与无标签投影", add_help=False)
