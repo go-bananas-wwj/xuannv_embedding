@@ -252,7 +252,10 @@ def export(path):
         {
             "months": spec["months"],
             "monthly_valid_pixels": {s: v.tolist() for s, v in totals.items()},
-            "quality": "named SCL/QA bits or independently validated companion, intersect finite physical bands",
+            "quality": (
+                "named SCL/QA bits or independently validated companion, "
+                "intersect finite physical bands"
+            ),
             "validated_companions": spec.get("validated_companions", {}),
             "missing_months": "zero values and false validity, never duplicated acquisitions",
             "aggregation": "per-pixel monthly mean of valid observations in archive units",
