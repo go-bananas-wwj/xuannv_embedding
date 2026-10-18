@@ -2,8 +2,10 @@
 
 ```json
 {
-  "stage": "validation",
-  "completed": {
+  "stage": "complete",
+  "winner": "native_blocks_16",
+  "acceptance_met": false,
+  "validation": {
     "public_rotation64": {
       "validation_macro_f1": 0.5523974517528092,
       "minimum_margin": -0.025199912389700208,
@@ -68,6 +70,7 @@
         "conv3x3": 0.531121624953776
       }
     }
-  }
+  },
+  "overleaf_modified": false
 }
 ```
