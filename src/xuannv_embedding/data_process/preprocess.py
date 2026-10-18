@@ -451,7 +451,7 @@ def process_one_date(args: tuple[Path, str, list[int], dict[str, Any]]) -> int:
                         acc["sum"][:-1] += np.where(vm, ref, 0.0)
                         acc["count"][:-1] += vm.astype(np.uint16)
                         key = "scl" if source == "s2" else "qa"
-                        empty = (acc[key] == nodata) & valid_mask
+                        empty = (acc[key] == nodata) & valid_mask.astype(bool)
                         acc[key][empty] = categorical[empty]
                         acc["valid_count"] += valid_mask.astype(np.uint8)
                     else:
