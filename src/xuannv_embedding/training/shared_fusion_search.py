@@ -119,8 +119,10 @@ def read_plan(path):
                 not in [
                     ["public", "semantic", "raw"],
                     ["public", "raw", "terrain"],
+                    ["public", "raw", "terrain", "context"],
                     ["public", "semantic", "raw", "terrain"],
                     ["public", "semantic", "raw", "context"],
+                    ["public", "semantic", "raw", "terrain", "context"],
                 ]
                 or len(recipe["dimensions"]) != len(recipe["sources"])
                 or sum(recipe["dimensions"]) != 64

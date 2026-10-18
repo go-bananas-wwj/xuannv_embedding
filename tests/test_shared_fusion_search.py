@@ -316,3 +316,53 @@ def test_shared_public_control_reallocates_all_64_channels_to_available_sources(
     assert np.load(path).shape == (22, 64, 2, 2)
     header = json.loads((path.parent / "identity.json").read_text())
     assert set(header["sources"]) == {"public", "raw", "terrain"}
+
+
+@pytest.mark.parametrize("include_local", [True, False])
+def test_shared_semantic_context_and_terrain_keep_equal_output_budget(tmp_path, include_local):
+    plan, region, _, _ = fixture_inputs(tmp_path)
+    rng = np.random.default_rng(45)
+    for name, channels in [("terrain", 5), ("context", 11)]:
+        path = tmp_path / f"{name}.npy"
+        np.save(path, rng.normal(size=(22, channels, 2, 2)).astype(np.float32))
+        region[name] = {
+            **ref(path),
+            "layout": "nchw",
+            "index_sha256": region["index"]["sha256"],
+        }
+    recipe = {
+        "name": "semantic_complement",
+        "kind": "blocks",
+        "sources": (
+            ["public", "semantic", "raw", "terrain", "context"]
+            if include_local
+            else ["public", "raw", "terrain", "context"]
+        ),
+        "dimensions": [16, 16, 17, 4, 11] if include_local else [32, 17, 4, 11],
+        "unit_branches": (
+            [True, True, True, False, False] if include_local else [True, True, False, False]
+        ),
+        "unit_output": False,
+    }
+    regions = [{**region, "name": name} for name in ["a", "b", "c"]]
+    rp, ap, sp = tmp_path / "regions.json", tmp_path / "anchor.json", tmp_path / "plan.json"
+    dump(rp, {"regions": regions})
+    dump(
+        ap,
+        {
+            "state": "complete",
+            "selection_uses_validation_only": True,
+            "values": {
+                r["name"]: {h: {"aef": 0.6, "public": 0.5} for h in ["mlp", "conv3x3"]}
+                for r in regions
+            },
+        },
+    )
+    plan.update(schema="shared-fusion-search-v1", regions=ref(rp), anchor=ref(ap), recipes=[recipe])
+    dump(sp, plan)
+    read_plan(sp)
+    path = export_candidate(plan, region, recipe)
+    assert np.load(path).shape == (22, 64, 2, 2)
+    identity = json.loads((path.parent / "identity.json").read_text())
+    assert set(identity["sources"]) == set(recipe["sources"])
+    assert export_candidate(plan, region, recipe) == path
