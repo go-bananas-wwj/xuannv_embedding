@@ -120,3 +120,14 @@ experiment and figure updates. Do not rewrite the introduction or fabricate a
 three-region victory while experiments are ongoing. Goal completion requires the
 complete acceptance matrix, high-resolution ablation, reproducible artifacts and
 an evidence-supported manuscript integration plan.
+
+## Started baseline stage
+
+Haidian's pure-public terminal bundle passed a strict cold load. All 320 public
+samples and mean embeddings have been restored without encoder training and
+aligned to the protected geographical index. Auckland's eleven-task binary
+registry preserves all 2,618,840 original reference-valid pixels. Eight necessary
+baseline jobs are queued on devices 1–7 with dynamic load balancing; unchanged
+Chinese baseline scores are reused through their existing references. A local
+controller handles bounded retries, stop requests and disk reserve checks. This
+stage does not count as goal completion or as evidence for a new fusion method.
