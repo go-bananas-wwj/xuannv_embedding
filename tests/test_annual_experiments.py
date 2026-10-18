@@ -6,6 +6,112 @@ import pytest
 from xuannv_embedding.training.annual_experiments import coverage_stratum, stratified_indices
 
 
+def _evaluation_cache_worker(source, destination, barrier, writes, results):
+    import time
+    from pathlib import Path
+
+    import xuannv_embedding.utils.manifest as manifests
+    from xuannv_embedding.training.annual_experiments import evaluation_manifest
+
+    original = manifests.write_manifest
+
+    def slow_write(*args, **kwargs):
+        with writes.get_lock():
+            writes.value += 1
+        time.sleep(0.2)
+        return original(*args, **kwargs)
+
+    manifests.write_manifest = slow_write
+    barrier.wait(timeout=60)
+    try:
+        path = evaluation_manifest(Path(source), Path(destination), {"p1"})
+        records = manifests.IndexedManifest(path)
+        before = path.stat().st_mtime_ns
+        time.sleep(0.1)
+        ids = [row.patch_id for row in records]
+        results.put({"ids": ids, "mtime": before, "after": path.stat().st_mtime_ns})
+    except Exception as exc:
+        results.put({"error": repr(exc)})
+
+
+@pytest.mark.parametrize("preexisting_links", [False, True])
+def test_evaluation_cache_serializes_concurrent_publishers_and_keeps_readers_stable(
+    tmp_path, preexisting_links
+):
+    import multiprocessing
+
+    from xuannv_embedding.utils.manifest import ManifestRecord, write_manifest
+
+    source = tmp_path / "source" / "2021.train.manifest.jsonl"
+    source.parent.mkdir()
+    (source.parent / "statistics").mkdir()
+    for name in ["summary.json", "sources.json"]:
+        (source.parent / name).write_text("{}")
+    write_manifest(
+        source,
+        [ManifestRecord(f"p{i}", "annual_2021", {"s2": None}) for i in range(2)],
+        months=[f"2021-{month:02}" for month in range(1, 13)],
+    )
+    destination = tmp_path / "cache" / source.name
+    if preexisting_links:
+        destination.parent.mkdir()
+        for name in ["summary.json", "sources.json", "statistics"]:
+            (destination.parent / name).symlink_to(
+                source.parent / name, target_is_directory=name == "statistics"
+            )
+    context = multiprocessing.get_context("spawn")
+    barrier = context.Barrier(3)
+    writes = context.Value("i", 0)
+    results = context.Queue()
+    processes = [
+        context.Process(
+            target=_evaluation_cache_worker,
+            args=(str(source), str(destination), barrier, writes, results),
+        )
+        for _ in range(3)
+    ]
+    for process in processes:
+        process.start()
+    try:
+        rows = [results.get(timeout=60) for _ in processes]
+        for process in processes:
+            process.join(timeout=30)
+        assert all(process.exitcode == 0 for process in processes)
+        assert all(row.get("ids") == ["p1"] for row in rows), rows
+        assert writes.value == 1
+        assert len({row["mtime"] for row in rows}) == 1
+        assert all(row["mtime"] == row["after"] for row in rows)
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=10)
+
+
+def test_completed_evaluation_cache_is_read_only_and_rejects_other_identities(tmp_path):
+    from xuannv_embedding.training.annual_experiments import evaluation_manifest
+    from xuannv_embedding.utils.manifest import ManifestRecord, write_manifest
+
+    source = tmp_path / "source" / "2021.test.manifest.jsonl"
+    source.parent.mkdir()
+    (source.parent / "statistics").mkdir()
+    for name in ["summary.json", "sources.json"]:
+        (source.parent / name).write_text("{}")
+    write_manifest(
+        source,
+        [ManifestRecord(f"p{i}", "annual_2021", {"s2": None}) for i in range(2)],
+        months=["2021-01"],
+    )
+    destination = tmp_path / "cache" / source.name
+    evaluation_manifest(source, destination, {"p1"})
+    before = destination.read_bytes(), destination.stat().st_mtime_ns
+    assert evaluation_manifest(source, destination, {"p1"}) == destination
+    assert (destination.read_bytes(), destination.stat().st_mtime_ns) == before
+    with pytest.raises(ValueError, match="identity differs"):
+        evaluation_manifest(source, destination, {"p0"})
+    assert (destination.read_bytes(), destination.stat().st_mtime_ns) == before
+
+
 def test_prepare_from_legacy_config_preserves_native_pan_and_resets_control_targets(tmp_path):
     import json
     from pathlib import Path

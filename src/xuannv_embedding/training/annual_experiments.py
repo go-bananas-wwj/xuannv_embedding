@@ -553,6 +553,22 @@ def adapt_inputs(args):
 
 def evaluation_manifest(source: Path, destination: Path, wanted: set[str]) -> Path:
     """Freeze the small labelled subset once instead of re-reading GBs per model."""
+    import fcntl
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    # Canonical features may already exist while their shared manifest cache does
+    # not. Serialize preparation across processes, including the shared symlinks.
+    # Publish origin metadata last, then never rewrite a completed cache entry:
+    # readers must retain IndexedManifest's size/mtime identity checks.
+    with (destination.parent / ".evaluation-manifests.lock").open("a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            return _evaluation_manifest_locked(source, destination, wanted)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _evaluation_manifest_locked(source: Path, destination: Path, wanted: set[str]) -> Path:
     from xuannv_embedding.utils.manifest import IndexedManifest, write_manifest
 
     origin = json.loads(Path(str(source) + ".meta.json").read_text())
