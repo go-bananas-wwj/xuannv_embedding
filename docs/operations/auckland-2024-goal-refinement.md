@@ -236,3 +236,38 @@ Lock the input-choice record from validation reports without reading query metri
 AEF/public-only controls never choose this model. Report both input settings and
 all prior query outcomes regardless of which wins. This prevents a claim of scale
 benefit if the matched original-grid fusion validates better.
+
+## Completed classification acceptance, 2026-10-18
+
+The refinement target is achieved. The validation-selected aligned input reaches
+MLP 60.0338%, CNN 58.6201% pooled Macro F1, versus the original archived
+58.6834%/56.8089%: gains 1.3504/1.8112 pp, mean 1.5808 pp. Both also exceed the
+previous 90m-only refinement, by 0.8635/1.4032 pp. Original AEF is
+56.9996%/56.1062%; matched processing is 57.6721%/56.5121%. The previously evaluated
+AEF 90m-mean variant (57.9650%/56.9066%) remains in the complete comparison.
+
+[All queried refinements, class F1, folds, controls and regression](auckland-2024-refinement-selected-results.md)
+retain the exact original-grid counterpart: MLP 60.1743%, CNN 58.1233%. Thus input
+scale alignment changes MLP by -0.1405 pp and CNN by +0.4968 pp; source allocation
+and feature-aware context account for part of the overall improvement. The selected
+input choice was locked from validation before the first matched query result.
+
+The selected recipe has public40/semantic24 coordinates, 13x13 cosine-affinity
+context at temperature 1.0, and a 0.5m encoder input grid resampled from the same
+real 1m image information. No frozen encoder was retrained. True 0.5m imagery is
+separately ready and was not used for these scores. All four regression targets
+remain behind unmodified AEF, so this is not universal task superiority. The region
+was tuned adaptively and is not a new blind test. No Overleaf edits.
+
+The original accepted archive is unchanged. The new inference package independently
+retains both full-precision encoder checkpoints, the actual semantic and fusion
+projections, preprocessing configurations, initialization and normalization metadata,
+geographic index, input-scale provenance, embedding, readouts and complete results.
+Five fixed unlabeled tiles reproduced the saved float16 embedding bitwise exactly.
+The package has 70 hash-verified payload entries, about 2.229 GiB logical size, with
+independent inodes and read-only files. No additional search is started after acceptance.
+
+Verification: 874 tests, Black, Ruff, repository gate, package build, real-input
+two-tile NPU gate and complete 320-tile extraction/readouts passed. Code and compact
+protocol/result milestones are synchronized to GitHub; large artifacts stay in the
+data workspace.
