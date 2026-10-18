@@ -215,3 +215,72 @@ def test_large_context_preserves_unit_constant_features_at_tile_edges(kernel):
     result = compose_tile({"kind": "identity", "post_pool": kernel}, [values], [])
     assert result.shape == values.shape
     assert np.allclose(result, 1 / 8)
+
+
+def test_standardized_mixed_channel_source_reloads_and_keeps_missing_pixels_zero(
+    tmp_path, monkeypatch
+):
+    import json
+
+    from xuannv_embedding.training import representation_search as search
+
+    rng = np.random.default_rng(41)
+    public = rng.normal(size=(4, 64, 8, 8)).astype(np.float32)
+    raw = rng.normal(size=(4, 95, 8, 8)).astype(np.float32)
+    raw[:, 0] *= 1000
+    raw[0] = 0
+    arrays = [public, raw]
+    sources = {}
+    for name, values in zip(["public", "raw"], arrays):
+        path = tmp_path / f"{name}.npy"
+        np.save(path, values)
+        sources[name] = {"path": str(path), "standardize": name == "raw"}
+    index = tmp_path / "index.json"
+    index.write_text(json.dumps({"records": [{}, {}, {}, {}]}))
+    output = tmp_path / "benchmark"
+    output.mkdir()
+    monkeypatch.setattr(search, "candidate_benchmark", lambda *a: {"output": str(output)})
+    recipe = {
+        "name": "mixed",
+        "kind": "blocks",
+        "sources": ["public", "raw"],
+        "dimensions": [32, 32],
+        "eligible": True,
+    }
+    spec = {
+        "sources": sources,
+        "seed": 41,
+        "fit_samples": 128,
+        "index": {"path": str(index)},
+        "output": str(tmp_path),
+        "baseline": {},
+        "github": {},
+        "recipes": [recipe],
+    }
+    search.prepare_recipe(spec, recipe)
+    directory = output / "representations/highres"
+    stored = np.load(directory / "annual.npy")
+    assert stored.shape == (4, 64, 8, 8)
+    assert np.count_nonzero(stored[0, 32:]) == 0
+    projections = [search.load_projection(directory / f"projection{i}.npz") for i in range(2)]
+    reconstructed = search.compose_tile(recipe, [x[1] for x in arrays], projections)
+    assert np.array_equal(reconstructed.astype(np.float16), stored[1])
+    spec["sources"]["raw"]["standardize"] = False
+    with pytest.raises(ValueError, match="identity changed"):
+        search.prepare_recipe(spec, recipe)
+
+
+def test_positive_mean_ranking_matches_joint_improvement_goal_without_sacrificing_a_head():
+    from xuannv_embedding.training.representation_search import validation_rank
+
+    reference = {"mlp": 0.60, "conv3x3": 0.59}
+    a = {"heads": {"mlp": {"macro_f1": 0.606}, "conv3x3": {"macro_f1": 0.596}}}
+    b = {"heads": {"mlp": {"macro_f1": 0.604}, "conv3x3": {"macro_f1": 0.605}}}
+    c = {"heads": {"mlp": {"macro_f1": 0.599}, "conv3x3": {"macro_f1": 0.650}}}
+    assert validation_rank(a, reference, "balanced") > validation_rank(b, reference, "balanced")
+    assert validation_rank(b, reference, "positive_mean") > validation_rank(
+        a, reference, "positive_mean"
+    )
+    assert validation_rank(b, reference, "positive_mean") > validation_rank(
+        c, reference, "positive_mean"
+    )

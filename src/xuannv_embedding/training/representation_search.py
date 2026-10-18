@@ -19,6 +19,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from sklearn.decomposition import PCA
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 from threadpoolctl import threadpool_limits
 
 from xuannv_embedding.export.context import dump, sha
@@ -38,6 +40,16 @@ def balanced_validation_rank(report: dict, reference: dict) -> tuple[float, floa
     ):
         raise ValueError("Invalid validation score")
     return min(values[h] - reference[h] for h in values), float(np.mean(list(values.values())))
+
+
+def validation_rank(report, reference, rule="balanced"):
+    minimum, mean = balanced_validation_rank(report, reference)
+    if rule == "balanced":
+        return minimum, mean
+    if rule != "positive_mean":
+        raise ValueError("Unknown validation ranking rule")
+    gains = [report["heads"][h]["macro_f1"] - reference[h] for h in ["mlp", "conv3x3"]]
+    return minimum > 0, float(np.mean(gains)), minimum
 
 
 def meets_acceptance(comparisons: dict, baseline: dict) -> bool:
@@ -78,6 +90,22 @@ def meets_improvement(comparisons: dict, reference: dict, *, minimum_mean_gain: 
 def unit(values):
     norm = np.linalg.norm(values, axis=0, keepdims=True)
     return np.divide(values, norm, out=np.zeros_like(values), where=norm > 1e-8)
+
+
+def load_projection(path):
+    with np.load(path) as saved:
+        pca = PCA(n_components=len(saved["components"]))
+        pca.mean_ = saved["mean"]
+        pca.components_ = saved["components"]
+        pca.n_features_in_ = pca.components_.shape[1]
+        pca.explained_variance_ = np.ones(len(pca.components_), np.float32)
+        if "scaler_mean" not in saved:
+            return pca
+        scaler = StandardScaler()
+        scaler.mean_ = saved["scaler_mean"]
+        scaler.scale_ = saved["scaler_scale"]
+        scaler.n_features_in_ = len(scaler.mean_)
+    return make_pipeline(scaler, pca)
 
 
 def _spatial_options(recipe, branches):
@@ -211,10 +239,12 @@ def read_spec(path: Path):
     }
     if (
         not expected.issubset(spec)
-        or set(spec) - expected - {"parent", "improvement"}
+        or set(spec) - expected - {"parent", "improvement", "ranking"}
         or spec["schema"] != "regional-representation-search-v1"
     ):
         raise ValueError("Unknown representation-search specification")
+    if spec.get("ranking", "balanced") not in ("balanced", "positive_mean"):
+        raise ValueError("Invalid registered ranking rule")
     registered_parent(spec)
     if "improvement" in spec:
         improvement = spec["improvement"]
@@ -246,7 +276,14 @@ def read_spec(path: Path):
         if set(source) == {"producer"}:
             producer = json.loads(_reference(source["producer"]).read_text())
             _same_index(common, json.loads(_reference(producer["cache"]).read_text()))
-        elif set(source) == {"path", "sha256", "index"}:
+        elif {"path", "sha256", "index"}.issubset(source) and not set(source) - {
+            "path",
+            "sha256",
+            "index",
+            "standardize",
+        }:
+            if type(source.get("standardize", False)) is not bool:
+                raise ValueError("Source standardization must be explicit boolean")
             _reference({k: source[k] for k in ["path", "sha256"]})
             _same_index(common, json.loads(_reference(source["index"]).read_text()))
         else:
@@ -275,6 +312,10 @@ def read_spec(path: Path):
         if not recipe["sources"] or any(s not in spec["sources"] for s in recipe["sources"]):
             raise ValueError("Unregistered fusion source")
         kind = recipe["kind"]
+        if kind != "blocks" and any(
+            spec["sources"][name].get("standardize", False) for name in recipe["sources"]
+        ):
+            raise ValueError("Standardized sources require block projections")
         if kind == "blocks":
             dims = recipe.get("dimensions", [])
             if (
@@ -332,6 +373,11 @@ def prepare_recipe(spec, recipe):
         "fit_samples": spec["fit_samples"],
         "sources": {name: sha(source_path(spec, name)) for name in recipe["sources"]},
     }
+    standardized = {
+        name: True for name in recipe["sources"] if spec["sources"][name].get("standardize", False)
+    }
+    if standardized:
+        identity["standardize"] = standardized
     identity_path = output / "identity.json"
     if identity_path.exists() and json.loads(identity_path.read_text()) != identity:
         raise ValueError("Representation recipe identity changed")
@@ -339,12 +385,12 @@ def prepare_recipe(spec, recipe):
     if (output / "annual.npy").exists() and (output / "status.json").exists():
         return
     arrays = [np.load(source_path(spec, name), mmap_mode="r") for name in recipe["sources"]]
-    if any(a.shape != arrays[0].shape or a.ndim != 4 or a.shape[1] != 64 for a in arrays):
-        raise ValueError("Fusion sources must share the complete 64-D grid")
+    if any(a.ndim != 4 or a.shape[1] < 1 for a in arrays):
+        raise ValueError("Fusion sources must be channel-first feature grids")
     public_shape = np.load(source_path(spec, "public"), mmap_mode="r").shape
     count = len(json.loads(Path(spec["index"]["path"]).read_text())["records"])
     reference_shape = (count, 64, *public_shape[-2:])
-    if arrays[0].shape != reference_shape:
+    if any((a.shape[0], 64, *a.shape[-2:]) != reference_shape for a in arrays):
         raise ValueError("Fusion source grid differs from the frozen reference")
     rng = np.random.default_rng(spec["seed"])
     samples = []
@@ -353,7 +399,10 @@ def prepare_recipe(spec, recipe):
         positions = rng.choice(count, min(256, count), replace=False)
         samples.append(
             np.concatenate(
-                [np.asarray(a[i], np.float32).reshape(64, -1)[:, positions].T for a in arrays],
+                [
+                    np.asarray(a[i], np.float32).reshape(a.shape[1], -1)[:, positions].T
+                    for a in arrays
+                ],
                 axis=1,
             )
         )
@@ -362,26 +411,38 @@ def prepare_recipe(spec, recipe):
         sampled = sampled[rng.choice(len(sampled), spec["fit_samples"], replace=False)]
     projections = []
     dimensions = recipe.get("dimensions", [64])
+    offsets = np.cumsum([0, *[a.shape[1] for a in arrays]])
     with threadpool_limits(limits=8):
         if recipe["kind"] in {"joint", "blocks"}:
             for index, dim in enumerate(dimensions):
                 values = (
                     sampled
                     if recipe["kind"] == "joint"
-                    else sampled[:, index * 64 : (index + 1) * 64]
+                    else sampled[:, offsets[index] : offsets[index + 1]]
                 )
                 active = np.linalg.norm(values, axis=1) > 1e-8
+                scaler = None
+                fit_values = values[active]
+                if recipe["kind"] == "blocks" and standardized.get(recipe["sources"][index]):
+                    scaler = StandardScaler().fit(fit_values)
+                    fit_values = scaler.transform(fit_values)
                 pca = PCA(n_components=dim, svd_solver="full")
-                pca.fit(values[active])
-                projections.append(pca)
+                pca.fit(fit_values)
+                projections.append(make_pipeline(scaler, pca) if scaler is not None else pca)
+                extra = (
+                    {"scaler_mean": scaler.mean_, "scaler_scale": scaler.scale_}
+                    if scaler is not None
+                    else {}
+                )
                 np.savez_compressed(
                     output / f"projection{index}.npz",
                     mean=pca.mean_,
                     components=pca.components_,
                     explained_variance_ratio=pca.explained_variance_ratio_,
+                    **extra,
                 )
     path = output / "annual.partial.npy"
-    result = np.lib.format.open_memmap(path, mode="w+", dtype=np.float16, shape=arrays[0].shape)
+    result = np.lib.format.open_memmap(path, mode="w+", dtype=np.float16, shape=reference_shape)
     for i in range(len(result)):
         result[i] = compose_tile(
             recipe, [np.asarray(a[i], np.float32) for a in arrays], projections
@@ -571,10 +632,19 @@ def follow(spec_path):
                     scores[recipe["name"]] = json.loads(
                         (root / recipe["name"] / "benchmark/validation-selection.json").read_text()
                     )
-            winner = max(scores, key=lambda name: balanced_validation_rank(scores[name], reference))
+            winner = max(
+                scores,
+                key=lambda name: validation_rank(
+                    scores[name], reference, spec.get("ranking", "balanced")
+                ),
+            )
             selection = {
                 "winner": winner,
-                "criterion": "minimum_of_MLP_and_CNN_validation_margins",
+                "criterion": (
+                    "mean_gain_after_positive_MLP_and_CNN_validation_gains"
+                    if spec.get("ranking") == "positive_mean"
+                    else "minimum_of_MLP_and_CNN_validation_margins"
+                ),
                 "reference": (
                     "fixed_validation_anchor"
                     if "improvement" in spec and "validation" in spec["improvement"]
