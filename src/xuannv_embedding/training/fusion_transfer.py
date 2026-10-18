@@ -178,6 +178,7 @@ def feature_exports(spec):
 
 def register_datasets(spec):
     root = Path(spec["output"])
+    (root / "jobs").mkdir(parents=True, exist_ok=True)
     index = json.loads(Path(spec["index"]["path"]).read_text())
     features = json.loads((root / "features.json").read_text())
     first_data = json.loads(Path(spec["datasets"][0]["data"]["path"]).read_text())
