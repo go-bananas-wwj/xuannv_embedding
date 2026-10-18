@@ -2,17 +2,16 @@
 
 ```json
 {
-  "stage": "validation_search",
-  "completed": {},
-  "total": 4,
-  "active": {
-    "wider_k11_d0": 1,
-    "wider_k13_d0": 2,
-    "wider_k13_d10": 3,
-    "wider_k13_d20": 4
-  },
-  "retries": {},
-  "supervisor_pid": 687488,
-  "utc": 1792309409.5669813
+  "stage": "validation",
+  "completed": {
+    "wider_k11_d0": {
+      "validation_macro_f1": 0.6004830011366222,
+      "minimum_margin": -0.0037617770750387747,
+      "heads": {
+        "mlp": 0.6099501375525486,
+        "conv3x3": 0.5910158647206958
+      }
+    }
+  }
 }
 ```
