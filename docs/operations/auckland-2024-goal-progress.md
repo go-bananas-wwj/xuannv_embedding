@@ -2,8 +2,10 @@
 
 ```json
 {
-  "stage": "validation",
-  "completed": {
+  "stage": "complete",
+  "winner": "semantic_blocks_16",
+  "acceptance_met": false,
+  "validation": {
     "blend_prior_050": {
       "validation_macro_f1": 0.5430132586065783,
       "minimum_margin": -0.02850907125885127,
@@ -140,6 +142,7 @@
         "conv3x3": 0.4875324140018791
       }
     }
-  }
+  },
+  "overleaf_modified": false
 }
 ```
