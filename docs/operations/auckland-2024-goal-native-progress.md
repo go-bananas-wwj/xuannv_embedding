@@ -2,15 +2,16 @@
 
 ```json
 {
-  "stage": "validation_search",
-  "completed": {},
-  "total": 8,
-  "active": {
-    "semantic": 1,
-    "public_rotation64": 2
-  },
-  "retries": {},
-  "supervisor_pid": 524513,
-  "utc": 1792302407.7473552
+  "stage": "validation",
+  "completed": {
+    "public_rotation64": {
+      "validation_macro_f1": 0.5523974517528092,
+      "minimum_margin": -0.025199912389700208,
+      "heads": {
+        "mlp": 0.5615555492371871,
+        "conv3x3": 0.5432393542684312
+      }
+    }
+  }
 }
 ```
