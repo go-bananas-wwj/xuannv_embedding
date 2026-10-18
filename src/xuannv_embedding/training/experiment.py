@@ -534,6 +534,10 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "frozen-feature-fusion":
+        from xuannv_embedding.training.frozen_fusion import main as frozen_fusion_main
+
+        return frozen_fusion_main(forwarded[1:])
     if forwarded and forwarded[0] == "annual-public-observations":
         from xuannv_embedding.data_process.annual_public import main as annual_main
 
@@ -580,6 +584,9 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser(
+        "frozen-feature-fusion", help="以真实弱监督拟合公共特征与高分残差", add_help=False
+    )
     sub.add_parser(
         "annual-public-observations", help="按质量与地理索引合成十二个月公共观测", add_help=False
     )
