@@ -175,3 +175,54 @@ Selection remains prospective positive-mean validation improvement against the f
 archived anchor, with the latest best-validation parent retained. Only a new winner
 gets query scoring. Apply exactly the selected affinity filter to the AEF and public-
 only controls; do not reuse uniform-average controls as if they included affinity.
+
+## Actual aerial resolution follow-up
+
+The affinity winner completed MLP 58.8877%, CNN 57.0911%, also below the original
+0.5-point mean-improvement goal. Its matched controls and all outcomes are retained.
+
+The [official DINOv3 model card](https://github.com/facebookresearch/dinov3/blob/main/MODEL_CARD.md#training-data)
+states that SAT-493M uses 512x512 Maxar images at 0.6 m. Our current RGB is read at
+1 m. The prospective hypothesis is improved physical-scale alignment and genuinely
+finer local texture, not a guarantee of improvement from more pixels.
+
+Prepare the same 320-tile, EPSG:2193, 2024 LINZ footprint at 0.5 m from the original
+0.25 m imagery, selecting only native source/overviews at resolution <=0.5 m. Reuse
+the same 84 official source URLs and five ROI strips with four download workers.
+Budget 20 GiB for this acquisition and retain a 100 GiB free-space reserve. No national
+imagery, point clouds, new sensors or reference labels are downloaded. Preserve the
+existing accepted archive, 1 m raster and all former results.
+
+After bounds, CRS, real read resolution and coverage checks, use the same frozen
+SAT-493M weights, normalization, overlapping 512-pixel windows, PCA sample budget,
+10 m output grid and 64D representation. Crop batches may use the existing supported
+maximum of eight. No duplicate monthly aerial frames are introduced.
+
+Register public/semantic dimensions 48/16, 40/24 and 32/32, each with joint 5x5,
+joint 9x9 or 13x13 affinity at temperature 1.0 (nine candidates). Keep the archived
+validation anchor and positive-mean rule; retain the latest best-validation parent.
+Query only a new validation winner, with exact matched AEF/public controls. Also
+retain or fit a matched 1 m setting for the selected 0.5 m recipe, so changes in input
+resolution are not conflated with dimension/context selection. Negative results,
+all classes and all LiDAR targets remain reported. No Overleaf edits.
+
+## Encoding-scale alignment control, using existing imagery
+
+A separate prospective control retains the original real 1 m image information but
+resamples it bilinearly to a 0.5 m input grid. A VRT records the original raster hash;
+this is explicitly interpolated 1 m data, not newly observed 0.5 m imagery. ViT-L/16
+then has an 8 m native token spacing instead of 16 m, while both outputs remain 10 m.
+This separates encoder sampling/physical-scale alignment from extra source detail.
+
+First verify two actual input tiles at crop batch eight, then extract the complete
+320-tile frozen feature bank and test the same nine dimension/context cases. Only
+validation selects a winner. Compare the selected recipe with the exact same recipe
+using the original 1 m source and 1 m encoder grid, as well as AEF and public-only
+controls. The previous accepted model, prior 90 m results, spectral tradeoffs and all
+negative trials stay recorded. Retain the existing real-half-meter download as a
+separate dataset. If the scale-only control meets the refinement goal, finish that
+acceptance and preserve true 0.5 m data for a later approved/goal continuation rather
+than automatically launching another sweep. If not, test the actual 0.5 m source.
+
+The scale-only experiment never supports a claim of added observational detail.
+No Overleaf edits are made.
