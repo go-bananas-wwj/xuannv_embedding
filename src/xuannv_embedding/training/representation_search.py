@@ -156,6 +156,24 @@ def _average(values, kernel):
         )[0].numpy()
 
 
+def _normalization_options(recipe, branches):
+    branch_unit = recipe.get("unit_branches", [True] * branches)
+    output_unit = recipe.get("unit_output", True)
+    if (
+        not isinstance(branch_unit, list)
+        or len(branch_unit) != branches
+        or any(type(value) is not bool for value in branch_unit)
+        or type(output_unit) is not bool
+        or ("unit_branches" in recipe and recipe["kind"] != "blocks")
+    ):
+        raise ValueError("Invalid fusion normalization options")
+    if (not output_unit or not all(branch_unit)) and (
+        recipe.get("post_pool", 1) != 1 or any(v != 1 for v in recipe.get("branch_pool", []))
+    ):
+        raise ValueError("Magnitude-preserving normalization requires no spatial pooling")
+    return branch_unit, output_unit
+
+
 def _affinity_average(values, kernel, temperature):
     if temperature is None:
         return _average(values, kernel)
@@ -184,6 +202,7 @@ def _affinity_average(values, kernel, temperature):
 
 def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
     kernel, detail, branch_pool, weights, temperature = _spatial_options(recipe, len(arrays))
+    branch_unit, output_unit = _normalization_options(recipe, len(arrays))
     kind = recipe["kind"]
     if kind == "blend":
         alpha = recipe["alpha"]
@@ -197,7 +216,7 @@ def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
             h, w = values.shape[-2:]
             projected = projection.transform(values.reshape(len(values), -1).T).T
             projected = projected.reshape(-1, h, w).astype(np.float32)
-            projected = unit(projected) * mask[None]
+            projected = (unit(projected) if branch_unit[index] else projected) * mask[None]
             if branch_pool[index] > 1:
                 projected = unit(_average(projected, branch_pool[index])) * mask[None]
             blocks.append(projected * weights[index])
@@ -213,7 +232,7 @@ def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
         raise ValueError("Unknown representation recipe")
     if values.shape[0] != 64 or not np.isfinite(values).all():
         raise ValueError("Every candidate must be finite and 64-dimensional")
-    result = unit(values).astype(np.float32)
+    result = (unit(values) if output_unit else values).astype(np.float32)
     if kernel > 1:
         result = unit(
             (1 - detail) * _affinity_average(result, kernel, temperature) + detail * result
@@ -335,9 +354,12 @@ def read_spec(path: Path):
             "branch_pool",
             "block_weights",
             "affinity_temperature",
+            "unit_branches",
+            "unit_output",
         }:
             raise ValueError("Unknown recipe fields")
         _spatial_options(recipe, len(recipe["sources"]))
+        _normalization_options(recipe, len(recipe["sources"]))
         if (
             not re.fullmatch(r"[a-z][a-z0-9_]*", recipe["name"])
             or recipe["name"] in names
@@ -499,9 +521,10 @@ def export_recipe(spec, recipe, output):
     path = output / "annual.partial.npy"
     result = np.lib.format.open_memmap(path, mode="w+", dtype=np.float16, shape=reference_shape)
     for i in range(len(result)):
-        result[i] = compose_tile(
-            recipe, [np.asarray(a[i], np.float32) for a in arrays], projections
-        ).astype(np.float16)
+        values = compose_tile(recipe, [np.asarray(a[i], np.float32) for a in arrays], projections)
+        if np.max(np.abs(values)) > np.finfo(np.float16).max:
+            raise ValueError("Fusion coordinates exceed float16 storage range")
+        result[i] = values.astype(np.float16)
     result.flush()
     path.replace(output / "annual.npy")
     dump(

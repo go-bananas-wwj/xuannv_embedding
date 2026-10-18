@@ -335,3 +335,64 @@ def test_block_export_handles_a_region_with_an_entirely_missing_source(tmp_path,
     reconstructed = search.compose_tile(recipe, [public[0], missing[0]], projections)
     assert np.array_equal(reconstructed.astype(np.float16), saved[0])
     assert np.allclose(np.linalg.norm(saved[:, :32].astype(np.float32), axis=1), 1, atol=1e-3)
+
+
+def test_block_fusion_can_preserve_magnitude_without_changing_missing_source_semantics():
+    class Projection:
+        def transform(self, values):
+            return values[:, :32] - 0.1
+
+    first = np.ones((64, 1, 2), np.float32)
+    first[:, :, 1] = 2
+    second = np.ones_like(first)
+    default = compose_tile({"kind": "blocks"}, [first, second], [Projection(), Projection()])
+    np.testing.assert_allclose(default[:, :, 0], default[:, :, 1], atol=1e-7)
+    preserved = compose_tile(
+        {"kind": "blocks", "unit_branches": [False, True], "unit_output": False},
+        [first, second],
+        [Projection(), Projection()],
+    )
+    np.testing.assert_allclose(preserved[:32, :, 0], 0.9)
+    np.testing.assert_allclose(preserved[:32, :, 1], 1.9)
+    missing = compose_tile(
+        {"kind": "blocks", "unit_branches": [False, False], "unit_output": False},
+        [first, np.zeros_like(second)],
+        [Projection(), Projection()],
+    )
+    assert np.count_nonzero(missing[32:]) == 0
+
+
+def test_block_fusion_rejects_ambiguous_normalization_and_pooling_options():
+    values = np.ones((64, 2, 2), np.float32)
+    with pytest.raises(ValueError, match="normalization"):
+        compose_tile({"kind": "identity", "unit_branches": [False]}, [values], [])
+    with pytest.raises(ValueError, match="normalization"):
+        compose_tile({"kind": "identity", "unit_output": 0}, [values], [])
+    with pytest.raises(ValueError, match="normalization"):
+        compose_tile({"kind": "identity", "unit_output": False, "post_pool": 3}, [values], [])
+
+
+def test_magnitude_preserving_export_rejects_unrepresentable_float16_coordinates(tmp_path):
+    import json
+
+    from xuannv_embedding.training import representation_search as search
+
+    rng = np.random.default_rng(41)
+    sources = {}
+    for name in ["public", "detail"]:
+        path = tmp_path / (name + ".npy")
+        np.save(path, rng.normal(size=(4, 64, 8, 8)).astype(np.float32))
+        sources[name] = {"path": str(path)}
+    index = tmp_path / "index.json"
+    index.write_text(json.dumps({"records": [{}] * 4}))
+    spec = {"sources": sources, "index": {"path": str(index)}, "seed": 41, "fit_samples": 128}
+    recipe = {
+        "name": "too_large",
+        "kind": "blocks",
+        "sources": ["public", "detail"],
+        "dimensions": [32, 32],
+        "block_weights": [1e8, 1],
+        "unit_output": False,
+    }
+    with pytest.raises(ValueError, match="float16"):
+        search.export_recipe(spec, recipe, tmp_path / "output")

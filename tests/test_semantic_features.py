@@ -123,3 +123,80 @@ def test_native_aerial_crop_obeys_crs_pixel_bounds_and_explicit_mask(tmp_path):
         read_aerial_window(path, {**record, "bounds": [104.5, 104, 112, 112]})
     with pytest.raises(ValueError, match="CRS"):
         read_aerial_window(path, {**record, "crs": "EPSG:4326"})
+
+
+def test_extraction_phase_defers_pca_until_all_native_features_are_available(tmp_path, monkeypatch):
+    import json
+
+    from xuannv_embedding.export import semantic_features as semantic
+
+    path = tmp_path / "spec.json"
+    path.write_text("{}")
+    root = tmp_path / "features"
+    spec = {
+        "output": str(root),
+        "seed": 41,
+        "fit_samples": 64,
+        "components": 64,
+        "weights": {"sha256": "0" * 64},
+        "raster": {"path": "not-read"},
+        "output_shape": [2, 2],
+    }
+    cache = {"records": [{"patch_id": str(i)} for i in range(4)], "months": ["2024-01"]}
+    monkeypatch.setattr(semantic, "read_spec", lambda _: (spec, cache))
+
+    def extracted(*args, **kwargs):
+        np.save(
+            root / "native.npy",
+            np.random.default_rng(41).normal(size=(4, 1024, 4, 4)).astype(np.float16),
+        )
+        np.save(root / "native-mask.npy", np.ones((4, 1, 4, 4), np.float32))
+        (root / "native-status.json").write_text(
+            json.dumps({"stage": "complete", "completed": 4, "source_shape": [64, 64]})
+        )
+
+    monkeypatch.setattr(semantic, "extract_native", extracted)
+    assert semantic.main(["--spec", str(path), "--phase", "extract", "--device", "cpu"]) == 0
+    assert not (root / "annual.npy").exists()
+    assert not (root / "projection.npz").exists()
+    assert semantic.main(["--spec", str(path), "--phase", "project", "--device", "cpu"]) == 0
+    assert np.load(root / "annual.npy").shape == (4, 64, 2, 2)
+    assert json.loads((root / "status.json").read_text())["label_data_used"] is False
+
+
+def test_projection_phase_never_starts_a_new_extraction(tmp_path, monkeypatch):
+    from xuannv_embedding.export import semantic_features as semantic
+
+    path = tmp_path / "spec.json"
+    path.write_text("{}")
+    monkeypatch.setattr(
+        semantic, "read_spec", lambda _: ({"output": str(tmp_path / "empty")}, {"records": [{}]})
+    )
+    monkeypatch.setattr(
+        semantic, "extract_native", lambda *a, **k: pytest.fail("project phase extracted data")
+    )
+    with pytest.raises(ValueError, match="extract"):
+        semantic.main(["--spec", str(path), "--phase", "project", "--device", "cpu"])
+
+
+def test_completed_projection_reuses_checked_output_after_native_cache_removal(
+    tmp_path, monkeypatch
+):
+    import json
+
+    from xuannv_embedding.export import semantic_features as semantic
+    from xuannv_embedding.export.context import sha
+
+    path = tmp_path / "spec.json"
+    path.write_text("{}")
+    root = tmp_path / "complete"
+    root.mkdir()
+    np.save(root / "annual.npy", np.ones((1, 64, 2, 2), np.float16))
+    (root / "status.json").write_text(
+        json.dumps({"stage": "complete", "annual_sha256": sha(root / "annual.npy")})
+    )
+    monkeypatch.setattr(semantic, "read_spec", lambda _: ({"output": str(root)}, {"records": [{}]}))
+    monkeypatch.setattr(
+        semantic, "extract_native", lambda *a, **k: pytest.fail("finished output re-extracted")
+    )
+    assert semantic.main(["--spec", str(path), "--phase", "project"]) == 0

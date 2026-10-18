@@ -24,7 +24,7 @@ from xuannv_embedding.export.anchored_fusion import (
     minimax_rank,
 )
 from xuannv_embedding.export.context import dump, sha
-from xuannv_embedding.training.representation_search import export_recipe
+from xuannv_embedding.training.representation_search import _normalization_options, export_recipe
 
 
 def save(path, value):
@@ -112,13 +112,16 @@ def read_plan(path):
                 raise ValueError("Invalid public-tail residual recipe")
         elif recipe["kind"] == "blocks":
             if (
-                set(recipe) != {"name", "kind", "sources", "dimensions"}
+                not {"name", "kind", "sources", "dimensions"}.issubset(recipe)
+                or set(recipe)
+                - {"name", "kind", "sources", "dimensions", "unit_branches", "unit_output"}
                 or recipe["sources"] != ["public", "semantic", "raw"]
                 or len(recipe["dimensions"]) != 3
                 or sum(recipe["dimensions"]) != 64
                 or any(type(n) is not int or not 1 <= n <= 64 for n in recipe["dimensions"])
             ):
                 raise ValueError("Invalid shared three-source recipe")
+            _normalization_options(recipe, 3)
         elif recipe["kind"] == "standardized_joint":
             if set(recipe) != {"name", "kind", "sources", "role"} or (
                 recipe["sources"],

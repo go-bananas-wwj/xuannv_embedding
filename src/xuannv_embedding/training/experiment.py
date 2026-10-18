@@ -534,6 +534,10 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "resolution-control":
+        from xuannv_embedding.data_process.resolution_control import main as resolution_main
+
+        return resolution_main(forwarded[1:])
     if forwarded and forwarded[0] == "frozen-feature-fusion":
         from xuannv_embedding.training.frozen_fusion import main as frozen_fusion_main
 
@@ -584,6 +588,7 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("resolution-control", help="保持影像观测范围的分辨率对照", add_help=False)
     sub.add_parser(
         "frozen-feature-fusion", help="以真实弱监督拟合公共特征与高分残差", add_help=False
     )

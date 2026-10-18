@@ -403,6 +403,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="xuannv experiment semantic-features")
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--device", default="npu:1")
+    parser.add_argument("--phase", choices=["all", "extract", "project"], default="all")
     args = parser.parse_args(argv)
     spec, cache = read_spec(args.spec)
     root = Path(spec["output"])
@@ -416,10 +417,38 @@ def main(argv=None):
     torch.set_num_threads(2)
     with (root / "extract.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if not (root / "native.npy").exists():
+        if args.phase != "extract" and (root / "annual.npy").exists():
+            previous = (
+                json.loads((root / "status.json").read_text())
+                if (root / "status.json").exists()
+                else {}
+            )
+            if previous.get("stage") == "complete":
+                if previous.get("annual_sha256") != sha(root / "annual.npy"):
+                    raise ValueError("Completed semantic features changed")
+                return 0
+        if args.phase != "project" and not (root / "native.npy").exists():
             extract_native(spec, cache, device_name=args.device)
         if (root / "native-mask.partial.npy").exists() and not (root / "native-mask.npy").exists():
             (root / "native-mask.partial.npy").replace(root / "native-mask.npy")
+        if not (root / "native.npy").exists() or not (root / "native-mask.npy").exists():
+            raise ValueError("Native features and masks must be extracted before projection")
+        native_status = json.loads((root / "native-status.json").read_text())
+        native = np.load(root / "native.npy", mmap_mode="r")
+        masks = np.load(root / "native-mask.npy", mmap_mode="r")
+        if (
+            native_status.get("completed") != len(cache["records"])
+            or len(native) != len(cache["records"])
+            or native.ndim != 4
+            or native.shape[1] != 1024
+            or masks.shape != (len(native), 1, *native.shape[-2:])
+        ):
+            raise ValueError("Native extraction is incomplete or its geometry differs")
+        if native_status.get("stage") != "complete":
+            # Both files were atomically published after the final flushed row.
+            dump(root / "native-status.json", {**native_status, "stage": "complete"})
+        if args.phase == "extract":
+            return 0
         complete = (
             json.loads((root / "status.json").read_text()).get("stage") == "complete"
             if (root / "status.json").exists()
