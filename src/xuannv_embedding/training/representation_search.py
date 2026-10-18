@@ -402,7 +402,12 @@ def source_path(spec, name):
 
 def prepare_recipe(spec, recipe):
     root = Path(candidate_benchmark(adapter(spec), {"name": recipe["name"]})["output"])
-    output = root / "representations/highres"
+    export_recipe(spec, recipe, root / "representations/highres")
+
+
+def export_recipe(spec, recipe, output):
+    """Export a fixed label-free recipe without creating or selecting a benchmark."""
+    output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     identity = {
         "recipe": recipe,

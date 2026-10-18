@@ -11,6 +11,41 @@ from xuannv_embedding.export.semantic_features import (
 )
 
 
+def test_registered_raster_inputs_match_order_bounds_and_identity(tmp_path):
+    import json
+
+    from xuannv_embedding.export.context import sha
+    from xuannv_embedding.export.semantic_features import registered_rasters
+
+    raster = tmp_path / "tile.tif"
+    raster.write_bytes(b"registered-source")
+    record = {"patch_id": "tile", "bounds": [0, 0, 10, 10], "crs": "EPSG:32650"}
+    manifest = tmp_path / "rasters.json"
+    value = {
+        "schema": "semantic-raster-inputs-v1",
+        "records": [{**record, "raster": {"path": str(raster), "sha256": sha(raster)}}],
+    }
+    manifest.write_text(json.dumps(value))
+    spec = {"rasters": {"path": str(manifest), "sha256": sha(manifest)}}
+    assert registered_rasters(spec, {"records": [record]}) == [str(raster)]
+    with pytest.raises(ValueError, match="geograph"):
+        registered_rasters(spec, {"records": [{**record, "patch_id": "other"}]})
+    raster.write_bytes(b"changed")
+    with pytest.raises(ValueError, match="identity"):
+        registered_rasters(spec, {"records": [record]})
+
+
+def test_external_raster_output_shape_requires_positive_integer_pair():
+    from xuannv_embedding.export.semantic_features import external_output_shape
+
+    assert external_output_shape({"output_shape": [128, 128], "rasters": {}}) == (128, 128)
+    for shape in [[0, 128], [128.0, 128], [128], [128, 128, 3]]:
+        with pytest.raises(ValueError, match="output shape"):
+            external_output_shape({"output_shape": shape, "rasters": {}})
+    with pytest.raises(ValueError, match="external"):
+        external_output_shape({"output_shape": [128, 128]})
+
+
 def test_rgb_normalization_uses_physical_values_and_satellite_statistics():
     image = torch.zeros(3, 16, 16)
     mean = [51.0, 102.0, 153.0]

@@ -96,6 +96,53 @@ def read_aerial_window(path, record):
         return values, mask[None].float()
 
 
+def external_output_shape(spec):
+    shape = spec.get("output_shape")
+    if shape is None:
+        return None
+    if "raster" not in spec and "rasters" not in spec:
+        raise ValueError("An explicit output shape requires external raster inputs")
+    if (
+        not isinstance(shape, list)
+        or len(shape) != 2
+        or any(type(v) is not int or v < 1 for v in shape)
+    ):
+        raise ValueError("Invalid external raster output shape")
+    return tuple(shape)
+
+
+def registered_rasters(spec, cache):
+    if "rasters" not in spec:
+        return None
+    ref = spec["rasters"]
+    if set(ref) != {"path", "sha256"} or sha(ref["path"]) != ref["sha256"]:
+        raise ValueError("Raster manifest identity changed")
+    manifest = json.loads(Path(ref["path"]).read_text())
+    if (
+        set(manifest) not in ({"schema", "records"}, {"schema", "records", "dependencies"})
+        or manifest["schema"] != "semantic-raster-inputs-v1"
+        or len(manifest["records"]) != len(cache["records"])
+    ):
+        raise ValueError("Invalid semantic raster manifest")
+    for dependency in manifest.get("dependencies", []):
+        if set(dependency) != {"path", "sha256"} or sha(dependency["path"]) != dependency["sha256"]:
+            raise ValueError("Semantic raster dependency identity changed")
+    paths, seen = [], set()
+    for record, item in zip(cache["records"], manifest["records"]):
+        if (
+            set(item) != {"patch_id", "bounds", "crs", "raster"}
+            or any(item[k] != record[k] for k in ["patch_id", "bounds", "crs"])
+            or item["patch_id"] in seen
+        ):
+            raise ValueError("Semantic raster geography or order differs")
+        source = item["raster"]
+        if set(source) != {"path", "sha256"} or sha(source["path"]) != source["sha256"]:
+            raise ValueError("Semantic raster identity changed")
+        paths.append(source["path"])
+        seen.add(item["patch_id"])
+    return paths
+
+
 def read_spec(path: Path):
     spec = json.loads(path.read_text())
     expected = {
@@ -112,7 +159,9 @@ def read_spec(path: Path):
     }
     if (
         not expected.issubset(spec)
-        or set(spec) - expected - {"raster", "raster_mask", "max_pixels", "crop_batch"}
+        or set(spec)
+        - expected
+        - {"raster", "rasters", "raster_mask", "max_pixels", "crop_batch", "output_shape"}
         or spec["schema"] != "regional-semantic-features-v1"
     ):
         raise ValueError("Unknown semantic feature specification")
@@ -144,6 +193,12 @@ def read_spec(path: Path):
     cache = json.loads(Path(spec["cache"]["path"]).read_text())
     if cache["state"] != "complete" or not cache["records"]:
         raise ValueError("Incomplete input cache")
+    if "raster" in spec and "rasters" in spec:
+        raise ValueError("Single and per-tile raster inputs are mutually exclusive")
+    external_output_shape(spec)
+    if "rasters" in spec and "output_shape" not in spec:
+        raise ValueError("Per-tile raster inputs require an explicit output shape")
+    registered_rasters(spec, cache)
     return spec, cache
 
 
@@ -152,11 +207,13 @@ def extract_native(spec, cache, *, device_name):
     from timm.models import load_checkpoint
 
     root, source = Path(spec["output"]), spec["source"]
-    first = torch.load(cache["records"][0]["path"], weights_only=True, mmap=True)
-    if "raster" in spec:
-        image, _ = read_aerial_window(spec["raster"]["path"], cache["records"][0])
+    rasters = registered_rasters(spec, cache)
+    if "raster" in spec or rasters is not None:
+        path = rasters[0] if rasters is not None else spec["raster"]["path"]
+        image, _ = read_aerial_window(path, cache["records"][0])
         shape = image.shape
     else:
+        first = torch.load(cache["records"][0]["path"], weights_only=True, mmap=True)
         shape = first["highres_frames"][source].shape
     if len(shape) != 3 or shape[0] != 3:
         raise ValueError("Satellite vision extraction requires one static RGB acquisition")
@@ -188,8 +245,9 @@ def extract_native(spec, cache, *, device_name):
     with torch.inference_mode():
         for i in range(start, len(native)):
             record = cache["records"][i]
-            if "raster" in spec:
-                image, mask = read_aerial_window(spec["raster"]["path"], record)
+            if "raster" in spec or rasters is not None:
+                path = rasters[i] if rasters is not None else spec["raster"]["path"]
+                image, mask = read_aerial_window(path, record)
                 source_mean, source_std = [0, 0, 0], [1, 1, 1]
             else:
                 if sha(record["path"]) != record["sha256"]:
@@ -303,8 +361,10 @@ def project_native(spec, cache):
         explained_variance_ratio=projection.explained_variance_ratio_,
     )
     source_shape = json.loads((root / "native-status.json").read_text())["source_shape"]
-    first = torch.load(cache["records"][0]["path"], weights_only=True, mmap=True)
-    output_shape = next(iter(first["source_frames"].values())).shape[-2:]
+    output_shape = external_output_shape(spec)
+    if output_shape is None:
+        first = torch.load(cache["records"][0]["path"], weights_only=True, mmap=True)
+        output_shape = next(iter(first["source_frames"].values())).shape[-2:]
     shape = (len(native), 64, *output_shape)
     path = root / "annual.partial.npy"
     output = np.lib.format.open_memmap(path, mode="w+", dtype=np.float16, shape=shape)
