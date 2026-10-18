@@ -65,3 +65,7 @@ calibration proposal remains unapproved. Preserve all previous results and
 primary tasks. Evaluate both MLP and CNN under the same support budget and
 selection rule; no software gate or training-map fit establishes the three-region
 AEF objective. No manuscript body has been changed for this experiment.
+
+The experiment has now completed all nine fits and all 120 calibration conditions.
+See the [complete calibration result](calendar-temporal-fusion-results.md).
+It fails the registered gate; no full-region query was launched for this candidate.
