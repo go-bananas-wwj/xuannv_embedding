@@ -78,3 +78,14 @@ beyond AEF but not CNN, so the goal remains active. The next six fixed candidate
 aggregate fused features over 30 or 50 m using 16, 24 or 32 semantic coordinates.
 Selection retains the previous validated candidate and uses only registered validation
 metrics. This is label-free latent aggregation, not ground-truth or prediction smoothing.
+
+## Spatial-context attribution controls
+
+After validation selects the context recipe, evaluate the same fixed 5 by 5 aggregation
+on AEF64, original public64, and public PCA48 with sixteen zero coordinates. Use the
+same 64-D unit-vector averaging, support points, folds, readout training and validation
+selection as the fused representation. These three controls are not eligible candidates
+and cannot select or modify the fusion winner. Report them alongside the frozen
+original baselines: a gain from generic spatial aggregation alone must not be attributed
+to high-resolution imagery. This is a classification-only diagnostic, with no new raw
+imagery, encoder training, labels, or reference-map inputs.
