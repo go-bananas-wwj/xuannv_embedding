@@ -284,3 +284,20 @@ def test_positive_mean_ranking_matches_joint_improvement_goal_without_sacrificin
     assert validation_rank(b, reference, "positive_mean") > validation_rank(
         c, reference, "positive_mean"
     )
+
+
+def test_affinity_context_preserves_tile_edges_when_kernel_exceeds_extent():
+    values = np.zeros((64, 3, 4), np.float32)
+    values[0] = 1
+    recipe = {"kind": "identity", "post_pool": 9, "affinity_temperature": 0.2}
+    assert np.array_equal(compose_tile(recipe, [values], []), values)
+    with pytest.raises(ValueError, match="affinity"):
+        compose_tile({**recipe, "affinity_temperature": 0.0}, [values], [])
+
+
+def test_affinity_context_avoids_mixing_orthogonal_feature_regions():
+    values = np.zeros((64, 5, 5), np.float32)
+    values[0, :, :2] = 1
+    values[1, :, 2:] = 1
+    recipe = {"kind": "identity", "post_pool": 5, "affinity_temperature": 0.01}
+    assert np.allclose(compose_tile(recipe, [values], []), values, atol=1e-6)

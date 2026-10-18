@@ -132,7 +132,15 @@ def _spatial_options(recipe, branches):
         raise ValueError("Invalid branch weights")
     if recipe["kind"] != "blocks" and ("branch_pool" in recipe or "block_weights" in recipe):
         raise ValueError("Per-branch filters require block fusion")
-    return kernel, detail, branch_pool, weights
+    temperature = recipe.get("affinity_temperature")
+    if temperature is not None and (
+        type(temperature) not in {float, int}
+        or not math.isfinite(temperature)
+        or temperature <= 0
+        or kernel == 1
+    ):
+        raise ValueError("Invalid affinity temperature or neighborhood")
+    return kernel, detail, branch_pool, weights, temperature
 
 
 def _average(values, kernel):
@@ -148,8 +156,34 @@ def _average(values, kernel):
         )[0].numpy()
 
 
+def _affinity_average(values, kernel, temperature):
+    if temperature is None:
+        return _average(values, kernel)
+    with torch.inference_mode():
+        tensor = torch.from_numpy(values)
+        height, width = values.shape[-2:]
+        numerator = torch.zeros_like(tensor)
+        denominator = torch.zeros((height, width), dtype=tensor.dtype)
+        radius = kernel // 2
+        for dy in range(-radius, radius + 1):
+            y0, y1 = max(0, -dy), min(height, height - dy)
+            if y1 <= y0:
+                continue
+            for dx in range(-radius, radius + 1):
+                x0, x1 = max(0, -dx), min(width, width - dx)
+                if x1 <= x0:
+                    continue
+                center = tensor[:, y0:y1, x0:x1]
+                neighbor = tensor[:, y0 + dy : y1 + dy, x0 + dx : x1 + dx]
+                similarity = (center * neighbor).sum(0).clamp_(-1, 1)
+                weight = ((similarity - 1) / temperature).exp_()
+                numerator[:, y0:y1, x0:x1].add_(neighbor * weight[None])
+                denominator[y0:y1, x0:x1].add_(weight)
+        return (numerator / denominator.clamp_min_(1e-8)[None]).numpy()
+
+
 def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
-    kernel, detail, branch_pool, weights = _spatial_options(recipe, len(arrays))
+    kernel, detail, branch_pool, weights, temperature = _spatial_options(recipe, len(arrays))
     kind = recipe["kind"]
     if kind == "blend":
         alpha = recipe["alpha"]
@@ -181,7 +215,9 @@ def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
         raise ValueError("Every candidate must be finite and 64-dimensional")
     result = unit(values).astype(np.float32)
     if kernel > 1:
-        result = unit((1 - detail) * _average(result, kernel) + detail * result)
+        result = unit(
+            (1 - detail) * _affinity_average(result, kernel, temperature) + detail * result
+        )
     return result.astype(np.float32)
 
 
@@ -298,6 +334,7 @@ def read_spec(path: Path):
             "detail_mix",
             "branch_pool",
             "block_weights",
+            "affinity_temperature",
         }:
             raise ValueError("Unknown recipe fields")
         _spatial_options(recipe, len(recipe["sources"]))
