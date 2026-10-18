@@ -115,13 +115,16 @@ def read_plan(path):
                 not {"name", "kind", "sources", "dimensions"}.issubset(recipe)
                 or set(recipe)
                 - {"name", "kind", "sources", "dimensions", "unit_branches", "unit_output"}
-                or recipe["sources"] != ["public", "semantic", "raw"]
-                or len(recipe["dimensions"]) != 3
+                or recipe["sources"]
+                not in [["public", "semantic", "raw"], ["public", "semantic", "raw", "terrain"]]
+                or len(recipe["dimensions"]) != len(recipe["sources"])
                 or sum(recipe["dimensions"]) != 64
                 or any(type(n) is not int or not 1 <= n <= 64 for n in recipe["dimensions"])
             ):
                 raise ValueError("Invalid shared three-source recipe")
-            _normalization_options(recipe, 3)
+            _normalization_options(recipe, len(recipe["sources"]))
+            if "terrain" in recipe["sources"] and any("terrain" not in r for r in regions):
+                raise ValueError("Public terrain must be provided in every registered region")
         elif recipe["kind"] == "standardized_joint":
             if set(recipe) != {"name", "kind", "sources", "role"} or (
                 recipe["sources"],
@@ -137,8 +140,11 @@ def prepare_sources(plan, region):
     root = Path(plan["output"]) / region["name"] / "inputs"
     root.mkdir(parents=True, exist_ok=True)
     refs = {}
-    for name in ["public", "semantic", "raw"]:
+    names = ["public", "semantic", "raw"] + (["terrain"] if "terrain" in region else [])
+    for name in names:
         value = region[name]
+        if name == "terrain" and value.get("index_sha256") != region["index"]["sha256"]:
+            raise ValueError("Public terrain geographic index differs")
         source = verified({k: value[k] for k in ["path", "sha256"]})
         array = np.load(source, mmap_mode="r")
         if value["layout"] == "nchw":
@@ -180,6 +186,7 @@ def prepare_sources(plan, region):
         or len(index["records"]) != shape[0]
         or arrays["semantic"].shape != shape
         or arrays["raw"].shape != (shape[0], 95, *shape[-2:])
+        or ("terrain" in arrays and arrays["terrain"].shape != (shape[0], 5, *shape[-2:]))
     ):
         raise ValueError("Shared input index, footprint or channel dimensions differ")
     return refs, index
@@ -213,8 +220,11 @@ def export_candidate(plan, region, recipe):
     if recipe["kind"] == "standardized_joint":
         return export_joint(plan, recipe, sources, root)
     if recipe["kind"] == "blocks":
+        registered = {**sources, "raw": {**sources["raw"], "standardize": True}}
+        if "terrain" in recipe["sources"]:
+            registered["terrain"] = {**sources["terrain"], "standardize": True}
         inputs = {
-            "sources": {**sources, "raw": {**sources["raw"], "standardize": True}},
+            "sources": registered,
             "index": region["index"],
             "seed": plan["seed"],
             "fit_samples": plan["fit_samples"],

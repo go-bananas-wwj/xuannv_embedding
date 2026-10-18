@@ -173,3 +173,33 @@ def test_shared_alignment_handles_a_region_without_any_high_resolution_observati
     feature = export_candidate(plan, region, recipe)
     np.testing.assert_array_equal(np.load(feature), np.load(region["public"]["path"]))
     assert export_candidate(plan, region, recipe) == feature
+
+
+def test_shared_fusion_accepts_public_terrain_with_same_geographic_binding(tmp_path):
+    plan, region, _, _ = fixture_inputs(tmp_path)
+    p = tmp_path / "terrain.npy"
+    np.save(p, np.random.default_rng(42).normal(size=(22, 5, 2, 2)).astype(np.float32))
+    region["terrain"] = {**ref(p), "layout": "nchw", "index_sha256": region["index"]["sha256"]}
+    recipe = {
+        "name": "terrain_context",
+        "kind": "blocks",
+        "sources": ["public", "semantic", "raw", "terrain"],
+        "dimensions": [12, 16, 32, 4],
+        "unit_branches": [True, True, True, False],
+        "unit_output": False,
+    }
+    feature = export_candidate(plan, region, recipe)
+    values = np.load(feature)
+    assert values.shape == (22, 64, 2, 2) and np.isfinite(values).all()
+    assert (feature.parent / "projection3.npz").exists()
+    with np.load(feature.parent / "projection3.npz") as projection:
+        assert "scaler_mean" in projection
+
+
+def test_shared_fusion_rejects_public_terrain_from_another_geographic_index(tmp_path):
+    plan, region, recipe, _ = fixture_inputs(tmp_path)
+    p = tmp_path / "terrain.npy"
+    np.save(p, np.zeros((22, 5, 2, 2), np.float32))
+    region["terrain"] = {**ref(p), "layout": "nchw", "index_sha256": "0" * 64}
+    with pytest.raises(ValueError, match="terrain.*index"):
+        export_candidate(plan, region, recipe)
