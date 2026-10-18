@@ -502,10 +502,25 @@ def train_city_head(features, labels, train, kind, fold, steps):
     return head.eval(), mean, std
 
 
-def city_probe(plan, root: Path, tag: str, device):
+def city_probe(plan, root: Path, tag: str, device, *, deterministic: bool = False):
+    from xuannv_embedding.downstream.numerics import city_readout_numerics
+
+    with city_readout_numerics(device, deterministic=deterministic) as numeric_policy:
+        return _city_probe(plan, root, tag, device, numeric_policy=numeric_policy)
+
+
+def _city_probe(plan, root: Path, tag: str, device, *, numeric_policy=None):
     from xuannv_embedding.training.annual_experiments import digest, write_json
     from xuannv_embedding.training.cli import _git_sha, _source_code_sha256
 
+    feature_export = json.loads((root / tag / "export.json").read_text())
+    feature_source = feature_export.get("evaluation_source_code_sha256")
+    if numeric_policy is not None and (
+        not isinstance(feature_source, str)
+        or len(feature_source) != 64
+        or any(char not in "0123456789abcdef" for char in feature_source)
+    ):
+        raise ValueError("Deterministic city readouts require feature-export source provenance")
     rows = json.loads(Path(plan["cities"]).read_text())
     city = {row[2]: row[0] for row in rows}
     ids = sorted(city)
@@ -570,7 +585,11 @@ def city_probe(plan, root: Path, tag: str, device):
     suffix = f"_seed{seed_offset}" if seed_offset or save_heads else ""
     if feature_mode != "native5m":
         suffix = f"_{feature_mode}{suffix}"
+    if numeric_policy is not None:
+        suffix += "_deterministic"
     destination = root / tag / f"city_probe{suffix}"
+    if numeric_policy is not None and destination.exists():
+        raise ValueError("Deterministic city readouts require a new result directory")
     destination.mkdir(exist_ok=True)
     result = {
         "development_only": not confirmation,
@@ -588,12 +607,13 @@ def city_probe(plan, root: Path, tag: str, device):
         "feature_mode": feature_mode,
         "threshold_free_metrics": plan.get("probe_threshold_free", False),
         "label_sha256": label_digests,
-        "checkpoint_sha256": json.loads((root / tag / "export.json").read_text())[
-            "checkpoint_sha256"
-        ],
+        "checkpoint_sha256": feature_export["checkpoint_sha256"],
         "scope": {task: select.tolist() for task, select in scored_scope.items()},
         "tasks": {},
     }
+    if numeric_policy is not None:
+        result["numerical_policy"] = numeric_policy
+        result["feature_export_source_code_sha256"] = feature_source
     for task, target in labels.items():
         for kind in ["linear", "conv3x3"]:
             stats = np.zeros((len(ids), 7), dtype=np.int64)
@@ -622,22 +642,25 @@ def city_probe(plan, root: Path, tag: str, device):
                 if save_heads:
                     from xuannv_embedding.training.checkpoint import _atomic_torch_save
 
-                    _atomic_torch_save(
-                        {
-                            "head": {
-                                key: value.detach().cpu()
-                                for key, value in head.state_dict().items()
-                            },
-                            "mean": mean.cpu(),
-                            "std": std.cpu(),
-                            "task": task,
-                            "kind": kind,
-                            "fold": fold,
-                            "seed": fold + seed_offset,
-                            "checkpoint_sha256": result["checkpoint_sha256"],
+                    artifact = {
+                        "head": {
+                            key: value.detach().cpu() for key, value in head.state_dict().items()
                         },
-                        destination / f"{task}_{kind}_fold{fold}.pt",
-                    )
+                        "mean": mean.cpu(),
+                        "std": std.cpu(),
+                        "task": task,
+                        "kind": kind,
+                        "fold": fold,
+                        "seed": fold + seed_offset,
+                        "checkpoint_sha256": result["checkpoint_sha256"],
+                    }
+                    if numeric_policy is not None:
+                        artifact.update(
+                            numerical_policy=numeric_policy,
+                            feature_export_source_code_sha256=feature_source,
+                            readout_source_code_sha256=result["evaluation_source_code_sha256"],
+                        )
+                    _atomic_torch_save(artifact, destination / f"{task}_{kind}_fold{fold}.pt")
                 del head
             np.save(destination / f"{task}_{kind}.npy", stats)
             groups = {

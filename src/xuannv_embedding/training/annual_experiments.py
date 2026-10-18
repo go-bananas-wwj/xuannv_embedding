@@ -709,6 +709,8 @@ def probe(args) -> None:
     plan["save_probe_heads"] = getattr(args, "save_heads", False)
     plan["probe_threshold_free"] = getattr(args, "threshold_free", False)
     plan["probe_feature_mode"] = getattr(args, "feature_mode", "native5m")
+    if getattr(args, "deterministic", False) and args.suite == "semantic":
+        raise ValueError("Deterministic city readouts require --suite city or all")
     if plan["probe_feature_mode"] != "native5m" and args.suite != "city":
         raise ValueError("Coarsened feature diagnostics require --suite city")
     root = args.plan.parent / "evaluation"
@@ -716,7 +718,10 @@ def probe(args) -> None:
     if args.suite in {"semantic", "all"}:
         semantic_probe(plan, root, args.arm, device)
     if args.suite in {"city", "all"}:
-        city_probe(plan, root, args.arm, device)
+        if getattr(args, "deterministic", False):
+            city_probe(plan, root, args.arm, device, deterministic=True)
+        else:
+            city_probe(plan, root, args.arm, device)
 
 
 def freeze_confirmation(args) -> None:
@@ -1170,6 +1175,11 @@ def main(argv=None) -> int:
             command.add_argument("--seed-offset", type=int, default=0)
             command.add_argument("--save-heads", action="store_true")
             command.add_argument("--threshold-free", action="store_true")
+            command.add_argument(
+                "--deterministic",
+                action="store_true",
+                help="Require deterministic city readouts and record numeric provenance",
+            )
             command.add_argument(
                 "--feature-mode", choices=["native5m", "pooled10m"], default="native5m"
             )

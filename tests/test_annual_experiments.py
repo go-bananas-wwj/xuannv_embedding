@@ -381,8 +381,9 @@ def test_selection_rejects_semantic_regression_despite_fine_detail_gain(tmp_path
 
 
 @pytest.mark.parametrize("threshold_free", [False, True])
+@pytest.mark.parametrize("deterministic", [False, True])
 def test_fine_confirmation_never_trains_heads_on_holdout_labels(
-    tmp_path, monkeypatch, threshold_free
+    tmp_path, monkeypatch, threshold_free, deterministic
 ):
     import json
 
@@ -394,7 +395,9 @@ def test_fine_confirmation_never_trains_heads_on_holdout_labels(
 
     features = tmp_path / "original" / "city5m"
     features.mkdir(parents=True)
-    (features.parent / "export.json").write_text(json.dumps({"checkpoint_sha256": "a" * 64}))
+    (features.parent / "export.json").write_text(
+        json.dumps({"checkpoint_sha256": "a" * 64, "evaluation_source_code_sha256": "b" * 64})
+    )
     osm = tmp_path / "osm"
     osm.mkdir()
     cache = tmp_path / "osm_labels"
@@ -428,6 +431,11 @@ def test_fine_confirmation_never_trains_heads_on_holdout_labels(
     seen = []
 
     def fake_train(features, labels, train, kind, fold, steps):
+        if deterministic:
+            assert torch.are_deterministic_algorithms_enabled()
+            assert not torch.is_deterministic_algorithms_warn_only_enabled()
+            assert torch.backends.cudnn.deterministic
+            assert not torch.backends.cudnn.benchmark
         seen.append(train.tolist())
         head = torch.nn.Conv2d(64, 1, 1)
         with torch.no_grad():
@@ -447,19 +455,36 @@ def test_fine_confirmation_never_trains_heads_on_holdout_labels(
         tmp_path,
         "original",
         torch.device("cpu"),
+        deterministic=deterministic,
     )
-    metadata = json.loads((features.parent / "city_probe" / "metrics.json").read_text())
+    probe_dir = features.parent / ("city_probe_deterministic" if deterministic else "city_probe")
+    metadata = json.loads((probe_dir / "metrics.json").read_text())
     train_rows = np.asarray(metadata["annual_splits"]) == "train"
     assert len(seen) == 6
     assert all(np.all(train_rows[index]) for index in seen)
     assert metadata["tasks"]["road:conv3x3"]["all"]["patches"] == 2
     assert metadata["confirmation_only"] and not metadata["development_only"]
+    assert ("numerical_policy" in metadata) == deterministic
+    if deterministic:
+        assert metadata["feature_export_source_code_sha256"] == "b" * 64
+        assert metadata["numerical_policy"]["deterministic_algorithms"]
     if threshold_free:
         metrics = metadata["tasks"]["road:conv3x3"]["all"]
         assert metrics["AP"] == pytest.approx(256 / 65536)
         assert metrics["ROC_AUC"] == pytest.approx(0.5)
-    stats = np.load(features.parent / "city_probe" / "road_conv3x3.npy")
+    stats = np.load(probe_dir / "road_conv3x3.npy")
     assert stats[train_rows].sum() == 0 and stats[~train_rows].sum() > 0
+    if deterministic:
+        previous_metrics = (probe_dir / "metrics.json").read_bytes()
+        with pytest.raises(ValueError, match="new result directory"):
+            evaluation.city_probe(
+                {"cities": str(cities), "osm": str(osm), "confirmation_only": True},
+                tmp_path,
+                "original",
+                torch.device("cpu"),
+                deterministic=True,
+            )
+        assert len(seen) == 6 and (probe_dir / "metrics.json").read_bytes() == previous_metrics
 
 
 def records():
