@@ -1,4 +1,4 @@
-# Active goal: exceed AEF with a regional high-resolution representation
+# Registered goal: exceed AEF with a regional high-resolution representation
 
 The user explicitly enabled goal mode on 2026-10-18. The goal is active until the
 registered acceptance criteria are actually met, or the user pauses it. Launching a run
@@ -89,3 +89,18 @@ and cannot select or modify the fusion winner. Report them alongside the frozen
 original baselines: a gain from generic spatial aggregation alone must not be attributed
 to high-resolution imagery. This is a classification-only diagnostic, with no new raw
 imagery, encoder training, labels, or reference-map inputs.
+
+## Acceptance outcome, 2026-10-18
+
+The registered classification target was met at 14:42 Beijing time. The selected
+64-D native-aerial/public representation with 50 m context reaches pooled Macro F1
+58.6834% (MLP) and 56.8089% (CNN), above original AEF by 1.6838 and 0.7027 percentage
+points. It also exceeds AEF with identical 50 m aggregation by 1.0699 and 0.5241
+points. The original public model and both context-matched public controls are lower.
+
+[Complete results, all classes, spatial folds and regression](auckland-2024-goal-context-results.md)
+include remaining weaknesses: several classes and all four LiDAR regression targets
+remain below AEF for this classification-selected representation. This completes
+the fixed classification goal, not a claim of superiority on every task. The benchmark
+was used adaptively and is not a new blind test. No additional search is required for
+this acceptance, and no Overleaf changes were made.
