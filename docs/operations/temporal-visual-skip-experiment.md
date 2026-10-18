@@ -49,6 +49,17 @@ variation in this diagnostic. Nonlinear information may remain, and neither this
 audit nor reconstruction variance measures downstream usefulness. These results
 motivate testing the registered skip; they do not establish its effectiveness.
 
+The existing eighty native/public task-reader fits were also checked for input
+scaling. Every reader already standardizes using labeled valid support pixels
+only, uses one hundred updates, and clears invalid context after standardization.
+All scaler channels are finite and positive; all eighty saved reader identities
+and parameter payload checksums match their records. A missing normalization
+stage therefore does not explain these scores. In Haidian the main calibration
+deficit is forest: native MLP/CNN F1 is 49.55/22.83 percent, against AEF
+66.67/71.40 percent. Native forest AP is also lower, so the deficit is not solely
+a threshold difference. The other three classes remain reported. The sparse
+forest calibration cohort is unchanged; no alternative cohort has been approved.
+
 ## One fixed follow-up recipe
 
 Use the existing label-free block exporter, without another encoder training:
