@@ -48,6 +48,54 @@ def align_patch_features(values, source_shape, output_shape, *, patch):
     )
 
 
+def window_starts(length: int, side: int) -> list[int]:
+    if side < 16 or side > length or length % 16 or side % 16:
+        raise ValueError("Semantic windows must follow the native patch grid")
+    stride = max(16, (side * 3 // 4) // 16 * 16)
+    return sorted(set([*range(0, length - side + 1, stride), length - side]))
+
+
+def stitch_patch_windows(pieces, shape, *, patch):
+    if not pieces:
+        raise ValueError("Missing semantic window coverage")
+    if len(pieces) == 1 and pieces[0][:2] == (0, 0) and pieces[0][2].shape[-2:] == shape:
+        return pieces[0][2].float()
+    total = torch.zeros((pieces[0][2].shape[0], *shape), dtype=torch.float32)
+    denominator = torch.zeros((1, *shape), dtype=torch.float32)
+    for y, x, values in pieces:
+        if y % patch or x % patch:
+            raise ValueError("Semantic window offset is not patch-aligned")
+        h, w = values.shape[-2:]
+        wy = (1 - torch.linspace(-1, 1, h).abs()).clamp_min(0.1)
+        wx = (1 - torch.linspace(-1, 1, w).abs()).clamp_min(0.1)
+        weight = wy[:, None] * wx[None, :]
+        sy, sx = y // patch, x // patch
+        total[:, sy : sy + h, sx : sx + w] += values.float() * weight
+        denominator[:, sy : sy + h, sx : sx + w] += weight
+    if (denominator <= 0).any():
+        raise ValueError("Incomplete semantic window coverage")
+    return total / denominator
+
+
+def read_aerial_window(path, record):
+    import rasterio
+    from rasterio.windows import from_bounds
+
+    with rasterio.Env(GDAL_CACHEMAX=128 * 1024**2), rasterio.open(path) as source:
+        if str(source.crs) != record["crs"] or source.count != 3:
+            raise ValueError("Aerial raster CRS/channel contract differs")
+        window = from_bounds(*record["bounds"], transform=source.transform)
+        aligned = window.round_offsets().round_lengths()
+        if any(abs(a - b) > 1e-6 for a, b in zip(window.flatten(), aligned.flatten())):
+            raise ValueError("Aerial record is not aligned to native source pixels")
+        values = torch.from_numpy(source.read(window=aligned, out_dtype="float32"))
+        valid = torch.from_numpy(source.dataset_mask(window=aligned) > 0)
+        if values.shape[-2:] != (int(aligned.height), int(aligned.width)):
+            raise ValueError("Aerial raster does not cover the requested tile extent")
+        mask = valid & torch.isfinite(values).all(0)
+        return values, mask[None].float()
+
+
 def read_spec(path: Path):
     spec = json.loads(path.read_text())
     expected = {
@@ -62,12 +110,30 @@ def read_spec(path: Path):
         "fit_samples",
         "components",
     }
-    if set(spec) != expected or spec["schema"] != "regional-semantic-features-v1":
+    if (
+        not expected.issubset(spec)
+        or set(spec) - expected - {"raster", "raster_mask", "max_pixels", "crop_batch"}
+        or spec["schema"] != "regional-semantic-features-v1"
+    ):
         raise ValueError("Unknown semantic feature specification")
-    for name in ["cache", "statistics", "weights"]:
+    for name in [
+        "cache",
+        "statistics",
+        "weights",
+        *[k for k in ["raster", "raster_mask"] if k in spec],
+    ]:
         ref = spec[name]
         if set(ref) != {"path", "sha256"} or sha(ref["path"]) != ref["sha256"]:
             raise ValueError("Semantic feature source identity changed")
+    side, batch = spec.get("max_pixels", 512), spec.get("crop_batch", 4)
+    if (
+        type(side) is not int
+        or not 128 <= side <= 1024
+        or side % 16
+        or type(batch) is not int
+        or not 1 <= batch <= 8
+    ):
+        raise ValueError("Invalid semantic window size or batch")
     if (
         spec["components"] != 64
         or type(spec["fit_samples"]) is not int
@@ -87,14 +153,20 @@ def extract_native(spec, cache, *, device_name):
 
     root, source = Path(spec["output"]), spec["source"]
     first = torch.load(cache["records"][0]["path"], weights_only=True, mmap=True)
-    shape = first["highres_frames"][source].shape
+    if "raster" in spec:
+        image, _ = read_aerial_window(spec["raster"]["path"], cache["records"][0])
+        shape = image.shape
+    else:
+        shape = first["highres_frames"][source].shape
     if len(shape) != 3 or shape[0] != 3:
         raise ValueError("Satellite vision extraction requires one static RGB acquisition")
     h, w = shape[-2:]
     gh, gw = math.ceil(h / 16), math.ceil(w / 16)
+    crop_h = min(gh * 16, spec.get("max_pixels", 512))
+    crop_w = min(gw * 16, spec.get("max_pixels", 512))
     native_shape = (len(cache["records"]), 1024, gh, gw)
     model = timm.create_model(
-        spec["model"], pretrained=False, img_size=(gh * 16, gw * 16), dynamic_img_size=True
+        spec["model"], pretrained=False, img_size=(crop_h, crop_w), dynamic_img_size=True
     )
     load_checkpoint(model, spec["weights"]["path"], strict=True)
     if model.num_features != 1024 or tuple(model.patch_embed.patch_size) != (16, 16):
@@ -116,10 +188,15 @@ def extract_native(spec, cache, *, device_name):
     with torch.inference_mode():
         for i in range(start, len(native)):
             record = cache["records"][i]
-            if sha(record["path"]) != record["sha256"]:
-                raise ValueError("Registered aerial sample changed")
-            sample = torch.load(record["path"], weights_only=True, mmap=True)
-            image, mask = sample["highres_frames"][source], sample["highres_masks"][source]
+            if "raster" in spec:
+                image, mask = read_aerial_window(spec["raster"]["path"], record)
+                source_mean, source_std = [0, 0, 0], [1, 1, 1]
+            else:
+                if sha(record["path"]) != record["sha256"]:
+                    raise ValueError("Registered aerial sample changed")
+                sample = torch.load(record["path"], weights_only=True, mmap=True)
+                image, mask = sample["highres_frames"][source], sample["highres_masks"][source]
+                source_mean, source_std = stats["mean"], stats["std"]
             if image.shape != shape or mask.shape != (1, h, w):
                 raise ValueError("Static aerial sample shape differs")
             pad = (0, gw * 16 - w, 0, gh * 16 - h)
@@ -129,15 +206,33 @@ def extract_native(spec, cache, *, device_name):
                 rgb = restore_rgb(
                     image,
                     mask,
-                    stats["mean"],
-                    stats["std"],
+                    source_mean,
+                    source_std,
                     model.pretrained_cfg["mean"],
                     model.pretrained_cfg["std"],
                 )
-                rgb = F.pad(rgb[None], pad, mode="reflect").to(device)
-                with _autocast(device, device.type == "npu"):
-                    values = model.forward_features(rgb)[:, model.num_prefix_tokens :]
-                values = values.transpose(1, 2).reshape(1, 1024, gh, gw).float()
+                rgb = F.pad(rgb[None], pad, mode="reflect")
+                offsets = [
+                    (y, x)
+                    for y in window_starts(gh * 16, crop_h)
+                    for x in window_starts(gw * 16, crop_w)
+                ]
+                pieces = []
+                for start_crop in range(0, len(offsets), spec.get("crop_batch", 4)):
+                    selected = offsets[start_crop : start_crop + spec.get("crop_batch", 4)]
+                    inputs = torch.cat(
+                        [rgb[:, :, y : y + crop_h, x : x + crop_w] for y, x in selected]
+                    ).to(device)
+                    with _autocast(device, device.type == "npu"):
+                        values = model.forward_features(inputs)[:, model.num_prefix_tokens :]
+                    values = (
+                        values.transpose(1, 2)
+                        .reshape(-1, 1024, crop_h // 16, crop_w // 16)
+                        .float()
+                        .cpu()
+                    )
+                    pieces.extend((y, x, values[j]) for j, (y, x) in enumerate(selected))
+                values = stitch_patch_windows(pieces, (gh, gw), patch=16)[None]
                 if not torch.isfinite(values).all():
                     raise FloatingPointError("Nonfinite satellite semantic features")
                 native[i] = values[0].cpu().numpy().astype(np.float16)
@@ -157,6 +252,8 @@ def extract_native(spec, cache, *, device_name):
                         "prefix_tokens_removed": model.num_prefix_tokens,
                         "normalization_mean": list(model.pretrained_cfg["mean"]),
                         "normalization_std": list(model.pretrained_cfg["std"]),
+                        "window_shape": [crop_h, crop_w],
+                        "crop_batch": spec.get("crop_batch", 4),
                     },
                 )
     native.flush()
@@ -173,6 +270,8 @@ def extract_native(spec, cache, *, device_name):
             "prefix_tokens_removed": model.num_prefix_tokens,
             "normalization_mean": list(model.pretrained_cfg["mean"]),
             "normalization_std": list(model.pretrained_cfg["std"]),
+            "window_shape": [crop_h, crop_w],
+            "crop_batch": spec.get("crop_batch", 4),
         },
     )
 
