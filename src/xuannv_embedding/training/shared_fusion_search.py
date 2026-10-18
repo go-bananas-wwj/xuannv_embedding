@@ -116,15 +116,23 @@ def read_plan(path):
                 or set(recipe)
                 - {"name", "kind", "sources", "dimensions", "unit_branches", "unit_output"}
                 or recipe["sources"]
-                not in [["public", "semantic", "raw"], ["public", "semantic", "raw", "terrain"]]
+                not in [
+                    ["public", "semantic", "raw"],
+                    ["public", "semantic", "raw", "terrain"],
+                    ["public", "semantic", "raw", "context"],
+                ]
                 or len(recipe["dimensions"]) != len(recipe["sources"])
                 or sum(recipe["dimensions"]) != 64
                 or any(type(n) is not int or not 1 <= n <= 64 for n in recipe["dimensions"])
             ):
-                raise ValueError("Invalid shared three-source recipe")
+                raise ValueError("Invalid shared observation fusion recipe")
             _normalization_options(recipe, len(recipe["sources"]))
             if "terrain" in recipe["sources"] and any("terrain" not in r for r in regions):
                 raise ValueError("Public terrain must be provided in every registered region")
+            if "context" in recipe["sources"] and (
+                recipe["dimensions"][-1] > 11 or any("context" not in r for r in regions)
+            ):
+                raise ValueError("Eleven-channel semantic context is required in every region")
         elif recipe["kind"] == "standardized_joint":
             if set(recipe) != {"name", "kind", "sources", "role"} or (
                 recipe["sources"],
@@ -140,11 +148,12 @@ def prepare_sources(plan, region):
     root = Path(plan["output"]) / region["name"] / "inputs"
     root.mkdir(parents=True, exist_ok=True)
     refs = {}
-    names = ["public", "semantic", "raw"] + (["terrain"] if "terrain" in region else [])
+    extra = [name for name in ["terrain", "context"] if name in region]
+    names = ["public", "semantic", "raw", *extra]
     for name in names:
         value = region[name]
-        if name == "terrain" and value.get("index_sha256") != region["index"]["sha256"]:
-            raise ValueError("Public terrain geographic index differs")
+        if name in extra and value.get("index_sha256") != region["index"]["sha256"]:
+            raise ValueError(f"Public {name} geographic index differs")
         source = verified({k: value[k] for k in ["path", "sha256"]})
         array = np.load(source, mmap_mode="r")
         if value["layout"] == "nchw":
@@ -187,6 +196,7 @@ def prepare_sources(plan, region):
         or arrays["semantic"].shape != shape
         or arrays["raw"].shape != (shape[0], 95, *shape[-2:])
         or ("terrain" in arrays and arrays["terrain"].shape != (shape[0], 5, *shape[-2:]))
+        or ("context" in arrays and arrays["context"].shape != (shape[0], 11, *shape[-2:]))
     ):
         raise ValueError("Shared input index, footprint or channel dimensions differ")
     return refs, index

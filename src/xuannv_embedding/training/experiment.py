@@ -534,6 +534,10 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "weak-semantic-context":
+        from xuannv_embedding.export.weak_semantic_context import main as context_main
+
+        return context_main(forwarded[1:])
     if forwarded and forwarded[0] == "public-terrain":
         from xuannv_embedding.data_process.public_terrain import main as terrain_main
 
@@ -600,6 +604,7 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("weak-semantic-context", help="导出已有弱监督预测作为补充特征", add_help=False)
     sub.add_parser("public-terrain", help="准备有公开来源记录的地形特征", add_help=False)
     sub.add_parser("semantic-shards", help="分片提取并恢复统一的区域语义特征", add_help=False)
     sub.add_parser("public-rgb-control", help="生成仅公共 S2 的视觉编码对照", add_help=False)

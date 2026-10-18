@@ -203,3 +203,76 @@ def test_shared_fusion_rejects_public_terrain_from_another_geographic_index(tmp_
     region["terrain"] = {**ref(p), "layout": "nchw", "index_sha256": "0" * 64}
     with pytest.raises(ValueError, match="terrain.*index"):
         export_candidate(plan, region, recipe)
+
+
+def test_shared_fusion_adds_predicted_context_without_replacing_observation_sources(tmp_path):
+    plan, region, _, _ = fixture_inputs(tmp_path)
+    p = tmp_path / "context.npy"
+    a = np.random.default_rng(43).dirichlet(np.ones(11), size=(22, 2, 2))
+    np.save(p, a.transpose(0, 3, 1, 2).astype(np.float32))
+    region["context"] = {**ref(p), "layout": "nchw", "index_sha256": region["index"]["sha256"]}
+    recipe = {
+        "name": "context_complement",
+        "kind": "blocks",
+        "sources": ["public", "semantic", "raw", "context"],
+        "dimensions": [12, 16, 25, 11],
+        "unit_branches": [True, True, True, False],
+        "unit_output": False,
+    }
+    path = export_candidate(plan, region, recipe)
+    assert np.load(path).shape == (22, 64, 2, 2)
+    execution = json.loads((path.parent / "execution.json").read_text())
+    assert set(execution["sources"]) == {"public", "semantic", "raw", "context"}
+    assert export_candidate(plan, region, recipe) == path
+
+
+def test_shared_fusion_rejects_predicted_context_from_another_index(tmp_path):
+    plan, region, recipe, _ = fixture_inputs(tmp_path)
+    p = tmp_path / "context.npy"
+    np.save(p, np.zeros((22, 11, 2, 2), np.float32))
+    region["context"] = {**ref(p), "layout": "nchw", "index_sha256": "0" * 64}
+    with pytest.raises(ValueError, match="context.*index"):
+        export_candidate(plan, region, recipe)
+
+
+@pytest.mark.parametrize("missing_region", [False, True])
+def test_shared_plan_requires_context_in_all_regions_before_scoring(tmp_path, missing_region):
+    plan, region, _, _ = fixture_inputs(tmp_path)
+    regions = []
+    for name in ["region_a", "region_b", "region_c"]:
+        regions.append({**region, "name": name, "context": {"unused": "registration-only"}})
+    if missing_region:
+        regions[1].pop("context")
+    rp, ap, sp = tmp_path / "regions.json", tmp_path / "anchor.json", tmp_path / "plan.json"
+    dump(rp, {"regions": regions})
+    dump(
+        ap,
+        {
+            "state": "complete",
+            "selection_uses_validation_only": True,
+            "values": {
+                r["name"]: {h: {"aef": 0.6, "public": 0.5} for h in ["mlp", "conv3x3"]}
+                for r in regions
+            },
+        },
+    )
+    plan.update(
+        schema="shared-fusion-search-v1",
+        regions=ref(rp),
+        anchor=ref(ap),
+        recipes=[
+            {
+                "name": "context_complement",
+                "kind": "blocks",
+                "sources": ["public", "semantic", "raw", "context"],
+                "dimensions": [12, 16, 25, 11],
+            }
+        ],
+    )
+    dump(sp, plan)
+    if missing_region:
+        with pytest.raises(ValueError, match="context.*every region"):
+            read_plan(sp)
+    else:
+        _, actual, _ = read_plan(sp)
+        assert len(actual) == 3
