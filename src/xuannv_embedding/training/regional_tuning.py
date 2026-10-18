@@ -387,7 +387,7 @@ def public_validation(plan):
     return {"validation_macro_f1": float(np.mean(values)), "selection": "validation_only"}
 
 
-def evaluate_selected(plan, name):
+def evaluate_selected(plan, name, *, device_name="npu:7", render_figures=True):
     if name in {"parent", "public"}:
         return {"winner": name, "state": f"{name}_retained_no_validation_improvement"}
     candidate = next(c for c in plan["candidates"] if c["name"] == name)
@@ -405,7 +405,7 @@ def evaluate_selected(plan, name):
     from xuannv_embedding.training.cli import _setup_device
 
     features = np.load(benchmark.feature_path(root, "highres"), mmap_mode="r")
-    device, _, _ = _setup_device("npu:7")
+    device, _, _ = _setup_device(device_name)
     for kind in plan["selection"]["heads"]:
         job = {"feature": "highres", "head": kind, "fold": 0, "budget": 200}
         output = root / "scores" / f"highres_{kind}_fold0_n200"
@@ -443,13 +443,14 @@ def evaluate_selected(plan, name):
                 test_tiles=np.asarray(fold["test"], np.int32),
             )
         for number in range(1, 5):
-            benchmark.score_job(spec, {**job, "fold": number}, device_name="npu:7")
+            benchmark.score_job(spec, {**job, "fold": number}, device_name=device_name)
     benchmark.score_regression(spec, "highres")
     from xuannv_embedding.downstream.regional_figures import render
     from xuannv_embedding.training.regional_followup import summarize
 
     summary = summarize(spec)
-    render(spec)
+    if render_figures:
+        render(spec)
     return {
         "winner": name,
         "selected_step": json.loads((Path(plan["output"]) / name / "status.json").read_text()).get(
