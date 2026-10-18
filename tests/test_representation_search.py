@@ -47,6 +47,16 @@ def test_blend_is_unit_length_and_rejects_invalid_weights():
         compose_tile({"kind": "blend", "alpha": 2}, [left, right], [])
 
 
+def test_spatial_pool_preserves_constant_feature_directions_and_grid_extent():
+    left = np.ones((64, 7, 7), np.float32)
+    right = left.copy()
+    result = compose_tile({"kind": "blend", "alpha": 0.5, "post_pool": 5}, [left, right], [])
+    assert result.shape == left.shape
+    assert np.allclose(result, 1 / 8)
+    with pytest.raises(ValueError):
+        compose_tile({"kind": "blend", "alpha": 0.5, "post_pool": 4}, [left, right], [])
+
+
 def test_block_projection_keeps_missing_source_zero_and_total_dimensions_64():
     class Projection:
         def transform(self, values):

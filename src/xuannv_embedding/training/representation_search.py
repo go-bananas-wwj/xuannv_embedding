@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 
 import numpy as np
+import torch
+import torch.nn.functional as F
 from sklearn.decomposition import PCA
 from threadpoolctl import threadpool_limits
 
@@ -55,6 +57,9 @@ def unit(values):
 
 
 def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
+    kernel = recipe.get("post_pool", 1)
+    if type(kernel) is not int or kernel not in {1, 3, 5, 7, 9}:
+        raise ValueError("Spatial pooling must be an odd registered neighborhood size")
     kind = recipe["kind"]
     if kind == "blend":
         alpha = recipe["alpha"]
@@ -81,7 +86,18 @@ def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
         raise ValueError("Unknown representation recipe")
     if values.shape[0] != 64 or not np.isfinite(values).all():
         raise ValueError("Every candidate must be finite and 64-dimensional")
-    return unit(values).astype(np.float32)
+    result = unit(values).astype(np.float32)
+    if kernel > 1:
+        with torch.inference_mode():
+            result = F.avg_pool2d(
+                torch.from_numpy(result)[None],
+                kernel,
+                stride=1,
+                padding=kernel // 2,
+                count_include_pad=False,
+            )[0].numpy()
+        result = unit(result)
+    return result.astype(np.float32)
 
 
 def _reference(ref):
@@ -156,8 +172,20 @@ def read_spec(path: Path):
     names = []
     for recipe in spec["recipes"]:
         required = {"name", "kind", "sources", "eligible"}
-        if not required.issubset(recipe) or set(recipe) - required - {"alpha", "dimensions"}:
+        if not required.issubset(recipe) or set(recipe) - required - {
+            "alpha",
+            "dimensions",
+            "post_pool",
+        }:
             raise ValueError("Unknown recipe fields")
+        if type(recipe.get("post_pool", 1)) is not int or recipe.get("post_pool", 1) not in {
+            1,
+            3,
+            5,
+            7,
+            9,
+        }:
+            raise ValueError("Invalid spatial pooling neighborhood")
         if (
             not re.fullmatch(r"[a-z][a-z0-9_]*", recipe["name"])
             or recipe["name"] in names
