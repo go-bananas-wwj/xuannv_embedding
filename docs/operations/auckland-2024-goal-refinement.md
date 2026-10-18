@@ -93,3 +93,20 @@ Keep the previous best validation candidate eligible with its cached readouts; r
 all candidates against the same archived validation anchor. Only a newly selected
 candidate receives new query fits. Do not use the first wave's query scores to choose
 the dimensional allocations or the multiscale winner.
+
+## First refinement outcome and multiscale activation
+
+The 9x9 candidate completed all five query folds: MLP 59.1703%, CNN 57.2169%,
+improving the archived candidate by 0.4869 and 0.4080 points (mean 0.4475). It also
+exceeds AEF with matched 9x9 averaging (57.9650%, 56.9066%). The mean gain is below
+the registered 0.5-point threshold, and surface-height RMSE increased further. The
+goal therefore remains active. [All results](auckland-2024-refinement-context-results.md)
+include all classes, folds, continuous targets and twelve validation trials.
+
+Activate the eight previously registered multiscale candidates. Retain `wide_k9` as
+the validated parent, while both validation gains and query acceptance thresholds
+remain anchored to the original read-only archive. This keeps the ranking rule
+consistent across waves; the parent's query score does not select new candidates.
+If the parent wins, do not refit or retest it. Matching AEF controls at 1/5/9 cells
+are reused from completed work rather than trained again. The public-only control
+retains both public scales and exactly the selected source projections.
