@@ -534,6 +534,14 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "representation-search":
+        from xuannv_embedding.training.representation_search import main as search_main
+
+        return search_main(forwarded[1:])
+    if forwarded and forwarded[0] == "semantic-features":
+        from xuannv_embedding.export.semantic_features import main as semantic_main
+
+        return semantic_main(forwarded[1:])
     if forwarded and forwarded[0] == "regional-tuning":
         from xuannv_embedding.training.regional_tuning import main as tuning_main
 
@@ -556,6 +564,8 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("representation-search", help="固定维度融合的验证集搜索", add_help=False)
+    sub.add_parser("semantic-features", help="静态高分语义特征与无标签投影", add_help=False)
     sub.add_parser("regional-tuning", help="验证集选参并监控有界区域实验", add_help=False)
     sub.add_parser("watchdog", help="监控并从有效检查点恢复区域训练", add_help=False)
     sub.add_parser("regional-benchmark", help="固定空间下游评测与阶段同步", add_help=False)
