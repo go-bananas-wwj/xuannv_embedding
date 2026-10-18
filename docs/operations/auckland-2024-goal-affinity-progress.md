@@ -2,8 +2,10 @@
 
 ```json
 {
-  "stage": "validation",
-  "completed": {
+  "stage": "complete",
+  "winner": "affinity_statistics_k13_t100",
+  "acceptance_met": false,
+  "validation": {
     "affinity_basic_k9_t20": {
       "validation_macro_f1": 0.6018685595653733,
       "minimum_margin": 0.000881616725401102,
@@ -52,6 +54,7 @@
         "conv3x3": 0.6004705191378698
       }
     }
-  }
+  },
+  "overleaf_modified": false
 }
 ```
