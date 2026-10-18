@@ -32,6 +32,23 @@ seed 41, twenty tiles and at most 256 valid samples per tile explained only abou
 reconstruction, not proof that it causes the downstream deficit. Reducing the
 training objective alone has not established useful transferable features.
 
+A further label-free audit fitted a new linear decoder on forty tiles per region
+and evaluated it on twenty different tiles, with at most 256 valid pixels per
+tile, seed 41 and ridge penalty 1. Targets were standardized using fitting samples
+only. Neither the encoder nor any primary reader was changed. Held-tile R-squared
+against the fitting-mean baseline was:
+
+| Region | Public visual teacher | Local visual teacher |
+| --- | ---: | ---: |
+| Haidian | 0.0966 | 0.1213 |
+| Harbin | 0.0894 | 0.1136 |
+| Auckland | 0.0955 | 0.1862 |
+
+Thus, fitting another linear decoder alone does not recover most teacher
+variation in this diagnostic. Nonlinear information may remain, and neither this
+audit nor reconstruction variance measures downstream usefulness. These results
+motivate testing the registered skip; they do not establish its effectiveness.
+
 ## One fixed follow-up recipe
 
 Use the existing label-free block exporter, without another encoder training:
