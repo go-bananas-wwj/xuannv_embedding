@@ -5,6 +5,7 @@ from xuannv_embedding.training.representation_search import (
     balanced_validation_rank,
     compose_tile,
     meets_acceptance,
+    registered_parent,
 )
 
 
@@ -110,3 +111,25 @@ def test_saved_unlabelled_projection_reproduces_feature_grid(tmp_path, monkeypat
     assert np.allclose(expected, result[0], atol=1e-3)
     report = json.loads((directory / "status.json").read_text())
     assert report["labels_used_for_projection"] is False
+
+
+def test_parent_reference_rejects_test_metrics_even_with_a_valid_file_hash(tmp_path):
+    import json
+
+    from xuannv_embedding.export.context import sha
+
+    validation = tmp_path / "validation.json"
+    result = tmp_path / "result.json"
+    result.write_text('{"state":"complete"}')
+    validation.write_text(json.dumps({"test_scored": False, "fold": 0, "heads": {}}))
+    spec = {
+        "parent": {
+            "validation": {"path": str(validation), "sha256": sha(validation)},
+            "result": {"path": str(result), "sha256": sha(result)},
+        }
+    }
+    assert registered_parent(spec)["test_scored"] is False
+    validation.write_text(json.dumps({"test_scored": True, "fold": 0, "heads": {}}))
+    spec["parent"]["validation"]["sha256"] = sha(validation)
+    with pytest.raises(ValueError, match="validation split"):
+        registered_parent(spec)

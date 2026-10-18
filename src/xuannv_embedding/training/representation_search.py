@@ -98,6 +98,19 @@ def _same_index(a, b):
             raise ValueError("Representation geographic index differs")
 
 
+def registered_parent(spec):
+    if "parent" not in spec:
+        return None
+    if set(spec["parent"]) != {"validation", "result"}:
+        raise ValueError("Unknown parent-reference fields")
+    for ref in spec["parent"].values():
+        _reference(ref)
+    report = json.loads(Path(spec["parent"]["validation"]["path"]).read_text())
+    if report.get("test_scored") is not False or report.get("fold") != 0:
+        raise ValueError("Parent selection must use the registered validation split")
+    return report
+
+
 def read_spec(path: Path):
     spec = json.loads(path.read_text())
     expected = {
@@ -113,8 +126,13 @@ def read_spec(path: Path):
         "fit_samples",
         "seed",
     }
-    if set(spec) != expected or spec["schema"] != "regional-representation-search-v1":
+    if (
+        not expected.issubset(spec)
+        or set(spec) - expected - {"parent"}
+        or spec["schema"] != "regional-representation-search-v1"
+    ):
         raise ValueError("Unknown representation-search specification")
+    registered_parent(spec)
     _reference(spec["baseline"])
     _reference(spec["semantic"])
     common = json.loads(_reference(spec["index"]).read_text())
@@ -438,6 +456,8 @@ def follow(spec_path):
                     time.sleep(30)
             public = validation_reference(spec, "public")
             scores = {"public": {"heads": {h: {"macro_f1": v} for h, v in public.items()}}}
+            if "parent" in spec:
+                scores["parent"] = registered_parent(spec)
             for recipe in spec["recipes"]:
                 if recipe["eligible"]:
                     scores[recipe["name"]] = json.loads(
@@ -458,12 +478,18 @@ def follow(spec_path):
             comparisons = json.loads((Path(baseline["output"]) / "comparison.json").read_text())[
                 "comparisons"
             ]
-            accepted = winner != "public" and meets_acceptance(result["comparisons"], comparisons)
+            accepted = winner not in {"public", "parent"} and meets_acceptance(
+                result["comparisons"], comparisons
+            )
             result["acceptance_met"] = accepted
             result["representation_kind"] = (
                 "unchanged public baseline"
                 if winner == "public"
-                else "label-free regional 64-D feature fusion"
+                else (
+                    "retained regional fusion reference"
+                    if winner == "parent"
+                    else "label-free regional 64-D feature fusion"
+                )
             )
             dump(root / "result.json", result)
             final = {
