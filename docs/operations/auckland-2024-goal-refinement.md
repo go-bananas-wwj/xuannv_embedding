@@ -110,3 +110,17 @@ consistent across waves; the parent's query score does not select new candidates
 If the parent wins, do not refit or retest it. Matching AEF controls at 1/5/9 cells
 are reused from completed work rather than trained again. The public-only control
 retains both public scales and exactly the selected source projections.
+
+## Bounded wider-context follow-up
+
+The eight multiscale candidates did not beat the retained parent's validation
+criterion, so no new query suite was run. See the [complete validation-only report](auckland-2024-refinement-pyramid-results.md).
+
+Register four further 64D candidates before validation: 11x11 joint mean, 13x13 joint
+mean, and 13x13 aggregation with 10% or 20% native detail mixed back before final unit
+normalization. Keep public48/semantic16 projections, images, masks, geometry, readouts,
+fixed validation anchor and original acceptance threshold unchanged. Retain `wide_k9`
+as the parent. Query only a new validation winner. AEF and public-PCA48 controls receive
+exactly the selected spatial filter. This tests a limited increase in context with
+partial detail preservation; it does not assert that wider pooling benefits height
+regression. Keep the first accepted archive and both completed search records.
