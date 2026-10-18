@@ -143,3 +143,45 @@ def test_parent_reference_rejects_test_metrics_even_with_a_valid_file_hash(tmp_p
     spec["parent"]["validation"]["sha256"] = sha(validation)
     with pytest.raises(ValueError, match="validation split"):
         registered_parent(spec)
+
+
+def test_spatial_residual_can_restore_local_directions_without_changing_extent():
+    values = np.zeros((64, 5, 5), np.float32)
+    values[0, :, :2] = 1
+    values[1, :, 2:] = 1
+    output = compose_tile({"kind": "identity", "post_pool": 5, "detail_mix": 1.0}, [values], [])
+    assert np.array_equal(output, values)
+    with pytest.raises(ValueError, match="detail"):
+        compose_tile({"kind": "identity", "post_pool": 5, "detail_mix": float("nan")}, [values], [])
+
+
+def test_branch_filters_preserve_missing_modalities_and_respect_source_weights():
+    class Projection:
+        def transform(self, values):
+            return values[:, :32]
+
+    values = np.ones((64, 5, 5), np.float32)
+    recipe = {"kind": "blocks", "branch_pool": [1, 3], "block_weights": [1.0, 2.0]}
+    output = compose_tile(recipe, [values, values], [Projection(), Projection()])
+    assert np.allclose(output[32:] / output[:32], 2)
+    missing = compose_tile(recipe, [values, np.zeros_like(values)], [Projection(), Projection()])
+    assert np.count_nonzero(missing[32:]) == 0
+    with pytest.raises(ValueError, match="branch"):
+        compose_tile({**recipe, "branch_pool": [1]}, [values, values], [Projection(), Projection()])
+
+
+def test_improvement_target_requires_both_heads_and_mean_gain_over_archived_result():
+    from xuannv_embedding.training.representation_search import meets_improvement
+
+    previous = {
+        "highres:mlp:200": {"macro_f1": 0.5868},
+        "highres:conv3x3:200": {"macro_f1": 0.5681},
+    }
+    values = {"highres:mlp:200": {"macro_f1": 0.5968}, "highres:conv3x3:200": {"macro_f1": 0.5681}}
+    assert not meets_improvement(values, previous, minimum_mean_gain=0.005)
+    values["highres:conv3x3:200"]["macro_f1"] = 0.5701
+    assert meets_improvement(values, previous, minimum_mean_gain=0.005)
+    values["highres:mlp:200"]["macro_f1"] = 0.5869
+    assert not meets_improvement(values, previous, minimum_mean_gain=0.005)
+    values["highres:conv3x3:200"]["macro_f1"] = float("nan")
+    assert not meets_improvement(values, previous, minimum_mean_gain=0.005)

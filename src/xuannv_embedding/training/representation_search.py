@@ -51,15 +51,77 @@ def meets_acceptance(comparisons: dict, baseline: dict) -> bool:
     return True
 
 
+def meets_improvement(comparisons: dict, reference: dict, *, minimum_mean_gain: float) -> bool:
+    if (
+        type(minimum_mean_gain) not in {int, float}
+        or not math.isfinite(minimum_mean_gain)
+        or minimum_mean_gain < 0
+    ):
+        raise ValueError("Invalid minimum mean improvement")
+    gains = []
+    for head in ["mlp", "conv3x3"]:
+        key = f"highres:{head}:200"
+        current = comparisons.get(key, {}).get("macro_f1", float("nan"))
+        previous = reference.get(key, {}).get("macro_f1", float("nan"))
+        if (
+            any(
+                type(v) not in {float, int} or not math.isfinite(v) or not 0 <= v <= 1
+                for v in [current, previous]
+            )
+            or current <= previous
+        ):
+            return False
+        gains.append(current - previous)
+    return float(np.mean(gains)) >= minimum_mean_gain
+
+
 def unit(values):
     norm = np.linalg.norm(values, axis=0, keepdims=True)
     return np.divide(values, norm, out=np.zeros_like(values), where=norm > 1e-8)
 
 
-def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
+def _spatial_options(recipe, branches):
+    allowed = {1, 3, 5, 7, 9}
     kernel = recipe.get("post_pool", 1)
-    if type(kernel) is not int or kernel not in {1, 3, 5, 7, 9}:
+    if type(kernel) is not int or kernel not in allowed:
         raise ValueError("Spatial pooling must be an odd registered neighborhood size")
+    detail = recipe.get("detail_mix", 0.0)
+    if type(detail) not in {float, int} or not math.isfinite(detail) or not 0 <= detail <= 1:
+        raise ValueError("Invalid local detail residual weight")
+    branch_pool = recipe.get("branch_pool", [1] * branches)
+    weights = recipe.get("block_weights", [1.0] * branches)
+    if (
+        not isinstance(branch_pool, list)
+        or len(branch_pool) != branches
+        or any(type(v) is not int or v not in allowed for v in branch_pool)
+    ):
+        raise ValueError("Invalid branch pooling neighborhoods")
+    if (
+        not isinstance(weights, list)
+        or len(weights) != branches
+        or any(type(v) not in {float, int} or not math.isfinite(v) or v <= 0 for v in weights)
+    ):
+        raise ValueError("Invalid branch weights")
+    if recipe["kind"] != "blocks" and ("branch_pool" in recipe or "block_weights" in recipe):
+        raise ValueError("Per-branch filters require block fusion")
+    return kernel, detail, branch_pool, weights
+
+
+def _average(values, kernel):
+    if kernel == 1:
+        return values
+    with torch.inference_mode():
+        return F.avg_pool2d(
+            torch.from_numpy(values)[None],
+            kernel,
+            stride=1,
+            padding=kernel // 2,
+            count_include_pad=False,
+        )[0].numpy()
+
+
+def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
+    kernel, detail, branch_pool, weights = _spatial_options(recipe, len(arrays))
     kind = recipe["kind"]
     if kind == "blend":
         alpha = recipe["alpha"]
@@ -68,12 +130,15 @@ def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
         values = (1 - alpha) * arrays[0] + alpha * arrays[1]
     elif kind == "blocks":
         blocks = []
-        for values, projection in zip(arrays, projections):
+        for index, (values, projection) in enumerate(zip(arrays, projections)):
             mask = np.linalg.norm(values, axis=0) > 1e-8
             h, w = values.shape[-2:]
             projected = projection.transform(values.reshape(len(values), -1).T).T
             projected = projected.reshape(-1, h, w).astype(np.float32)
-            blocks.append(unit(projected) * mask[None])
+            projected = unit(projected) * mask[None]
+            if branch_pool[index] > 1:
+                projected = unit(_average(projected, branch_pool[index])) * mask[None]
+            blocks.append(projected * weights[index])
         values = np.concatenate(blocks)
     elif kind == "joint":
         joined = np.concatenate(arrays)
@@ -88,15 +153,7 @@ def compose_tile(recipe: dict, arrays: list, projections: list) -> np.ndarray:
         raise ValueError("Every candidate must be finite and 64-dimensional")
     result = unit(values).astype(np.float32)
     if kernel > 1:
-        with torch.inference_mode():
-            result = F.avg_pool2d(
-                torch.from_numpy(result)[None],
-                kernel,
-                stride=1,
-                padding=kernel // 2,
-                count_include_pad=False,
-            )[0].numpy()
-        result = unit(result)
+        result = unit((1 - detail) * _average(result, kernel) + detail * result)
     return result.astype(np.float32)
 
 
@@ -144,11 +201,21 @@ def read_spec(path: Path):
     }
     if (
         not expected.issubset(spec)
-        or set(spec) - expected - {"parent"}
+        or set(spec) - expected - {"parent", "improvement"}
         or spec["schema"] != "regional-representation-search-v1"
     ):
         raise ValueError("Unknown representation-search specification")
     registered_parent(spec)
+    if "improvement" in spec:
+        improvement = spec["improvement"]
+        if "parent" not in spec or set(improvement) != {"reference", "minimum_mean_gain"}:
+            raise ValueError("Improvement searches require a parent and frozen reference")
+        previous = json.loads(_reference(improvement["reference"]).read_text())["comparisons"]
+        meets_improvement(previous, previous, minimum_mean_gain=improvement["minimum_mean_gain"])
+        for head in ["mlp", "conv3x3"]:
+            value = previous[f"highres:{head}:200"]["macro_f1"]
+            if type(value) not in {int, float} or not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError("Invalid archived improvement reference")
     _reference(spec["baseline"])
     _reference(spec["semantic"])
     common = json.loads(_reference(spec["index"]).read_text())
@@ -176,16 +243,12 @@ def read_spec(path: Path):
             "alpha",
             "dimensions",
             "post_pool",
+            "detail_mix",
+            "branch_pool",
+            "block_weights",
         }:
             raise ValueError("Unknown recipe fields")
-        if type(recipe.get("post_pool", 1)) is not int or recipe.get("post_pool", 1) not in {
-            1,
-            3,
-            5,
-            7,
-            9,
-        }:
-            raise ValueError("Invalid spatial pooling neighborhood")
+        _spatial_options(recipe, len(recipe["sources"]))
         if (
             not re.fullmatch(r"[a-z][a-z0-9_]*", recipe["name"])
             or recipe["name"] in names
@@ -339,6 +402,8 @@ def follow(spec_path):
     root = Path(spec["output"])
     root.mkdir(parents=True, exist_ok=True)
     reference = validation_reference(spec, "aef")
+    if "improvement" in spec:
+        reference = {h: v["macro_f1"] for h, v in registered_parent(spec)["heads"].items()}
     active, complete, retries, prepared = {}, {}, {}, set()
     identity = sha(spec_path)
     with (root / "search.lock").open("w") as lock:
@@ -495,6 +560,7 @@ def follow(spec_path):
             selection = {
                 "winner": winner,
                 "criterion": "minimum_of_MLP_and_CNN_validation_margins",
+                "reference": "validated_parent" if "improvement" in spec else "aef",
                 "validation_reference": reference,
                 "scores": complete,
                 "test_used_for_selection": False,
@@ -509,6 +575,15 @@ def follow(spec_path):
             accepted = winner not in {"public", "parent"} and meets_acceptance(
                 result["comparisons"], comparisons
             )
+            if "improvement" in spec:
+                improvement = spec["improvement"]
+                previous = json.loads(Path(improvement["reference"]["path"]).read_text())
+                accepted = accepted and meets_improvement(
+                    result["comparisons"],
+                    previous["comparisons"],
+                    minimum_mean_gain=improvement["minimum_mean_gain"],
+                )
+                result["improvement"] = improvement
             result["acceptance_met"] = accepted
             result["representation_kind"] = (
                 "unchanged public baseline"
