@@ -85,9 +85,11 @@ base; neither fusion reading exceeds original AEF on the Dynamic World average.
 Haidian CLCD MLP improves over the original base, while CNN decreases and both
 remain below AEF. No superiority across all datasets, tasks or heads is established.
 The DINO-only controls and all unfavorable conditions remain in the tables.
+On Harbin Dynamic World CNN, DINO alone (59.3387%) slightly exceeds local fusion
+(59.1824%); the complementary gain is not uniform across reference sources.
 
-The two components may be complementary: Harbin OSM CNN averages are 63.8557%
-for public features, 57.8877% for DINO alone and 67.6268% for local fusion. These
+The two components may be complementary: Harbin OSM CNN averages are 63.8563%
+for public features, 57.8877% for DINO alone and 67.6271% for local fusion. These
 observations support complementarity but do not isolate every effect of PCA,
 normalization, source quality or finite readout optimization. In particular, the
 40D public projection retains over 99.8% of unlabeled variance in both regions;
