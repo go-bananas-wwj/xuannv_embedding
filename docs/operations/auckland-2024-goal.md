@@ -69,3 +69,12 @@ padding is accounted for using actual source-pixel centers when aligning native 
 to the common 10 m footprint. Missing high-resolution observations stay missing; they do
 not change the common scoring mask. Two real urban tiles passed NPU extraction and PCA
 checks before the full run. Optional installation is `pip install -e '.[downstream,vision]'`.
+
+## Native aerial and spatial-context waves
+
+The native aerial wave and all class/regression results are recorded in
+[the native-wave result](auckland-2024-goal-native-results.md). It improves pooled MLP
+beyond AEF but not CNN, so the goal remains active. The next six fixed candidates
+aggregate fused features over 30 or 50 m using 16, 24 or 32 semantic coordinates.
+Selection retains the previous validated candidate and uses only registered validation
+metrics. This is label-free latent aggregation, not ground-truth or prediction smoothing.
