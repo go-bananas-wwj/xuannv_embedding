@@ -2,20 +2,16 @@
 
 ```json
 {
-  "stage": "validation_search",
-  "completed": {},
-  "total": 17,
-  "active": {
-    "semantic": 1,
-    "blend_prior_025": 2,
-    "blend_prior_050": 3,
-    "blocks_prior_32": 4,
-    "blend_long_025": 5,
-    "blend_long_050": 6,
-    "blocks_long_32": 7
-  },
-  "retries": {},
-  "supervisor_pid": 471624,
-  "utc": 1792298850.165062
+  "stage": "validation",
+  "completed": {
+    "blend_prior_050": {
+      "validation_macro_f1": 0.5430132586065783,
+      "minimum_margin": -0.02850907125885127,
+      "heads": {
+        "mlp": 0.5416422698733444,
+        "conv3x3": 0.5443842473398124
+      }
+    }
+  }
 }
 ```
