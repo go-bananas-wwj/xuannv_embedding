@@ -2,20 +2,16 @@
 
 ```json
 {
-  "stage": "validation_search",
-  "completed": {},
-  "total": 9,
-  "active": {
-    "scale05_p48_s16_k5": 1,
-    "scale05_p48_s16_k9": 2,
-    "scale05_p48_s16_k13": 3,
-    "scale05_p40_s24_k5": 4,
-    "scale05_p40_s24_k9": 5,
-    "scale05_p40_s24_k13": 6,
-    "scale05_p32_s32_k5": 7
-  },
-  "retries": {},
-  "supervisor_pid": 761434,
-  "utc": 1792317536.4845426
+  "stage": "validation",
+  "completed": {
+    "scale05_p48_s16_k5": {
+      "validation_macro_f1": 0.6097304877774153,
+      "minimum_margin": 0.008351476963772586,
+      "heads": {
+        "mlp": 0.6163318567953235,
+        "conv3x3": 0.6031291187595071
+      }
+    }
+  }
 }
 ```
