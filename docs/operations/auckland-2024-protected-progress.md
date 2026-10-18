@@ -19,6 +19,14 @@
       "selected_step": 1600,
       "completed_steps": 2400,
       "registered_budget": 2400
+    },
+    "long_continuation": {
+      "stage": "complete",
+      "utc": 1792285253.6278892,
+      "validation_macro_f1": 0.5481432840126117,
+      "selected_step": 2400,
+      "completed_steps": 2400,
+      "registered_budget": 2400
     }
   }
 }
