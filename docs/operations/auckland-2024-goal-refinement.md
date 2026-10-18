@@ -152,3 +152,26 @@ A validation-only audit of all completed refinement candidates still selects `wi
 under this rule. No query result or new raw-source readout determined this change.
 Earlier published rounds retain their recorded balanced-minimum criterion. This
 prospective selection change and all adaptation remain explicit in the study record.
+
+## Feature-affinity context: registered follow-up
+
+The complementary-statistics winner reached MLP 58.8316%, CNN 57.2448%, a mean gain
+of 0.2920 points over the original archive. It does not meet the 0.5-point goal.
+Both the 90 m-only candidate and this tradeoff remain recorded, with all class,
+fold and regression outcomes. The latest validation-selected statistics candidate
+is retained as the parent regardless of its query tradeoff.
+
+Register six label-free affinity candidates: public48/semantic16 and
+public32/semantic24/raw8, each with 9x9 context at temperatures 0.2 or 1.0, and
+13x13 context at temperature 1.0. For unit feature vectors, a neighbor's weight is
+exp((cosine_similarity - 1)/temperature); normalize by the sum of weights inside
+the same tile, then unit-normalize. No label/prediction or reference-map value enters
+the affinity. This checks feature-aware context while retaining sharper transitions.
+
+This is our direct cosine-feature filtering hypothesis, not an implementation of the
+[Fast Bilateral Solver](https://arxiv.org/abs/1511.03296). That work motivates studying
+edge-aware processing; it establishes no result for our region or feature vectors.
+Selection remains prospective positive-mean validation improvement against the fixed
+archived anchor, with the latest best-validation parent retained. Only a new winner
+gets query scoring. Apply exactly the selected affinity filter to the AEF and public-
+only controls; do not reuse uniform-average controls as if they included affinity.
