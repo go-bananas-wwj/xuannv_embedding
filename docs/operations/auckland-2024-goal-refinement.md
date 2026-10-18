@@ -226,3 +226,13 @@ than automatically launching another sweep. If not, test the actual 0.5 m source
 
 The scale-only experiment never supports a claim of added observational detail.
 No Overleaf edits are made.
+
+The matched original-1m encoder setting is also a complete regional fusion model,
+unlike the AEF and public-only baselines. Before inspecting its validation metrics,
+register a final paired-input decision: choose between the aligned winner and its
+exact original-grid counterpart using the same fixed-anchor positive-mean validation
+rule. This conditional paired candidate adds no free fusion/dimension hyperparameters.
+Lock the input-choice record from validation reports without reading query metrics.
+AEF/public-only controls never choose this model. Report both input settings and
+all prior query outcomes regardless of which wins. This prevents a claim of scale
+benefit if the matched original-grid fusion validates better.
