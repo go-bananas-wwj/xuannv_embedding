@@ -465,11 +465,24 @@ def export_recipe(spec, recipe, output):
                 active = np.linalg.norm(values, axis=1) > 1e-8
                 scaler = None
                 fit_values = values[active]
-                if recipe["kind"] == "blocks" and standardized.get(recipe["sources"][index]):
+                if (
+                    len(fit_values)
+                    and recipe["kind"] == "blocks"
+                    and standardized.get(recipe["sources"][index])
+                ):
                     scaler = StandardScaler().fit(fit_values)
                     fit_values = scaler.transform(fit_values)
                 pca = PCA(n_components=dim, svd_solver="full")
-                pca.fit(fit_values)
+                if len(fit_values):
+                    pca.fit(fit_values)
+                else:
+                    # An absent optional source contributes no learned directions.
+                    # Keep its allocated width so matched ablations use the same layout.
+                    pca.mean_ = np.zeros(values.shape[1], np.float32)
+                    pca.components_ = np.zeros((dim, values.shape[1]), np.float32)
+                    pca.n_features_in_ = values.shape[1]
+                    pca.explained_variance_ = np.zeros(dim, np.float32)
+                    pca.explained_variance_ratio_ = np.zeros(dim, np.float32)
                 projections.append(make_pipeline(scaler, pca) if scaler is not None else pca)
                 extra = (
                     {"scaler_mean": scaler.mean_, "scaler_scale": scaler.scale_}

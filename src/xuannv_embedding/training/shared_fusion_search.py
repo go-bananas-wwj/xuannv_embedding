@@ -252,7 +252,14 @@ def export_candidate(plan, region, recipe):
     if len(samples) > plan["fit_samples"]:
         samples = samples[rng.choice(len(samples), plan["fit_samples"], replace=False)]
     with threadpool_limits(limits=4):
-        model = align_samples(samples[:, :64], samples[:, 64:], ridge=recipe["ridge"])
+        if len(samples):
+            model = align_samples(samples[:, :64], samples[:, 64:], ridge=recipe["ridge"])
+        else:
+            model = {
+                "matrix": np.zeros((64, 64), np.float32),
+                "public_mean": np.zeros(64, np.float32),
+                "semantic_mean": np.zeros(64, np.float32),
+            }
     np.savez_compressed(root / "alignment.npz", **model)
     pending = root / "annual.partial.npy"
     result = np.lib.format.open_memmap(pending, mode="w+", dtype=np.float32, shape=u.shape)

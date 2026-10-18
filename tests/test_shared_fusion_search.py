@@ -163,3 +163,13 @@ def test_selection_never_promotes_public_only_control_and_prefers_eligible_candi
     accepted = record("balanced", "candidate", 0.003, True)
     assert select_shared_winner([control, insufficient, accepted])["recipe"]["name"] == "balanced"
     assert select_shared_winner([control, insufficient])["recipe"]["name"] == "too_small_mean"
+
+
+def test_shared_alignment_handles_a_region_without_any_high_resolution_observations(tmp_path):
+    plan, region, recipe, _ = fixture_inputs(tmp_path)
+    source = np.load(region["semantic"]["path"])
+    np.save(region["semantic"]["path"], np.zeros_like(source))
+    region["semantic"].update(ref(region["semantic"]["path"]))
+    feature = export_candidate(plan, region, recipe)
+    np.testing.assert_array_equal(np.load(feature), np.load(region["public"]["path"]))
+    assert export_candidate(plan, region, recipe) == feature

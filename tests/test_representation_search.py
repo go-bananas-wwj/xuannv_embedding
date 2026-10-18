@@ -301,3 +301,37 @@ def test_affinity_context_avoids_mixing_orthogonal_feature_regions():
     values[1, :, 2:] = 1
     recipe = {"kind": "identity", "post_pool": 5, "affinity_temperature": 0.01}
     assert np.allclose(compose_tile(recipe, [values], []), values, atol=1e-6)
+
+
+@pytest.mark.parametrize("standardize", [False, True])
+def test_block_export_handles_a_region_with_an_entirely_missing_source(tmp_path, standardize):
+    import json
+
+    from xuannv_embedding.training import representation_search as search
+
+    rng = np.random.default_rng(41)
+    public = rng.normal(size=(2, 64, 8, 8)).astype(np.float32)
+    missing = np.zeros_like(public)
+    sources = {}
+    for name, values in [("public", public), ("optional", missing)]:
+        path = tmp_path / f"{name}.npy"
+        np.save(path, values)
+        sources[name] = {"path": str(path), "standardize": name == "optional" and standardize}
+    index = tmp_path / "index.json"
+    index.write_text(json.dumps({"records": [{}, {}]}))
+    recipe = {
+        "name": "missing_source_control",
+        "kind": "blocks",
+        "sources": ["public", "optional"],
+        "dimensions": [32, 32],
+    }
+    spec = {"sources": sources, "index": {"path": str(index)}, "seed": 41, "fit_samples": 128}
+    output = tmp_path / "output"
+    search.export_recipe(spec, recipe, output)
+    saved = np.load(output / "annual.npy")
+    assert np.isfinite(saved).all()
+    assert np.count_nonzero(saved[:, 32:]) == 0
+    projections = [search.load_projection(output / f"projection{i}.npz") for i in range(2)]
+    reconstructed = search.compose_tile(recipe, [public[0], missing[0]], projections)
+    assert np.array_equal(reconstructed.astype(np.float16), saved[0])
+    assert np.allclose(np.linalg.norm(saved[:, :32].astype(np.float32), axis=1), 1, atol=1e-3)
