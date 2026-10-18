@@ -64,3 +64,18 @@ Execution registration, source hashes, geographical order, true input resolution
 RGB provenance, projections, supports, scores and failure records remain in the
 experiment workspace. New input adapter regression checks cover masks, virtual
 raster dependencies, band order, fixed radiometry and geographic/identity errors.
+
+## Execution checkpoint
+
+All 742 temporal RGB inputs are prepared. The implementation passed 886 CPU
+tests, Black, Ruff, the repository gate and package build; execution uses an
+immutable archive of commit `9d536cb`. Real two-tile Haidian NPU extraction passed
+shape, finite-value, satellite-normalization, prefix-token and unit-norm checks.
+
+After measuring throughput, a scheduling amendment split each region into three
+contiguous inference shards on devices 1/3/4 and 2/5/6. Thirty flushed Haidian
+tiles from serial extraction are reused. Shards are restored to the original
+regional order before fitting one regional PCA; per-shard fitted projections
+never enter the final representation. The merged native features must match the
+two-tile gate before downstream evaluation. NPU 0 is not used. This amendment
+changes scheduling only, and was recorded before destination downstream scores.
