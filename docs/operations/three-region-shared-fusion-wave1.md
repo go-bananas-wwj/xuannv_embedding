@@ -49,3 +49,13 @@ bounded retries, process identity, stop requests, progress receipts and the 100 
 disk reserve. No automatic Overleaf claim or paper change follows this screening.
 Matched no-high-resolution and public-RGB pretrained controls remain necessary
 before attributing a successful method to local high-resolution data.
+
+Execution milestone: all 36 representations were exported before calibration.
+The first reader startup failed because the operational snapshot launcher replaced
+CANN's inherited Python module path, making `tbe` unavailable. No task scores or
+checkpoints were produced. Preserve these failed startup logs, prepend the frozen
+source path to the inherited environment, verify a real NPU convolution forward
+and backward, then resume the original 72 registered reader jobs using the existing
+arrays. This environment repair changes no recipe, split, target, budget or score.
+The subsequent absent-source regression fix passed the complete 908-test suite;
+its source is separate from the frozen numerical snapshot used for this wave.
