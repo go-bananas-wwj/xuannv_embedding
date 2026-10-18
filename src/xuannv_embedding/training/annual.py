@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import date
 
 import torch
-from torch import nn
+from torch import distributed, nn
 
 from xuannv_embedding.models.annual import masked_resample, visibility_coverage
 from xuannv_embedding.training.losses import batch_uniformity_loss, reconstruction_loss
@@ -374,7 +374,18 @@ def native_feature_anchor_loss(student, reference, support):
         raise ValueError("Native anchor validity must have shape B1HW")
     mask = support.float()
     error = torch.where(mask > 0, student.float() - reference.detach().float(), 0.0)
-    return (0.5 * error.square().sum(1, keepdim=True) * mask).sum() / mask.sum().clamp(min=1)
+    numerator = (0.5 * error.square().sum(1, keepdim=True) * mask).sum()
+    count = mask.sum()
+    if distributed.is_available() and distributed.is_initialized():
+        totals = torch.stack((numerator.detach(), count.detach()))
+        distributed.all_reduce(totals)
+        denominator = totals[1].clamp(min=1)
+        # DDP averages gradients; scale the local graph by world size while
+        # reporting the same true global valid-pixel mean on every rank.
+        proxy = numerator * distributed.get_world_size() / denominator
+        mean = totals[0] / denominator
+        return proxy + (mean - proxy.detach())
+    return numerator / count.clamp(min=1)
 
 
 def multiscale_latent_loss(student, teacher, support, pool_factors=None):

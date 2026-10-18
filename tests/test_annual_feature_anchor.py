@@ -247,3 +247,105 @@ def test_anchor_named_optimizer_and_scheduler_resume_reproduce_the_next_update(t
         )
     )
     assert all(p.grad is None for p in restored.teacher_model.parameters())
+
+
+def test_heldout_reconstruction_does_not_include_training_feature_anchor(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from xuannv_embedding.training import annual_data, annual_experiments
+
+    cfg = anchor_config()
+    cfg = replace(cfg, data=replace(cfg.data, datasets=cfg.data.datasets[:1]))
+    system = build_training_system(cfg).eval()
+    raw = raw_batch(32)
+    checkpoint = tmp_path / "model.pt"
+    checkpoint.write_bytes(
+        b"source identity; load_model is patched to the actual small annual model"
+    )
+    plan = tmp_path / "plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "initialize_config": "unused.yaml",
+                "initialize_checkpoint": str(checkpoint),
+                "datasets": [{"validation": "unused.manifest.jsonl"}],
+            }
+        )
+    )
+    monkeypatch.setattr(annual_data, "annual_dataset", lambda *args, **kwargs: [None])
+    monkeypatch.setattr(torch.utils.data, "DataLoader", lambda *args, **kwargs: [raw])
+    scores = []
+    for weight in [0.0, 10.0]:
+        current = replace(cfg, training=replace(cfg.training, annual_feature_anchor_weight=weight))
+        monkeypatch.setattr(annual_experiments, "load_model", lambda *args: (current, system, {}))
+        annual_experiments.reconstruction(
+            SimpleNamespace(plan=plan, arm="original", device="cpu", workers=0)
+        )
+        result = json.loads((tmp_path / "evaluation/original/reconstruction.json").read_text())
+        assert "feature_anchor" not in result["mean"]
+        scores.append(result["per_patch"])
+    assert scores[0] == scores[1]
+
+
+def _anchor_global_mean_worker(rank, rendezvous, output):
+    import json
+    from pathlib import Path
+
+    import torch.distributed as dist
+    from torch.nn.parallel import DistributedDataParallel
+
+    torch.set_num_threads(1)
+    dist.init_process_group("gloo", init_method=rendezvous, rank=rank, world_size=2)
+    try:
+        model = torch.nn.Linear(1, 1, bias=False)
+        with torch.no_grad():
+            model.weight.fill_(0.3)
+        wrapped = DistributedDataParallel(model)
+        values = torch.ones(3, 1) * (1 if rank == 0 else 2)
+        reference = torch.ones(1, 1, 1, 3) * (0 if rank == 0 else 1)
+        rows = []
+        for pattern in ["unequal", "zero_local", "zero_global"]:
+            support = torch.ones(1, 1, 1, 3)
+            if rank == 0:
+                support[..., 1:] = 0
+            if pattern == "zero_global" or (pattern == "zero_local" and rank == 0):
+                support.zero_()
+            wrapped.zero_grad(set_to_none=True)
+            student = wrapped(values).reshape(1, 1, 1, 3)
+            loss = native_feature_anchor_loss(student, reference, support)
+            loss.backward()
+            rows.append({"loss": float(loss.detach()), "gradient": float(model.weight.grad)})
+        Path(output, f"rank{rank}.json").write_text(json.dumps(rows))
+    finally:
+        dist.destroy_process_group()
+
+
+def test_anchor_global_valid_pixel_mean_matches_centralized_gradient_with_unequal_ranks(tmp_path):
+    import json
+    import multiprocessing
+
+    context = multiprocessing.get_context("spawn")
+    rendezvous = (tmp_path / "rendezvous").as_uri()
+    processes = [
+        context.Process(target=_anchor_global_mean_worker, args=(rank, rendezvous, str(tmp_path)))
+        for rank in range(2)
+    ]
+    for process in processes:
+        process.start()
+    try:
+        for process in processes:
+            process.join(timeout=60)
+        assert all(process.exitcode == 0 for process in processes)
+        for rank in range(2):
+            rows = json.loads((tmp_path / f"rank{rank}.json").read_text())
+            for row, loss, gradient in zip(
+                rows, [0.07125, 0.08, 0.0], [-0.525, -0.8, 0.0], strict=True
+            ):
+                assert row["loss"] == pytest.approx(loss, abs=1e-6)
+                assert row["gradient"] == pytest.approx(gradient, abs=1e-6)
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=10)

@@ -159,8 +159,12 @@ def diagnose(args):
         raise ValueError("Diagnostics require unique frozen TRAIN positions")
     base_config = replace(config, training=replace(config.training, independent_targets=None))
     criterion = AnnualLoss(base_config).to(device).eval()
-    if criterion.latent_predictor is not None or criterion.view_predictor is not None:
-        raise ValueError("Diagnostics require teacher/EMA objectives disabled")
+    if (
+        criterion.latent_predictor is not None
+        or criterion.view_predictor is not None
+        or criterion.feature_anchor_weight
+    ):
+        raise ValueError("Diagnostics require teacher/EMA/anchor objectives disabled")
     results = []
     try:
         for dc in config.data.datasets:

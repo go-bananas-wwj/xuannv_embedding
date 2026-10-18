@@ -88,6 +88,7 @@ def prepare_comparison(local_plan: Path, evaluation_plan: Path, output: Path) ->
                 gradient_checkpointing=True,
                 compile=False,
                 latent_prediction_weight=0.0,
+                annual_feature_anchor_weight=0.0,
                 view_consistency_weight=0.0,
             )
             raw["training"]["independent_targets"].update(

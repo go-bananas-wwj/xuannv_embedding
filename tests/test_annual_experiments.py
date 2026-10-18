@@ -153,6 +153,7 @@ def test_prepare_from_legacy_config_preserves_native_pan_and_resets_control_targ
         patch_grid_path=str(data / "2020.train.manifest.jsonl"),
         statistics_dir=str(data / "statistics"),
     )
+    raw["training"]["annual_feature_anchor_weight"] = 10.0
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.safe_dump(raw))
     checkpoint = tmp_path / "checkpoint.pt"
@@ -190,7 +191,9 @@ def test_prepare_from_legacy_config_preserves_native_pan_and_resets_control_targ
     for observation in batch["highres_observations"][0]:
         assert torch.all(observation["mask"] > 0)
     for arm in plan["arms"].values():
-        assert Config.from_yaml(Path(arm["config"])).model.annual_exact_mask_coverage
+        prepared = Config.from_yaml(Path(arm["config"]))
+        assert prepared.model.annual_exact_mask_coverage
+        assert prepared.training.annual_feature_anchor_weight == 0
 
 
 def test_common_corrected_targets_do_not_change_the_legacy_model_input_policy():
