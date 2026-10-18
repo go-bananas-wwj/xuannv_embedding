@@ -17,7 +17,13 @@ from xuannv_embedding.training.distillation import freeze_teacher
 from xuannv_embedding.training.losses import TotalLoss
 
 
-def _model_view(model: nn.Module, view: dict[str, Any], *, decode: bool = True):
+def _model_view(
+    model: nn.Module,
+    view: dict[str, Any],
+    *,
+    decode: bool = True,
+    sample_vmf: bool | None = None,
+):
     optional = {
         key: view[key]
         for key in (
@@ -32,6 +38,10 @@ def _model_view(model: nn.Module, view: dict[str, Any], *, decode: bool = True):
     # Annual teachers only need embeddings; avoid observation-specific decoders.
     if hasattr(model, "context_pooling"):
         optional["decode"] = decode
+        if sample_vmf is not None:
+            optional["sample_vmf"] = sample_vmf
+    elif sample_vmf is not None:
+        raise ValueError("Deterministic mean views require an annual model")
     return model(
         view["source_frames"],
         view["source_masks"],
@@ -175,17 +185,26 @@ class TrainingSystem(nn.Module):
     def forward(self, batch: dict[str, Any]) -> dict[str, torch.Tensor]:
         output = _model_view(self.model, batch)
         teacher_output = None
+        anchor_output = None
         teacher_view = batch.get("teacher_view")
         if self.teacher_model is not None:
             if teacher_view is None:
                 raise ValueError("Frozen teacher requires an explicit teacher_view")
             with torch.no_grad():
                 teacher_output = _model_view(self.teacher_model, teacher_view, decode=False)
+            if getattr(self.criterion, "feature_anchor_weight", 0.0) > 0:
+                # Use the same clean observations as the reference. Preserve the
+                # main masked/noisy path and its RNG; no decoder/predictor here.
+                anchor_output = _model_view(
+                    self.model, teacher_view, decode=False, sample_vmf=False
+                )
         loss_optional = (
             {"highres_targets": batch["highres_targets"]} if "highres_targets" in batch else {}
         )
         if "independent_targets" in batch:
             loss_optional["independent_targets"] = batch["independent_targets"]
+        if anchor_output is not None:
+            loss_optional["anchor_output"] = anchor_output
         if self.ema_model is not None:
             if "consistency_view" not in batch:
                 raise ValueError("EMA consistency requires an independent consistency_view")

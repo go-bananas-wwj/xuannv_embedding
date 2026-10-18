@@ -185,6 +185,7 @@ class AnnualLoss(nn.Module):
         self.uniformity_temperature = config.training.uniformity_temperature
         self.warmup = config.training.uniformity_warmup_epochs
         self.latent_prediction_weight = config.training.latent_prediction_weight
+        self.feature_anchor_weight = config.training.annual_feature_anchor_weight
         self.latent_pool_factors = config.training.latent_prediction_pool_factors
         self.view_consistency_weight = config.training.view_consistency_weight
         self.view_pool_factors = config.training.view_consistency_pool_factors
@@ -232,6 +233,7 @@ class AnnualLoss(nn.Module):
         consistency_output=None,
         highres_targets=None,
         independent_targets=None,
+        anchor_output=None,
     ) -> dict[str, torch.Tensor]:
         zero = output.embedding_map.sum() * 0
         reconstruction = zero
@@ -326,6 +328,19 @@ class AnnualLoss(nn.Module):
                 "view_consistency": consistency,
             }
         )
+        if self.feature_anchor_weight > 0:
+            if anchor_output is None or teacher_output is None:
+                raise ValueError(
+                    "Annual feature anchor requires clean student and frozen reference"
+                )
+            support = anchor_output.validity_mask[:, 0] & teacher_output.validity_mask[:, 0]
+            anchor = native_feature_anchor_loss(
+                anchor_output.embedding_map[:, 0], teacher_output.embedding_map[:, 0], support
+            )
+            weighted_anchor = self.feature_anchor_weight * anchor
+            result["total"] = result["total"] + weighted_anchor
+            result["feature_anchor"] = anchor
+            result["feature_anchor_weighted"] = weighted_anchor
         if self.target_supervision is not None:
             if independent_targets is None:
                 raise ValueError("Configured independent targets are missing from annual batch")
@@ -345,6 +360,21 @@ class AnnualLoss(nn.Module):
             if self.training:
                 self.target_batches.add_(1)
         return result
+
+
+def native_feature_anchor_loss(student, reference, support):
+    """Preserve deterministic native-grid directions without a trainable predictor.
+
+    Directions already come from the sole vMF bottleneck; no further projection,
+    pooling or normalization is applied. Invalid observations contribute nothing.
+    """
+    if student.shape != reference.shape or student.ndim != 4:
+        raise ValueError("Native anchor feature maps must have the same BCHW shape")
+    if support.shape != (student.shape[0], 1, *student.shape[-2:]):
+        raise ValueError("Native anchor validity must have shape B1HW")
+    mask = support.float()
+    error = torch.where(mask > 0, student.float() - reference.detach().float(), 0.0)
+    return (0.5 * error.square().sum(1, keepdim=True) * mask).sum() / mask.sum().clamp(min=1)
 
 
 def multiscale_latent_loss(student, teacher, support, pool_factors=None):

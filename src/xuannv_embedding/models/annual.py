@@ -280,6 +280,7 @@ class Annual5mModel(nn.Module):
         highres_observations: list[list[dict]] | None = None,
         reconstruction_requests: list[list[dict]] | None = None,
         decode: bool = True,
+        sample_vmf: bool | None = None,
     ) -> AnnualOutput:
         if highres_frames or highres_masks:
             raise ValueError("Annual model requires native highres_observations")
@@ -362,7 +363,11 @@ class Annual5mModel(nn.Module):
             refined = low5 + available * self.joint(combined)
         else:
             refined = low5 + available * self.gate(combined).sigmoid() * self.joint(combined)
-        embedding = self.bottleneck(refined)
+        embedding = (
+            self.bottleneck(refined)
+            if sample_vmf is None
+            else self.bottleneck(refined, sample=sample_vmf)
+        )
         scene = (embedding * validity).sum(dim=(-2, -1)) / validity.sum(dim=(-2, -1)).clamp(min=1)
         scene = functional.normalize(scene, dim=1)
         reconstructions = {}

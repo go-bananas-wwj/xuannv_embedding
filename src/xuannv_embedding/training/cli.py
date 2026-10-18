@@ -9,7 +9,7 @@ import json
 import os
 import re
 import subprocess
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import unquote, urlparse
@@ -631,8 +631,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "config_sha256": teacher_config_sha,
             }
         system.set_teacher(freeze_teacher(teacher_system.model), device=device)
-    elif config.training.latent_prediction_weight > 0.0:
-        parser.error("启用 latent_prediction_weight 时必须提供 --teacher-checkpoint")
+    elif (
+        config.training.latent_prediction_weight > 0.0
+        or config.training.annual_feature_anchor_weight > 0.0
+    ):
+        parser.error(
+            "启用 latent_prediction_weight 或 annual_feature_anchor_weight "
+            "时必须提供 --teacher-checkpoint"
+        )
     if config.training.view_consistency_weight > 0:
         system.set_ema(config.training.view_consistency_ema_decay)
     optimizer = build_optimizer(
@@ -845,10 +851,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def teacher_contract_matches(student: Config, teacher: Config) -> bool:
-    """Permit a smaller annual teacher while retaining the observation interface."""
+    """Match observation interfaces; a native anchor also retains the model contract."""
     if student.data.months != teacher.data.months:
         return False
     if student.model.architecture == teacher.model.architecture == "annual5m":
+        if student.training.annual_feature_anchor_weight > 0:
+            # Context pooling differs only on artificial corruption. The anchor
+            # compares uncorrupted views, while exact validity and model capacity
+            # remain identical to the function being preserved.
+            return (
+                replace(student.model, annual_context_pooling=teacher.model.annual_context_pooling)
+                == teacher.model
+                and list(student.model.input_sources) == list(teacher.model.input_sources)
+                and student.data.highres_mode == teacher.data.highres_mode
+                and student.data.highres_max_observations == teacher.data.highres_max_observations
+            )
         return (
             student.model.input_sources == teacher.model.input_sources
             and student.model.embed_dim == teacher.model.embed_dim

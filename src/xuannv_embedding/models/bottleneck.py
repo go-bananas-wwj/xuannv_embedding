@@ -40,11 +40,12 @@ class VMFBottleneck(nn.Module):
         self.log_kappa_min = 0.0
         self.log_kappa_max = 8.0
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *, sample: bool | None = None) -> torch.Tensor:
         """前向传播。
 
         Args:
             x: 输入张量，形状为 (B, in_dim, H, W)。
+            sample: 默认随模块训练状态采样；False 返回确定性均值方向，保留梯度。
 
         Returns:
             输出张量，形状为 (B, out_dim, H, W)，每个空间位置的 L2 范数为 1。
@@ -52,7 +53,8 @@ class VMFBottleneck(nn.Module):
         z = self.proj(x)
         z = F.normalize(z, dim=1)
 
-        if self.training:
+        should_sample = self.training if sample is None else sample
+        if should_sample:
             # 加入环境空间各向同性高斯噪声，标准差为 1 / exp(log_kappa)，
             # 再重新投影回单位球面以近似 vMF 采样。
             effective_log_kappa = self.log_kappa.clamp(

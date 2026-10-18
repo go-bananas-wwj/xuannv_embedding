@@ -80,7 +80,8 @@ DDP 包装前，各进程还会核对参数和 buffer 的名称、注册顺序�
 修改训练目标后继续优化既有模型，使用成对的 `--initialize-from`、`--initialize-config`。
 它们先按原配置严格核验 checkpoint，只加载模型参数，重新创建 optimizer、scheduler 和损失
 predictor；原 checkpoint 的摘要、epoch、Git SHA 会记入新制品。该操作与 `--resume` 互斥，
-输出不得覆盖初始化权重或教师权重。年度教师可以比学生小，接口合同仍严格匹配。
+输出不得覆盖初始化权重或教师权重。年度潜变量预测的教师可以比学生小，接口合同仍严格匹配；
+原生特征保持的参考须保留模型结构与观测合同。
 
 ```bash
 xuannv train --config /path/ablation.yaml --output /path/new/student.pt \
@@ -266,6 +267,15 @@ checkpoint 的 `warmed_head_identity` 中登记。`--resume` 则恢复完整联�
 `training.annual_vmf_lr_multiplier` 默认为 `1.0`，保留历史优化器参数顺序；设为 `0`
 只冻结 `bottleneck.proj`，仍允许损失经该投影反传到上游。大于零的其他值为投影独立学习率
 倍率，不改变 `log_kappa`、其他模型参数或目标头倍率。该设置仅适用于年度模型。
+`training.annual_feature_anchor_weight` 默认为 `0`。研究原特征保持时，可以提供结构和观测合同
+一致的冻结参考，并显式设置正权重；参考只用于约束未遮挡观测上的原生 5m 确定性特征。
+它不替代 DEM、WorldCover 等独立目标。新训练同时提供 `--teacher-checkpoint` 和
+`--teacher-config`，恢复时继续提供同一对参数；严格身份检查与其他教师目标相同。
+参考保持 eval 和停止梯度，额外学生前向保持梯度、关闭采样和 decoder，不改变主训练的 vMF
+随机数序列。只记录 `feature_anchor` 及其加权值；关闭时不会增加这些损失键。
+此模式增加训练前向和激活内存，必须实测多卡恢复、梯度和高分丰富样本的显存；
+导出仍是同一份学生模型，不增加推理参数，也不据该损失下降宣布下游效果合格。
+
 `training.update_diagnostics_interval` 默认 `0`；正整数在首次及相应优化器步上记录实际参数
 差值、相对权重范数及与负原始梯度的夹角。它只支持无 GradScaler 的 FP32/BF16，
 不裁剪梯度、不重写 Adam 状态；原始梯度范数与实际 Adam 更新量必须分别解释。
