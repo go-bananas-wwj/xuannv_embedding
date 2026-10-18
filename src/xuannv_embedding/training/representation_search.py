@@ -184,6 +184,16 @@ def registered_parent(spec):
     return report
 
 
+def improvement_validation_reference(spec):
+    ref = spec["improvement"].get("validation")
+    report = json.loads(_reference(ref).read_text()) if ref is not None else registered_parent(spec)
+    if report.get("test_scored") is not False or report.get("fold") != 0:
+        raise ValueError("Improvement anchor must contain registered validation scores")
+    values = {h: report["heads"][h]["macro_f1"] for h in ["mlp", "conv3x3"]}
+    balanced_validation_rank(report, values)
+    return values
+
+
 def read_spec(path: Path):
     spec = json.loads(path.read_text())
     expected = {
@@ -208,8 +218,13 @@ def read_spec(path: Path):
     registered_parent(spec)
     if "improvement" in spec:
         improvement = spec["improvement"]
-        if "parent" not in spec or set(improvement) != {"reference", "minimum_mean_gain"}:
+        if (
+            "parent" not in spec
+            or not {"reference", "minimum_mean_gain"}.issubset(improvement)
+            or set(improvement) - {"reference", "minimum_mean_gain", "validation"}
+        ):
             raise ValueError("Improvement searches require a parent and frozen reference")
+        improvement_validation_reference(spec)
         previous = json.loads(_reference(improvement["reference"]).read_text())["comparisons"]
         meets_improvement(previous, previous, minimum_mean_gain=improvement["minimum_mean_gain"])
         for head in ["mlp", "conv3x3"]:
@@ -403,7 +418,7 @@ def follow(spec_path):
     root.mkdir(parents=True, exist_ok=True)
     reference = validation_reference(spec, "aef")
     if "improvement" in spec:
-        reference = {h: v["macro_f1"] for h, v in registered_parent(spec)["heads"].items()}
+        reference = improvement_validation_reference(spec)
     active, complete, retries, prepared = {}, {}, {}, set()
     identity = sha(spec_path)
     with (root / "search.lock").open("w") as lock:
@@ -560,7 +575,11 @@ def follow(spec_path):
             selection = {
                 "winner": winner,
                 "criterion": "minimum_of_MLP_and_CNN_validation_margins",
-                "reference": "validated_parent" if "improvement" in spec else "aef",
+                "reference": (
+                    "fixed_validation_anchor"
+                    if "improvement" in spec and "validation" in spec["improvement"]
+                    else ("validated_parent" if "improvement" in spec else "aef")
+                ),
                 "validation_reference": reference,
                 "scores": complete,
                 "test_used_for_selection": False,

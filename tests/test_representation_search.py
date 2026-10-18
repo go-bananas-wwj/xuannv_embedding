@@ -185,3 +185,25 @@ def test_improvement_target_requires_both_heads_and_mean_gain_over_archived_resu
     assert not meets_improvement(values, previous, minimum_mean_gain=0.005)
     values["highres:conv3x3:200"]["macro_f1"] = float("nan")
     assert not meets_improvement(values, previous, minimum_mean_gain=0.005)
+
+
+def test_improvement_validation_anchor_stays_fixed_when_parent_changes(tmp_path):
+    import json
+
+    from xuannv_embedding.export.context import sha
+    from xuannv_embedding.training.representation_search import improvement_validation_reference
+
+    path = tmp_path / "anchor.json"
+    report = {
+        "fold": 0,
+        "test_scored": False,
+        "heads": {"mlp": {"macro_f1": 0.60}, "conv3x3": {"macro_f1": 0.59}},
+    }
+    path.write_text(json.dumps(report))
+    spec = {"improvement": {"validation": {"path": str(path), "sha256": sha(path)}}}
+    assert improvement_validation_reference(spec) == {"mlp": 0.60, "conv3x3": 0.59}
+    report["test_scored"] = True
+    path.write_text(json.dumps(report))
+    spec["improvement"]["validation"]["sha256"] = sha(path)
+    with pytest.raises(ValueError, match="validation"):
+        improvement_validation_reference(spec)
