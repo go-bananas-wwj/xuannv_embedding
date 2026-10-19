@@ -62,3 +62,25 @@ the nine source-index/shape/dtype contracts and eighteen actual first-tile
 float64-oracle comparisons passed before new full exports or readers began.
 The quiet dependent observer will audit cached predictions after completion.
 These are prototype checks, not standalone production-release acceptance.
+
+Both fixed mixtures have now completed all thirty-six readers and 240 conditions.
+The independent cached-prediction audit passed. Neither coefficient is eligible
+for full-region queries. The 15% case is closest, with a worst-slot deficit of
+1.2105 percentage points and a mean margin of -0.3147 percentage points against
+the stronger AEF/public reference. The 30% case's worst deficit is 1.3346 points.
+
+| Region | Reader | 15% native F1 (%) | 30% native F1 (%) | AEF (%) | Current public envelope (%) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Haidian | MLP | 84.7073 | 84.6699 | 83.8754 | 84.6595 |
+| Haidian | CNN | 85.3262 | 85.2778 | 84.3817 | 85.4545 |
+| Harbin | MLP | 57.9621 | 57.9533 | 58.3955 | 58.0648 |
+| Harbin | CNN | 59.8691 | 59.7450 | 58.7958 | 61.0796 |
+| Auckland | MLP | 62.7793 | 63.1925 | 63.4338 | 63.3369 |
+| Auckland | CNN | 65.2153 | 64.5607 | 64.6834 | 64.7244 |
+
+These are exploratory balanced-v2 calibration scores. The 15% case's regional
+mean AEF gains are +0.8882, +0.3200 and -0.0613 percentage points, respectively;
+Harbin and Auckland still fail the required +0.5 points. All task records remain.
+The new genuine-public Harbin MLP score of 58.0648% becomes the preserved floor.
+Eleven common cases from six independently audited studies now use that same
+current envelope; none passes. No manuscript body or accepted exporter follows.
