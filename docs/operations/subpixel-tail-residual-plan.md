@@ -88,3 +88,12 @@ matching the allocation inventory. All nine projection parameter bundles,
 positions, predictions, thresholds, configurations, source and active/raw/reference
 data remain. Free space is about 147.19 GiB before small QA artifacts. Formal
 cache preparation and projection fitting have not yet started.
+
+Formal preparation has started from immutable source commit
+`9874f1b01230eb6c9f8b89ac12c505e0bafc4163`, synchronized to GitHub after every
+software, source and real-data gate passed. Three CPU workers are streaming the
+first regional native RGB caches with chunk checksums and verified recovery. A
+bounded controller subsequently fits nine covariance bundles, exports both
+strengths, and leases unused devices 1–7 for thirty-six fixed reader jobs. Quiet
+output-audit and deterministic-grid observers are live; device 0 is excluded.
+No complete new cache, fitted formal model or primary result is claimed at launch.
