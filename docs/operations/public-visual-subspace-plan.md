@@ -46,11 +46,16 @@ before trainable semantic/geometry compression. Earlier compression failures and
 negative source diagnostics remain retained; PCA itself is not claimed as novel.
 
 Nine self-contained region/role specifications and both common allocations were
-registered before new fitted parameters, exports or scores. Implementation is
-pending. Add failing-first coverage, missing-modality, alignment, projection-reuse,
-strict-schema and reload tests; then run software/package and all real-data gates.
-Check public projection equality across roles and truthful observed-sample counts.
-Only after those checks and a pinned source snapshot, fit nine projection bundles,
+registered before new fitted parameters, exports or scores. The package and single
+CLI entrypoint are now implemented. Twenty-five focused tests cover observed/missing
+modalities, mask-aware alignment, projection reuse, cache identity, strict schemas,
+constant inputs and cold reload. The full 1,171-test CPU suite, Black, Ruff, tracked
+repository policy and package build passed; wheel/sdist production bytes match.
+All nine real region/role payload, geography and physical-calendar checks passed.
+Partial eight-tile/512-sample QA bundles and cold outputs passed with exact public
+projection equality across roles. These are partial QA fits and never initialize
+formal fits. Prior source lineage and current implementation hashes also match.
+After a pinned source snapshot, fit nine projection bundles,
 export eighteen 64D representations and run thirty-six fresh MLP/CNN readers for
 all 240 unchanged balanced-v2 conditions. No neural encoder is newly trained.
 
@@ -63,3 +68,12 @@ role/hash/hardlink/open-file/mapping audit; keep weights, source, saved predicti
 thresholds, all active public/raw-visual dependencies and original best bundles.
 Keep a 100 GiB reserve. No manuscript body or accepted-model claim follows from
 registration; complete source/rebuild, contribution and cost evidence still matter.
+
+Only rejected fallback-gate annual outputs and deterministic evaluation grids
+were removed: 50 paths representing 36 physical files, releasing exactly
+31.711212 GiB by both allocation inventory and observed free-space delta. Free
+space is about 147.894 GiB. All eighteen terminal weights, negative results,
+predictions, thresholds, source and active public/raw-visual inputs remain.
+No formal subspace fit, export or primary score preceded the completed checks.
+The extra visual branch currently uses local optical imagery; public Sentinel-1
+information remains in the public expert, and no new local SAR branch is claimed.
