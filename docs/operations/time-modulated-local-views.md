@@ -40,11 +40,20 @@ regression tests and a pinned source snapshot precede formal fitting. Device 0 i
 reserved for the unrelated service. A bounded external controller monitors real
 process identities, checkpoints and disk reserve; no chat polling is needed.
 
-Implementation checks: 1094 tests passed; Black, Ruff, repository policy, build
-and exact wheel/sdist source checks passed. The real Haidian two-tile BF16 gate
-also passed: four updates, recovery after update two, strict cold load and finite
-64D export. Maximum resident-memory and remaining regional gates are pending;
-these checks establish executability, not downstream improvement.
+Implementation checks: 1097 tests passed; Black, Ruff, repository policy, build
+and exact wheel/sdist source checks passed. All three real two-tile BF16 gates
+passed four updates, recovery after update two, strict cold load and finite 64D
+export. An audit of the actual trained gate weights confirms nonzero affine
+updates in all three regions and exact learned-public fallback with absent local
+inputs. Single-view attention in Auckland correctly has no view-selection update.
+
+The full resident-input gates passed batch 64 with 320 six-view tiles in Haidian
+and 422 five-view tiles in Harbin. Peak reserved memory was 58.38 and 57.71 GiB;
+losses and gradients were finite. No batch reduction was needed. Formal fitting
+uses immutable code commit `790db70`, seven free NPUs and a total of 18 fits,
+followed by 36 matched MLP/CNN readers. Primary scores remain pending. These
+checks establish executability, not downstream improvement. The Overleaf remote
+was refreshed read-only and remains at the previously read manuscript revision.
 
 A pre-training correction intersects the fixed auxiliary context-teacher loss
 domain with the teacher's actual coverage. Missing zero vectors are unknown;
