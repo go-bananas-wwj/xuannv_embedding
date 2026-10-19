@@ -200,3 +200,147 @@ def test_completed_projection_reuses_checked_output_after_native_cache_removal(
         semantic, "extract_native", lambda *a, **k: pytest.fail("finished output re-extracted")
     )
     assert semantic.main(["--spec", str(path), "--phase", "project"]) == 0
+
+
+def test_rgb_reduction_averages_only_observed_values_and_retains_coverage():
+    from xuannv_embedding.export.semantic_features import reduce_observed_rgb
+
+    image = torch.full((3, 4, 4), 50.0)
+    mask = torch.ones(1, 4, 4)
+    image[:, :2, :2] = float("nan")
+    image[:, 0, 0], image[:, 0, 1] = 10, 30
+    mask[:, :2, :2] = 0
+    mask[:, 0, :2] = 1
+    mask[:, 2:, 2:] = 0
+    image[:, 2:, 2:] = float("inf")
+    reduced, coverage = reduce_observed_rgb(image, mask, 2)
+    assert reduced.shape == (3, 2, 2)
+    assert torch.all(reduced[:, 0, 0] == 20)
+    assert coverage[0, 0, 0] == 0.5
+    assert torch.all(reduced[:, 0, 1] == 50)
+    assert torch.all(reduced[:, 1, 1] == 0)
+    assert coverage[0, 1, 1] == 0
+    assert torch.isfinite(reduced).all()
+
+
+def test_rgb_reduction_default_keeps_existing_input_objects():
+    from xuannv_embedding.export.semantic_features import reduce_observed_rgb
+
+    image, mask = torch.rand(3, 16, 16), torch.ones(1, 16, 16)
+    reduced, coverage = reduce_observed_rgb(image, mask, 1)
+    assert reduced is image
+    assert coverage is mask
+
+
+@pytest.mark.parametrize("factor", [0, -1, True, 1.0, 3, 16])
+def test_rgb_reduction_rejects_unsupported_factor(factor):
+    from xuannv_embedding.export.semantic_features import reduce_observed_rgb
+
+    with pytest.raises(ValueError, match="reduction"):
+        reduce_observed_rgb(torch.zeros(3, 16, 16), torch.ones(1, 16, 16), factor)
+
+
+def test_rgb_reduction_rejects_partial_extent_and_invalid_observations():
+    from xuannv_embedding.export.semantic_features import reduce_observed_rgb
+
+    with pytest.raises(ValueError, match="extent"):
+        reduce_observed_rgb(torch.zeros(3, 15, 16), torch.ones(1, 15, 16), 4)
+    for invalid in [-0.1, 1.1, float("nan")]:
+        with pytest.raises(ValueError, match="mask"):
+            reduce_observed_rgb(torch.zeros(3, 16, 16), torch.full((1, 16, 16), invalid), 4)
+    with pytest.raises(ValueError, match="finite"):
+        reduce_observed_rgb(torch.full((3, 16, 16), float("nan")), torch.ones(1, 16, 16), 4)
+
+
+def test_reduced_token_alignment_keeps_original_geographic_extent():
+    from xuannv_embedding.export.semantic_features import reduce_observed_rgb
+
+    image, _ = reduce_observed_rgb(torch.zeros(3, 128, 256), torch.ones(1, 128, 256), 4)
+    # Coarse token centers expressed in original source-pixel units.
+    values = torch.tensor([32.0, 96.0, 160.0, 224.0]).expand(1, 1, 2, 4).clone()
+    aligned = align_patch_features(values, image.shape[-2:], (16, 32), patch=16)
+    assert aligned[0, 0, 8, 8].item() == pytest.approx(68.0, abs=1e-5)
+
+
+def test_native_extraction_applies_reduction_before_windowing(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    import timm
+
+    from xuannv_embedding.export import semantic_features as semantic
+
+    seen = []
+
+    class Encoder(torch.nn.Module):
+        num_features = 1024
+        num_prefix_tokens = 1
+        patch_embed = SimpleNamespace(patch_size=(16, 16))
+        pretrained_cfg = {"mean": [0, 0, 0], "std": [1, 1, 1]}
+
+        def forward_features(self, x):
+            seen.append(tuple(x.shape))
+            count = x.shape[-2] // 16 * (x.shape[-1] // 16) + 1
+            return torch.ones(len(x), count, 1024, device=x.device)
+
+    statistics = tmp_path / "statistics.json"
+    statistics.write_text(json.dumps({"mean": [0, 0, 0], "std": [1, 1, 1]}))
+    spec = {
+        "output": str(tmp_path),
+        "source": "rgb",
+        "model": "fake",
+        "weights": {"path": "not-read"},
+        "statistics": {"path": str(statistics)},
+        "raster": {"path": "not-read"},
+        "input_reduction": 4,
+        "max_pixels": 512,
+        "crop_batch": 8,
+    }
+    monkeypatch.setattr(timm, "create_model", lambda *a, **k: Encoder())
+    monkeypatch.setattr(timm.models, "load_checkpoint", lambda *a, **k: None)
+    monkeypatch.setattr(
+        semantic,
+        "read_aerial_window",
+        lambda *a: (torch.full((3, 640, 640), 128.0), torch.ones(1, 640, 640)),
+    )
+    semantic.extract_native(spec, {"records": [{}]}, device_name="cpu")
+    assert seen == [(1, 3, 160, 160)]
+    assert np.load(tmp_path / "native.npy").shape == (1, 1024, 10, 10)
+    status = json.loads((tmp_path / "native-status.json").read_text())
+    assert status["source_shape"] == [160, 160]
+    assert status["original_source_shape"] == [640, 640]
+    assert status["input_reduction"] == 4
+
+
+def test_semantic_spec_accepts_explicit_reduction_and_rejects_ambiguous_value(tmp_path):
+    import json
+
+    from xuannv_embedding.export.context import sha
+    from xuannv_embedding.export.semantic_features import read_spec
+
+    cache = tmp_path / "cache.json"
+    cache.write_text(json.dumps({"state": "complete", "records": [{}]}))
+    source = tmp_path / "source"
+    source.write_bytes(b"identity-only fixture")
+    ref = {"path": str(source), "sha256": sha(source)}
+    spec = {
+        "schema": "regional-semantic-features-v1",
+        "cache": {"path": str(cache), "sha256": sha(cache)},
+        "statistics": ref,
+        "weights": ref,
+        "raster": ref,
+        "model": "fake",
+        "source": "rgb",
+        "output": str(tmp_path / "out"),
+        "seed": 41,
+        "components": 64,
+        "fit_samples": 64,
+        "input_reduction": 4,
+    }
+    path = tmp_path / "spec.json"
+    path.write_text(json.dumps(spec))
+    assert read_spec(path)[0]["input_reduction"] == 4
+    for value in [True, 4.0, 3, 0]:
+        path.write_text(json.dumps({**spec, "input_reduction": value}))
+        with pytest.raises(ValueError, match="reduction"):
+            read_spec(path)

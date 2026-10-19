@@ -28,6 +28,38 @@ def restore_rgb(image, mask, source_mean, source_std, model_mean, model_std):
     return (clean - channel(model_mean)) / channel(model_std)
 
 
+def input_reduction(spec):
+    factor = spec.get("input_reduction", 1)
+    if type(factor) is not int or factor not in (1, 2, 4, 8):
+        raise ValueError("Semantic input reduction must be one of 1, 2, 4, 8")
+    return factor
+
+
+def reduce_observed_rgb(image, mask, factor):
+    """Expand physical window context by averaging only observed source pixels.
+
+    The complete footprint is retained. Fractional masks record observed area;
+    the default returns the original tensors without altering legacy numerics.
+    """
+    input_reduction({"input_reduction": factor})
+    if image.ndim != 3 or image.shape[0] != 3 or mask.shape != (1, *image.shape[-2:]):
+        raise ValueError("Semantic RGB/mask shapes differ")
+    if not torch.isfinite(mask).all() or ((mask < 0) | (mask > 1)).any():
+        raise ValueError("Semantic observation mask must be finite in [0, 1]")
+    if not torch.isfinite(image[:, mask[0] > 0]).all():
+        raise ValueError("Observed semantic RGB values must be finite")
+    if any(n < factor or n % factor for n in image.shape[-2:]):
+        raise ValueError("Semantic input extent must divide exactly by the reduction")
+    if factor == 1:
+        return image, mask
+    weights = mask.float()
+    observed = torch.where(weights > 0, image.float(), 0)
+    coverage = F.avg_pool2d(weights, factor)
+    numerator = F.avg_pool2d(observed * weights, factor)
+    values = torch.where(coverage > 0, numerator / coverage.clamp_min(1e-12), 0)
+    return values, coverage
+
+
 def align_patch_features(values, source_shape, output_shape, *, patch):
     h, w = source_shape
     if values.ndim != 4 or values.shape[-2:] != (math.ceil(h / patch), math.ceil(w / patch)):
@@ -161,10 +193,19 @@ def read_spec(path: Path):
         not expected.issubset(spec)
         or set(spec)
         - expected
-        - {"raster", "rasters", "raster_mask", "max_pixels", "crop_batch", "output_shape"}
+        - {
+            "raster",
+            "rasters",
+            "raster_mask",
+            "max_pixels",
+            "crop_batch",
+            "output_shape",
+            "input_reduction",
+        }
         or spec["schema"] != "regional-semantic-features-v1"
     ):
         raise ValueError("Unknown semantic feature specification")
+    input_reduction(spec)
     for name in [
         "cache",
         "statistics",
@@ -217,6 +258,11 @@ def extract_native(spec, cache, *, device_name):
         shape = first["highres_frames"][source].shape
     if len(shape) != 3 or shape[0] != 3:
         raise ValueError("Satellite vision extraction requires one static RGB acquisition")
+    original_shape = tuple(shape[-2:])
+    reduction = input_reduction(spec)
+    if any(n < reduction or n % reduction for n in original_shape):
+        raise ValueError("Semantic input extent must divide exactly by the reduction")
+    shape = (3, *(n // reduction for n in original_shape))
     h, w = shape[-2:]
     gh, gw = math.ceil(h / 16), math.ceil(w / 16)
     crop_h = min(gh * 16, spec.get("max_pixels", 512))
@@ -255,6 +301,9 @@ def extract_native(spec, cache, *, device_name):
                 sample = torch.load(record["path"], weights_only=True, mmap=True)
                 image, mask = sample["highres_frames"][source], sample["highres_masks"][source]
                 source_mean, source_std = stats["mean"], stats["std"]
+            if image.shape[-2:] != original_shape:
+                raise ValueError("Static aerial source extent differs")
+            image, mask = reduce_observed_rgb(image, mask, reduction)
             if image.shape != shape or mask.shape != (1, h, w):
                 raise ValueError("Static aerial sample shape differs")
             pad = (0, gw * 16 - w, 0, gh * 16 - h)
@@ -307,6 +356,8 @@ def extract_native(spec, cache, *, device_name):
                         "total": len(native),
                         "native_shape": list(native_shape),
                         "source_shape": [h, w],
+                        "original_source_shape": list(original_shape),
+                        "input_reduction": reduction,
                         "prefix_tokens_removed": model.num_prefix_tokens,
                         "normalization_mean": list(model.pretrained_cfg["mean"]),
                         "normalization_std": list(model.pretrained_cfg["std"]),
@@ -324,6 +375,8 @@ def extract_native(spec, cache, *, device_name):
             "stage": "complete",
             "completed": len(native),
             "source_shape": [h, w],
+            "original_source_shape": list(original_shape),
+            "input_reduction": reduction,
             "native_shape": list(native_shape),
             "prefix_tokens_removed": model.num_prefix_tokens,
             "normalization_mean": list(model.pretrained_cfg["mean"]),
