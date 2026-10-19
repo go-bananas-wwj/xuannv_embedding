@@ -58,8 +58,12 @@ class SemanticResidualFusion(nn.Module):
         public_residual_scale: float = 0.25,
         local_residual_scale: float = 0.5,
         interaction_layers: int = 0,
+        semantic_public_only: bool = False,
     ) -> None:
         super().__init__()
+        if type(semantic_public_only) is not bool:
+            raise ValueError("Semantic routing flag must be Boolean")
+        self.semantic_public_only = semantic_public_only
         if type(interaction_layers) is not int or interaction_layers not in {0, 1, 2}:
             raise ValueError("Semantic interaction layer count must be zero, one or two")
         if (
@@ -272,14 +276,15 @@ class SemanticResidualFusion(nn.Module):
         embedding = public + self.public_std * delta
         public_embedding = public + self.public_std * pub_delta
         white = base + delta
+        semantic_features = base + pub_delta if self.semantic_public_only else white
         return SemanticOutput(
             embedding,
             public_embedding,
             delta,
             gates,
-            self.worldcover_head(white),
-            self.area_head(white),
-            self.geometry_head(white),
+            self.worldcover_head(semantic_features),
+            self.area_head(semantic_features),
+            self.geometry_head(semantic_features),
             self.spectral_head(white),
             self.detail_head(white),
             self.context_head(white),
