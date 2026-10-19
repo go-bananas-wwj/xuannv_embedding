@@ -56,3 +56,14 @@ weights remain in their existing protected location; their producer hash is
 recorded, with final-bundle hash verification still required. Raw observations,
 existing weights and arrays were not deleted. This prepares reproducibility;
 it is not an accepted-model release or performance evidence.
+
+The five shared candidates from the latest three independently audited balanced-v2
+studies were also reranked against the same current public envelope. This is a
+comparison of cached results, not another fit or a rank of every historical model.
+Their worst reader/region margins are: semantic residual −1.2025 percentage points,
+time-guided −1.3029, time-guided with diversity −1.4568, spatial context with stronger
+preservation −2.0085, and the original always-on spatial context −2.6950. All five
+remain ineligible. The latest study is therefore a new hypothesis, not an already
+verified improvement over the closest completed common method. Complete per-task
+precision/recall counts from the preceding time-guided study remain outside Git;
+no cached threshold, model or score was refitted for this history review.
