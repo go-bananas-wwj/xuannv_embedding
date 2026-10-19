@@ -59,3 +59,21 @@ preprocessing, frozen visual extraction, fitted projections and public teacher
 training, and distinguish selected-model deployment from exploratory search.
 Actual completed process receipts, rather than partial training extrapolations,
 will support runtime claims. None of these inventories proves accuracy acceptance.
+
+The first case's three native fits reached the terminal update. Across the eight
+logged minibatches after update 1,800, mean local-relation MSE changed as follows
+relative to the previous gated-geometry case:
+
+| Region | Previous gated geometry | Decoupled geometry, scale 0.5 |
+| --- | ---: | ---: |
+| Haidian | 0.040300 | 0.013073 |
+| Harbin | 0.030645 | 0.012695 |
+| Auckland | 0.040988 | 0.014979 |
+
+Weak WorldCover training CE increased in all three regions, while physical
+reconstruction error decreased. The routing, architecture and loss weights all
+changed, so this is a training diagnostic, not a controlled causal attribution.
+These are sampled training losses, not primary-task scores or whole-area errors.
+They show the intended relation objective is being optimized and a tradeoff with
+coarse semantics remains. Both registered cases and all controls still require
+the unchanged complete primary evaluation before any selection or success claim.
