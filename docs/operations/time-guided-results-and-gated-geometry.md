@@ -44,3 +44,15 @@ update budget. Native/public/degraded roles stay matched. Selection still requir
 all six wins against AEF and the nondecreasing public envelope, plus each region's
 mean AEF gain of0.005. New source tests, three-region recovery/export checks and
 actual saved-warmup B64 gates precede formal fitting. The paper body stays unchanged.
+
+A separate rebuild-dependency inventory protects small fitted transforms and
+provenance while the trial runs. The public64D anchor is a fixed16+16+32 block
+projection of public temporal, public visual and physical-statistic features;
+its block projections are required to reconstruct the original coordinates.
+The inventory also retains fine/context visual PCA parameters, public temporal
+checkpoints, source recipes, radiometry, geographic and physical-time indices.
+Twenty-seven fitted PCA files were found and preserved. Frozen global visual
+weights remain in their existing protected location; their producer hash is
+recorded, with final-bundle hash verification still required. Raw observations,
+existing weights and arrays were not deleted. This prepares reproducibility;
+it is not an accepted-model release or performance evidence.
