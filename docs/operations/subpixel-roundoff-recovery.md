@@ -47,3 +47,10 @@ Three verified CPU cache workers use fresh recovery output directories. The
 controller, quiet independent-output auditor and deterministic-grid observer are
 live. All regions and roles use this one corrected version. No complete recovery
 cache, covariance model or new primary result is claimed at launch.
+
+Corrected formal preparation completed all nine RGB caches, nine covariance
+bundles and eighteen exports with 27 successful processes and no failed retries.
+The full matched-projection audit passed: each region uses exactly the same
+public normalization/basis in every role, with all registered tiles represented
+and observed private sampling counts retained. Seven NPU workers have started
+the unchanged MLP/CNN readers. No complete primary result is available yet.
