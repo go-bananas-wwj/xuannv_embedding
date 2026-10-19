@@ -46,3 +46,16 @@ A bounded observer can prepare deterministic evaluation grids without fitting
 heads or computing scores; hardlinks share those grids with the formal queue.
 The fixed reserve remains 100 GiB. No success claim or paper edit follows these
 software and configuration checks.
+
+An architecture inventory records 633,090 parameters for each instantiated fusion
+case, including auxiliary heads, and 713,281 for the instantiated public temporal
+teacher, including unused local modules and auxiliary heads. The shared frozen
+visual checkpoint stores 303,079,424 tensor elements in 318 tensors; that header
+inventory is not an independent model-parameter or full-file integrity audit.
+The checkpoint name must not be interpreted as its parameter count. The 27 fitted
+upstream PCA transforms remain required rebuild dependencies. These counts do not
+establish a complete deployment footprint. Final cost reporting must include
+preprocessing, frozen visual extraction, fitted projections and public teacher
+training, and distinguish selected-model deployment from exploratory search.
+Actual completed process receipts, rather than partial training extrapolations,
+will support runtime claims. None of these inventories proves accuracy acceptance.
