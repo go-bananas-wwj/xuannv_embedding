@@ -264,9 +264,8 @@ def test_reduced_token_alignment_keeps_original_geographic_extent():
 
 def test_native_extraction_applies_reduction_before_windowing(tmp_path, monkeypatch):
     import json
-    from types import SimpleNamespace
-
-    import timm
+    import sys
+    from types import ModuleType, SimpleNamespace
 
     from xuannv_embedding.export import semantic_features as semantic
 
@@ -296,8 +295,13 @@ def test_native_extraction_applies_reduction_before_windowing(tmp_path, monkeypa
         "max_pixels": 512,
         "crop_batch": 8,
     }
-    monkeypatch.setattr(timm, "create_model", lambda *a, **k: Encoder())
-    monkeypatch.setattr(timm.models, "load_checkpoint", lambda *a, **k: None)
+    # Exercise extractor wiring without requiring the optional vision extra.
+    timm = ModuleType("timm")
+    models = ModuleType("timm.models")
+    monkeypatch.setattr(timm, "create_model", lambda *a, **k: Encoder(), raising=False)
+    monkeypatch.setattr(models, "load_checkpoint", lambda *a, **k: None, raising=False)
+    monkeypatch.setitem(sys.modules, "timm", timm)
+    monkeypatch.setitem(sys.modules, "timm.models", models)
     monkeypatch.setattr(
         semantic,
         "read_aerial_window",
