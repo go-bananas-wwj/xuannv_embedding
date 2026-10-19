@@ -15,8 +15,8 @@ roles within a region. Each region fits its own parameters by the same procedure
 
 Pool the original 1024D DINOv3 SAT493M native token maps with their observed
 coverage. Average each actual view once. Use all six available real Haidian views,
-five Harbin views, and one Auckland aerial observation; the public role uses its
-actual public annual RGB view and the degraded role its matching degraded views.
+five Harbin views, and one Auckland aerial observation; the public role uses corresponding registered Sentinel-2 RGB composites and the
+degraded role its matching reduced-resolution local views.
 Keep the existing dates and geographic/mask contracts. No monthly copies of the
 Auckland aerial image are introduced. There is no learned weak-label gate in this
 new branch. Frozen upstream public fitting and the shared global visual backbone
@@ -127,3 +127,11 @@ this trial's direct visual branch, not every historical branch or the full mixed
 embedding. First-tile checks in all nine region/role sources confirm existing
 640x640 RGB working grids and permit explicit 5x5 subpixel groups. They are
 feasibility/geometry diagnostics, not whole-region quality or causal proof.
+
+A subsequent source inventory clarified the RGB description without changing any
+input, transform or score. The additional native/public/degraded view inventories
+are all 6/5/1 for the three regions. Public entries are named-band Sentinel-2 RGB
+composites in the selected corresponding months, not one shared annual extra view
+or that many independent satellite acquisitions. The separate frozen public-base
+path has an annual RGB component. Degraded producers correctly use the
+`local_rgb_10m` marker. Source hashes and saved scientific results are unchanged.

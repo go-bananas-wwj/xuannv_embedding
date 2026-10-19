@@ -47,7 +47,7 @@ trial. A convolutional reconstruction encoder would be a separate future test,
 only if source evidence and full results justify it.
 
 Nine source-cache specifications and the full common recipe are registered;
-implementation and data preparation are pending. Add failing-first tests for
+the implementation and its preflight checks are complete. The 34 focused tests cover
 frame pooling, pixel packing, geography/calendar/source integrity, masks, missing
 modalities, mean-free descriptors, zero variance, public-basis equality, identity,
 residual bounds, protected projections and cold reload. Run full software/package
@@ -65,3 +65,26 @@ queries. No favorable task/reader/region splicing or manuscript success claim is
 permitted. New pixel caches are about 9.72 GiB and candidate/readout arrays about
 31.71 GiB; budget 44 GiB peak and keep a 100 GiB reserve. No manuscript body edit
 follows from this registration.
+
+All 1,205 CPU tests, Black, Ruff, tracked repository policy, build and byte-exact
+production-source checks in wheel/sdist passed. Nine real region/role source and
+partial-cache tests validated all registered input identities and geographic/time
+contracts, processed two actual tiles each, and passed partial parameter reload,
+missing-RGB identity, residual bounds and FP32 protected-direction checks. Public
+parameters are exactly equal across roles within each region. These partial QA
+artifacts are explicitly distinguished from formal caches and fits.
+
+The source inventory confirms 6/5/1 additional registered RGB views in all three
+roles. Public views are corresponding Sentinel-2 RGB composites, not independent
+acquisition counts; the public-base annual RGB path is separate. Twelve public
+RGB generation identities/audits trace the named B04/B03/B02 bands and show no
+label reads. The first audit incorrectly expected `highres_optical` for degraded
+inputs; their original `local_rgb_10m` marker is correct. Only the audit expectation
+and prose were corrected, with all original input specifications/hashes preserved.
+
+Only rejected preceding-trial annual and deterministic readout arrays were
+removed: 48 paths, 36 physical files and exactly 31.711208 GiB observed release,
+matching the allocation inventory. All nine projection parameter bundles,
+positions, predictions, thresholds, configurations, source and active/raw/reference
+data remain. Free space is about 147.19 GiB before small QA artifacts. Formal
+cache preparation and projection fitting have not yet started.
