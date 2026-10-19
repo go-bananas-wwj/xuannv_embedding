@@ -111,3 +111,23 @@ def test_masked_diversity_matches_direct_moments_and_ignores_unknown_pixels():
     assert torch.isfinite(x.grad).all()
     zero = diversity_loss(x, torch.zeros_like(m), step=0)
     assert all(v.item() == 0 for v in zero.values())
+
+
+def test_query_normalization_uses_its_own_encoder_basis():
+    model = TimeModulatedFusion(width=8)
+    mean, std = torch.full((64,), 40.0), torch.full((64,), 2.0)
+    model.set_statistics("query", mean, std)
+    x = inputs(1)
+    x["queries"] = x["queries"] * 2 + 40
+    with torch.no_grad():
+        model.affine.weight.normal_(0, 0.02)
+        model.base.context_delta.weight.normal_(0, 0.03)
+    y = model(**x)
+    q = inputs(1)["queries"].reshape(-1, 64, 2, 2)
+    torch.testing.assert_close(
+        ((x["queries"] - model.query_mean[:, None]) / model.query_std[:, None]).reshape_as(q),
+        q,
+        atol=2e-6,
+        rtol=1e-5,
+    )
+    assert torch.isfinite(y.embedding).all()

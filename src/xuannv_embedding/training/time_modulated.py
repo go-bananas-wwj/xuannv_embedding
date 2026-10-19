@@ -158,40 +158,48 @@ class TrainingData(base.TrainingData):
 
     def moments(self, *, seed):
         result = super().moments(seed=seed)
-        rng = np.random.default_rng(seed)
-        # One identical sampling rule for every actual view and role, no map labels.
-        rows = []
-        valid = []
-        for array, mask in zip(self.views, self.view_masks):
-            for i in range(self.n):
-                ids = rng.choice(
-                    array.shape[-2] * array.shape[-1],
-                    min(64, array.shape[-2] * array.shape[-1]),
-                    replace=False,
-                )
-                rows.append(np.asarray(array[i], np.float32).reshape(1024, -1)[:, ids].T)
-                valid.append(np.asarray(mask[i]).reshape(-1)[ids] > 0)
-        x = np.concatenate(rows)
-        m = np.concatenate(valid)
-        if len(x) > 65536:
-            ids = rng.choice(len(x), 65536, replace=False)
-            x, m = x[ids], m[ids]
-        x = x[m].astype(np.float64)
-        if not np.isfinite(x).all():
-            raise ValueError("Nonfinite observed view normalization sample")
-        mean = x.mean(0) if len(x) else np.zeros(1024)
-        std = x.std(0) if len(x) > 1 else np.ones(1024)
-        std[std < 1e-6] = 1
-        result["context"] = (mean.astype(np.float32), std.astype(np.float32))
+        result["context"] = sampled_observed_moments(self.views, self.view_masks, seed=seed)
+        result["query"] = sampled_observed_moments(
+            [self.queries[:, t] for t in range(self.queries.shape[1])],
+            [self.query_mask[:, t] for t in range(self.query_mask.shape[1])],
+            seed=seed,
+        )
         return result
 
 
+def sampled_observed_moments(arrays, masks, *, seed):
+    """Normalize each encoder in its own coordinate basis without map labels."""
+    rng = np.random.default_rng(seed)
+    rows, valid = [], []
+    channels = arrays[0].shape[1]
+    for array, mask in zip(arrays, masks):
+        for i in range(len(array)):
+            ids = rng.choice(
+                array.shape[-2] * array.shape[-1],
+                min(64, array.shape[-2] * array.shape[-1]),
+                replace=False,
+            )
+            rows.append(np.asarray(array[i], np.float32).reshape(channels, -1)[:, ids].T)
+            valid.append(np.asarray(mask[i]).reshape(-1)[ids] > 0)
+    x, m = np.concatenate(rows), np.concatenate(valid)
+    if len(x) > 65536:
+        ids = rng.choice(len(x), 65536, replace=False)
+        x, m = x[ids], m[ids]
+    x = x[m].astype(np.float64)
+    if not np.isfinite(x).all():
+        raise ValueError("Nonfinite observed normalization sample")
+    mean = x.mean(0) if len(x) else np.zeros(channels)
+    std = x.std(0) if len(x) > 1 else np.ones(channels)
+    std[std < 1e-6] = 1
+    return mean.astype(np.float32), std.astype(np.float32)
+
+
 def forward(model, batch, shape, *, burnin=False):
-    p, s, d, conditional, _, _, visible, _ = batch
+    p, s, d, conditional, _, target, visible, _ = batch
     local, mask, queries, query_mask, support = conditional
     if not torch.equal(support, support[:1].expand_as(support)):
         raise ValueError("Observation calendar support differs inside a regional batch")
-    return model(
+    output = model(
         p,
         s,
         d,
@@ -204,6 +212,13 @@ def forward(model, batch, shape, *, burnin=False):
         context_source_shape=shape,
         burnin=burnin,
     )
+    # A fixed auxiliary teacher can have less coverage than the new actual views.
+    # Its absent zero vectors are unknown, rather than reconstruction targets.
+    if target is not None:
+        output.context_mask = output.context_mask & (
+            target.detach().abs().sum(1, keepdim=True) > 1e-8
+        )
+    return output
 
 
 def extra_loss(output, visible, step, spec):

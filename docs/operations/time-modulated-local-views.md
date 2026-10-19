@@ -45,3 +45,16 @@ and exact wheel/sdist source checks passed. The real Haidian two-tile BF16 gate
 also passed: four updates, recovery after update two, strict cold load and finite
 64D export. Maximum resident-memory and remaining regional gates are pending;
 these checks establish executability, not downstream improvement.
+
+A pre-training correction intersects the fixed auxiliary context-teacher loss
+domain with the teacher's actual coverage. Missing zero vectors are unknown;
+new local observations do not turn these into zero-valued reconstruction labels.
+The targeted regression fails on the preceding immutable source and passes after
+the correction. The updated full suite passes 1097 tests. Original gate outputs
+remain archived; new source-bound real gates use a separate output directory.
+
+Monthly public queries and the annual anchor come from separate learned encoders.
+Each now uses statistics from its own observed public feature coordinates; query
+statistics remain exactly shared across all roles and candidates within a region.
+A label-free diagnostic found 17.4–20.0% clipping with unrelated anchor statistics.
+This input correction was recorded before formal weights or primary scores.

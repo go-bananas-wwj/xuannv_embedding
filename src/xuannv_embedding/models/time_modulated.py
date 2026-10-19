@@ -14,6 +14,8 @@ class TimeModulatedFusion(nn.Module):
     def __init__(self, **kwargs) -> None:
         super().__init__()
         self.base = SemanticResidualFusion(**kwargs)
+        self.register_buffer("query_mean", torch.zeros(1, 64, 1, 1))
+        self.register_buffer("query_std", torch.ones(1, 64, 1, 1))
         self.affine = nn.Conv2d(64, 2048, 1)
         self.channel_gate = nn.Conv2d(64, 1024, 1)
         self.attention = nn.Conv2d(1090, 1, 1)
@@ -23,7 +25,23 @@ class TimeModulatedFusion(nn.Module):
         nn.init.constant_(self.channel_gate.bias, -2)
 
     def set_statistics(self, name, mean, std):
-        self.base.set_statistics(name, mean, std)
+        if name != "query":
+            self.base.set_statistics(name, mean, std)
+            return
+        mean, std = [
+            torch.as_tensor(x, dtype=torch.float32).reshape(1, -1, 1, 1) for x in [mean, std]
+        ]
+        if (
+            mean.shape != self.query_mean.shape
+            or std.shape != self.query_std.shape
+            or not torch.isfinite(mean).all()
+            or not torch.isfinite(std).all()
+            or (std <= 0).any()
+        ):
+            raise ValueError("Invalid monthly-query normalization statistics")
+        with torch.no_grad():
+            self.query_mean.copy_(mean)
+            self.query_std.copy_(std)
 
     def standardize(self, *args, **kwargs):
         return self.base.standardize(*args, **kwargs)
@@ -85,7 +103,7 @@ class TimeModulatedFusion(nn.Module):
         query = torch.where(qm > 0, queries.detach().float(), 0)
         query = torch.where(
             qm > 0,
-            ((query - self.base.public_mean[:, None]) / self.base.public_std[:, None]).clamp(-6, 6),
+            ((query - self.query_mean[:, None]) / self.query_std[:, None]).clamp(-6, 6),
             0,
         )
         support = support.detach().float()
