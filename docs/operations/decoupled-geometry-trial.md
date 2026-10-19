@@ -77,3 +77,10 @@ These are sampled training losses, not primary-task scores or whole-area errors.
 They show the intended relation objective is being optimized and a tradeoff with
 coarse semantics remains. Both registered cases and all controls still require
 the unchanged complete primary evaluation before any selection or success claim.
+
+A subsequent payload audit rehashed the entire shared visual checkpoint and
+matched its frozen producer checksum. All 36 dated visual extraction recipes
+bind that same payload, and their completed output identities match their exact
+recipe checksums and registered regional tile counts. This extends the earlier
+header-only inventory. It does not rehash every feature array, rerun extraction,
+prove the full raw-source closure or constitute a selected-model release.
