@@ -40,3 +40,10 @@ package checks have now passed. The corrected source must be pinned before
 formal processing. The original source and its failure
 remain reproducible, and all negative task results from completed earlier trials
 remain unchanged. No manuscript body or success claim follows from the repair.
+
+The corrected execution has started from immutable source commit
+`777a32eb38f5ddc83e672813d94ef08dbc9a74f4`, pushed to GitHub after all checks.
+Three verified CPU cache workers use fresh recovery output directories. The
+controller, quiet independent-output auditor and deterministic-grid observer are
+live. All regions and roles use this one corrected version. No complete recovery
+cache, covariance model or new primary result is claimed at launch.
