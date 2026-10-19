@@ -35,9 +35,15 @@ def _clean_frame(image, coverage):
     ):
         raise ValueError("Invalid RGB coverage or channel geometry")
     clean = np.where(coverage > 0, image, 0)
-    if not np.isfinite(clean).all() or (clean < 0).any() or (clean > 255).any():
+    # Resampling float32 display RGB can overshoot an endpoint by a few ulps.
+    tolerance = 8 * np.finfo(np.float32).eps * 255
+    if (
+        not np.isfinite(clean).all()
+        or (clean < -tolerance).any()
+        or (clean > 255 + tolerance).any()
+    ):
         raise ValueError("Invalid observed prepared RGB values; expected digital values in [0,255]")
-    return clean, coverage
+    return np.clip(clean, 0, 255), coverage
 
 
 def pool_rgb(frames, shape):

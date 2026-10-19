@@ -193,3 +193,26 @@ def test_specification_rejects_malformed_public_array_reference(tmp_path, field,
     spec["public"]["array"][field] = value
     with pytest.raises(ValueError, match="specification"):
         rgb.validate_specification(spec)
+
+
+def test_tiny_float32_display_range_roundoff_is_clipped():
+    values = np.full((3, 5, 5), 100, np.float32)
+    values[0, 0, 0] = np.nextafter(np.float32(255), np.float32(np.inf))
+    values[1, 0, 0] = -np.finfo(np.float32).eps
+    packed, _ = rgb.pack_subpixels(values, np.ones((1, 5, 5)), factor=5)
+    assert packed[0, 0, 0] == 255
+    assert packed[25, 0, 0] == 0
+
+
+@pytest.mark.parametrize("value", [-1.0, 256.0, 1000.0])
+def test_actual_rgb_radiometric_range_errors_still_fail(value):
+    with pytest.raises(ValueError, match="observed"):
+        rgb.pack_subpixels(np.full((3, 5, 5), value), np.ones((1, 5, 5)), factor=5)
+
+
+def test_values_inside_rgb_range_keep_exact_original_bits():
+    rng = np.random.default_rng(41)
+    values = rng.uniform(0, 255, size=(3, 10, 10)).astype(np.float32)
+    packed, _ = rgb.pack_subpixels(values, np.ones((1, 10, 10)), factor=5)
+    expected = values.reshape(3, 2, 5, 2, 5).transpose(0, 2, 4, 1, 3).reshape(75, 2, 2)
+    np.testing.assert_array_equal(packed, expected)
