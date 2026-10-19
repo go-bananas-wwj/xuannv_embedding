@@ -52,3 +52,13 @@ prototype would still need a tested standalone implementation, both fusers' full
 source/rebuild closure, complete compute costs, contribution checks and the
 remaining paper-task evidence. No Overleaf body edit or goal-completion claim is
 made from this preparation.
+
+The cached prototype exporter and bounded evaluator are now implemented and
+launched against the pinned core/readout source `2e3e735`. Ten arithmetic,
+input-contract and invalid-value cases passed after the initial missing-module
+failure. Six scheduling, sampling, scoring and query functions are AST-identical
+to the audited predecessor. All eighteen source embedding payloads were rehashed;
+the nine source-index/shape/dtype contracts and eighteen actual first-tile
+float64-oracle comparisons passed before new full exports or readers began.
+The quiet dependent observer will audit cached predictions after completion.
+These are prototype checks, not standalone production-release acceptance.
