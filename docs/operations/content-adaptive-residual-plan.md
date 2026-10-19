@@ -95,3 +95,11 @@ were retired after enumerating 52 hardlink paths. Actual free-space growth equal
 arrays, every source annual embedding and weight, original scores, predictions,
 labels, masks and figures remain. Per-file identity/deletion records are retained
 outside Git; the removed grids can be rebuilt without refitting old readers.
+
+All eighteen formal gate fits have reached update 2,000; remaining exports and
+primary readers are still pending. A separate reconstruction-readiness audit
+located every declared implementation fingerprint for all eighteen frozen
+upstream source checkpoints. The semantic source maps to archived commit
+`6096c14`, and the geometry source to `2e3e735`. This proves availability of the
+checkpoint-declared code dependencies, not complete raw-data/PCA closure or a
+full inference replay. It performs no new model/head fitting or task scoring.
