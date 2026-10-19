@@ -103,3 +103,28 @@ upstream source checkpoints. The semantic source maps to archived commit
 `6096c14`, and the geometry source to `2e3e735`. This proves availability of the
 checkpoint-declared code dependencies, not complete raw-data/PCA closure or a
 full inference replay. It performs no new model/head fitting or task scoring.
+
+The full study has now completed eighteen fits, eighteen exports, thirty-six
+readers and all 240 primary conditions. The independent cached-prediction audit
+passed. Both penalties fail acceptance, so no full-region query was selected.
+
+| Region | Reader | Penalty 0.05 native F1 (%) | Penalty 0.20 native F1 (%) | AEF (%) | Current public envelope (%) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Haidian | MLP | 84.7127 | 84.7230 | 83.8754 | 84.6595 |
+| Haidian | CNN | 85.3106 | 85.2942 | 84.3817 | 85.4545 |
+| Harbin | MLP | 57.7714 | 57.7863 | 58.3955 | 58.0648 |
+| Harbin | CNN | 59.4617 | 59.4982 | 58.7958 | 61.0796 |
+| Auckland | MLP | 62.4231 | 62.4419 | 63.4338 | 63.3369 |
+| Auckland | CNN | 65.0059 | 65.0206 | 64.6834 | 64.7244 |
+
+These exploratory calibration scores give worst-slot deficits of 1.6179 and
+1.5814 percentage points. For the better penalty, regional mean AEF gains are
++0.8800, +0.0466 and -0.3273 points; Harbin and Auckland fail the +0.5 requirement.
+The public envelope does not change. The preceding fixed 15% mixture remains
+closest among thirteen common cases from seven independently audited balanced-v2
+studies, with a worst deficit of 1.2105 points. All cases and tasks remain saved.
+Low mean geometry coefficients in the final training logs suggest that routing
+favoured the semantic source. They are not causal importance or accuracy evidence.
+The frozen semantic heads and anchor penalty may favour that source; the two-source
+box also has no explicit learned-public fallback. These motivate the next test,
+without proving why this study failed or that the next design will succeed.
