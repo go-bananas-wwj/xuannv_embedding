@@ -45,6 +45,7 @@ class SemanticOutput:
     context_reconstruction: torch.Tensor
     detail_mask: torch.Tensor
     context_mask: torch.Tensor
+    white_features: torch.Tensor
 
 
 class SemanticResidualFusion(nn.Module):
@@ -142,8 +143,10 @@ class SemanticResidualFusion(nn.Module):
             target.copy_(mean)
             getattr(self, name + "_std").copy_(std)
 
-    def standardize(self, x: torch.Tensor, name: str, mask: torch.Tensor) -> torch.Tensor:
-        clean = torch.where(mask, x.detach().float(), 0)
+    def standardize(
+        self, x: torch.Tensor, name: str, mask: torch.Tensor, *, detach: bool = True
+    ) -> torch.Tensor:
+        clean = torch.where(mask, (x.detach() if detach else x).float(), 0)
         return torch.where(
             mask,
             ((clean - getattr(self, name + "_mean")) / getattr(self, name + "_std")).clamp(-6, 6),
@@ -161,6 +164,7 @@ class SemanticResidualFusion(nn.Module):
         spectral_mask: torch.Tensor,
         context_source_shape: tuple[int, int] | None = None,
         burnin: bool = False,
+        trainable_context: bool = False,
     ) -> SemanticOutput:
         if (
             public.ndim != 4
@@ -203,7 +207,7 @@ class SemanticResidualFusion(nn.Module):
                 raise ValueError("Native coverage must be finite in [0,1]")
             context_mask = context_mask.detach().float()
             c_valid = context_mask > 0
-            context = context.detach().float()
+            context = (context if trainable_context else context.detach()).float()
             if not torch.isfinite(torch.where(c_valid, context, 0)).all():
                 raise ValueError("Observed native context must be finite")
             coverage = align_patch_features(context_mask, context_source_shape, (h, w), patch=16)
@@ -229,7 +233,15 @@ class SemanticResidualFusion(nn.Module):
             if context is not None:
                 c_hidden = (
                     self.context_encoder(
-                        torch.cat([self.standardize(context, "context", c_valid), context_mask], 1)
+                        torch.cat(
+                            [
+                                self.standardize(
+                                    context, "context", c_valid, detach=not trainable_context
+                                ),
+                                context_mask,
+                            ],
+                            1,
+                        )
                     )
                     * c_valid
                 )
@@ -271,6 +283,7 @@ class SemanticResidualFusion(nn.Module):
             self.context_head(white),
             d_mask,
             c_mask,
+            white,
         )
 
 

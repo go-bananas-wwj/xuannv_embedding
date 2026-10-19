@@ -9,7 +9,9 @@ import hashlib
 import json
 import math
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import torch
@@ -35,7 +37,10 @@ from xuannv_embedding.training.resident_features import ResidentFeatures
 
 
 def specification(path):
-    spec = _json(Path(path))
+    return validate_specification(_json(Path(path)))
+
+
+def validate_specification(spec):
     expected = {
         "schema",
         "index",
@@ -326,14 +331,11 @@ def _autocast(spec, device):
 
 
 def _move(batch, device):
-    return tuple(
-        (
-            {k: v.to(device) for k, v in x.items()}
-            if isinstance(x, dict)
-            else x.to(device) if x is not None else None
-        )
-        for x in batch
-    )
+    if isinstance(batch, dict):
+        return {k: _move(v, device) for k, v in batch.items()}
+    if isinstance(batch, tuple):
+        return tuple(_move(v, device) for v in batch)
+    return batch.to(device) if batch is not None else None
 
 
 def _forward(model, batch, shape, *, burnin=False):
@@ -341,13 +343,24 @@ def _forward(model, batch, shape, *, burnin=False):
     return model(p, s, d, c, m, spectral_mask=visible, context_source_shape=shape, burnin=burnin)
 
 
-def train(path, *, max_updates=None):
+@dataclass(frozen=True)
+class RefinementRuntime:
+    specification: Callable = specification
+    identity: Callable = identity
+    data: Callable = TrainingData
+    model: Callable = SemanticResidualFusion
+    forward: Callable = _forward
+    extra_loss: Callable | None = None
+
+
+def train(path, *, max_updates=None, runtime: RefinementRuntime | None = None):
+    runtime = runtime or RefinementRuntime()
     if max_updates is not None and (type(max_updates) is not int or max_updates < 1):
         raise ValueError("Partial training limit must be a positive integer")
-    spec, index = specification(path)
-    root, ident = Path(spec["output"]), identity(path)
+    spec, index = runtime.specification(path)
+    root, ident = Path(spec["output"]), runtime.identity(path)
     with ownership(root, ident, spec["reserve_gib"]):
-        data = TrainingData(spec, index)
+        data = runtime.data(spec, index)
         final, latest, status = root / "model.weights.pt", root / "latest.pt", root / "status.json"
         if final.exists():
             saved = torch.load(str(final), weights_only=True, map_location="cpu")
@@ -364,7 +377,7 @@ def train(path, *, max_updates=None):
                 and _json(status)["model_sha256"] != digest
             ):
                 raise ValueError("Semantic refinement final model changed")
-            cold = SemanticResidualFusion(**spec["model"])
+            cold = runtime.model(**spec["model"])
             cold.load_state_dict(saved["model"], strict=True)
             result = {**saved["summary"], "model_sha256": digest}
             dump(status, result)
@@ -372,7 +385,7 @@ def train(path, *, max_updates=None):
             return result
         device = _device(spec)
         torch.manual_seed(spec["seed"])
-        model = SemanticResidualFusion(**spec["model"]).to(device)
+        model = runtime.model(**spec["model"]).to(device)
         optimizer = torch.optim.AdamW(
             model.parameters(), lr=spec["lr"], weight_decay=spec["weight_decay"]
         )
@@ -422,7 +435,7 @@ def train(path, *, max_updates=None):
             _, s, d, _, _, t, visible, labels = batch
             optimizer.zero_grad(set_to_none=True)
             with _autocast(spec, device):
-                out = _forward(
+                out = runtime.forward(
                     model, batch, data.context_shape, burnin=current < spec["burnin_steps"]
                 )
                 targets = {
@@ -437,6 +450,10 @@ def train(path, *, max_updates=None):
                     ),
                 }
                 loss = semantic_loss(out, labels, targets, visible, weights, weights=spec["loss"])
+                if runtime.extra_loss is not None:
+                    extra = runtime.extra_loss(out, visible, current, spec)
+                    loss["loss"] = loss["loss"] + extra.pop("loss")
+                    loss.update(extra)
             if not torch.isfinite(loss["loss"]):
                 raise FloatingPointError("Nonfinite semantic refinement loss")
             loss["loss"].backward()
@@ -494,7 +511,7 @@ def train(path, *, max_updates=None):
             final,
             {"identity": ident, "step": step, "model": model.state_dict(), "summary": summary},
         )
-        cold = SemanticResidualFusion(**spec["model"])
+        cold = runtime.model(**spec["model"])
         cold.load_state_dict(
             torch.load(str(final), weights_only=True, map_location="cpu")["model"], strict=True
         )
@@ -504,19 +521,20 @@ def train(path, *, max_updates=None):
         return result
 
 
-def export(path):
-    spec, index = specification(path)
-    root, ident = Path(spec["output"]), identity(path)
+def export(path, *, runtime: RefinementRuntime | None = None):
+    runtime = runtime or RefinementRuntime()
+    spec, index = runtime.specification(path)
+    root, ident = Path(spec["output"]), runtime.identity(path)
     with ownership(root, ident, spec["reserve_gib"]):
         final = root / "model.weights.pt"
         saved = torch.load(str(final), weights_only=True, map_location="cpu")
         if saved["identity"] != ident or saved["step"] != spec["steps"]:
             raise ValueError("Semantic export requires the selected terminal checkpoint")
-        data = TrainingData(spec, index)
+        data = runtime.data(spec, index)
         if saved["summary"]["weak_domain_sha256"] != data.domain_sha256:
             raise ValueError("Semantic export training domain changed")
         device = _device(spec)
-        model = SemanticResidualFusion(**spec["model"]).to(device)
+        model = runtime.model(**spec["model"]).to(device)
         model.load_state_dict(saved["model"], strict=True)
         model.eval()
         output = root / "embedding"
@@ -542,7 +560,7 @@ def export(path):
                 ids = list(range(start, min(data.n, start + min(spec["batch_size"], 8))))
                 batch = _move(data.batch(ids), device)
                 with _autocast(spec, device):
-                    out = _forward(model, batch, data.context_shape).embedding
+                    out = runtime.forward(model, batch, data.context_shape).embedding
                 values = out.float().cpu().numpy().astype(np.float16)
                 if not np.isfinite(values).all():
                     raise FloatingPointError("Nonfinite or overflowed semantic output")

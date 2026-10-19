@@ -602,6 +602,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.training.semantic_refinement import main as refinement_main
 
         return refinement_main(forwarded[1:])
+    if forwarded and forwarded[0] == "time-modulated":
+        from xuannv_embedding.training.time_modulated import main as time_main
+
+        return time_main(forwarded[1:])
     if forwarded and forwarded[0] == "prithvi-features":
         from xuannv_embedding.export.prithvi_features import main as prithvi_main
 
@@ -653,6 +657,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("temporal-public-queries", help="冻结公开时序模型的逐月引导特征", add_help=False)
     sub.add_parser("osm-weak-targets", help="已知 OSM 标签的地理对齐弱监督", add_help=False)
     sub.add_parser("semantic-refinement", help="保持公共表征的多源语义残差训练", add_help=False)
+    sub.add_parser("time-modulated", help="按真实观测时间引导地方视觉特征融合", add_help=False)
     sub.add_parser("prithvi-features", help="公开时序预训练特征与完整区域投影", add_help=False)
     sub.add_parser("semantic-features", help="静态高分语义特征与无标签投影", add_help=False)
     sub.add_parser("regional-tuning", help="验证集选参并监控有界区域实验", add_help=False)
