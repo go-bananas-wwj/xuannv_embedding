@@ -83,3 +83,51 @@ local-fusion follow-up. Reuse the existing observations, primary masks and
 approved calibration cohort. Do not change targets, budgets or acceptance gates.
 A public pretrained-model diagnostic alone cannot satisfy the high-resolution
 method goal. The original best regional bundles and manuscript body remain intact.
+
+## Complete pretrained checkpoint verification and next bounded study
+
+The download completed and matches the official LFS SHA256
+`faab2c8b776f0723f93431747603a7ec586a54fc45473613b4322c29752486e7`.
+All294 encoder state entries load strictly;104 decoder entries are explicitly
+excluded. Complete pretrained CPU comparisons on the three actual regional
+samples, at four and twelve frames, are bit-identical to the publisher reference.
+All six complete-model NPU cases pass the preregistered numerical thresholds.
+FP32 relative errors are0.04–0.11%, and bfloat16 errors0.53–1.52%. No primary task
+score was calculated by these checks. Frozen verified source is`ea103cf`.
+
+Register the next whole-region study before regional projection fitting or task
+scores: all320/422/320 existing tiles, their twelve calendar months and original
+geography. Extract observed-patch-weighted temporal descriptors, preserving
+missing masks; fit a single64-component regional PCA only after merging every
+shard. Fit from at least0.9 observed-frame equivalents per native patch, capped
+at65,536 samples with seed41. Align over the unchanged footprint to128-by-128;
+mask annual coverage below0.05 and preserve PCA-score magnitudes. Native global
+patch tokens remain160m at the existing10m input grid; interpolation is not newly
+observed detail. No new image acquisition or reference-map input is introduced.
+
+Score Prithvi64 alone as a genuine public control: six readers/forty conditions.
+That alone cannot achieve the local-fusion goal. Then test two declared common
+64D candidates, with one unchanging recipe across all regions and data roles:
+
+- Regional public NN16, Prithvi16, fine visual16 and original physical16.
+- Prithvi32, fine visual16 and original physical16.
+
+The first preserves the existing regional WorldCover-trained backbone; the
+second uses regional projection fitting without a locally trained neural
+backbone. Do not conflate their training or losses. Physical observations retain
+public S1 and Landsat even though Prithvi itself consumes S2 only. Existing fine
+SAT-493M features supply native local, public S2 and degraded-local roles with
+the same capacity. Within a candidate,48 public/physical coordinates must match
+between roles; only the sixteen fine coordinates change. All branch/output
+unit-normalization flags are false. These are fixed budget hypotheses, not a
+per-region or primary-label dimension search.
+
+Both candidates receive all240 matched conditions: thirty-six fresh MLP/CNN
+reader jobs plus the six public-control jobs, totalling280 new conditions. Reuse
+verified AEF/strong-public caches from v2, raise the envelope when appropriate,
+and select only one globally eligible recipe by worst-slot gain then mean. Keep
+the original twenty primary tasks and all negative results. Apply the unchanged
+full-query/frozen-head gates and separately verify high-resolution contribution.
+Full extraction/reader orchestration follows implementation and data-pipeline
+tests; registration is not a claim those exports have already run. The goal and
+manuscript remain unchanged until the complete scientific acceptance succeeds.
