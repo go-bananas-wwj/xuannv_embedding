@@ -94,3 +94,33 @@ only after exact current payload-checksum equality. No encoder or reader fitting
 inference or task scoring was repeated for this integrity check. Remaining exports
 and the complete primary evaluation still have to finish; no accuracy acceptance
 or selected-model release is established by these checks.
+
+The full primary study has completed: eighteen fits, thirty-six fresh readers and
+all 240 conditions. Independent saved-prediction checks passed for confusion-count
+metrics, target positions, support selection, initialization and update schedules.
+Neither case is eligible for a frozen full-region query. All negative task records,
+weights and original results remain; no manuscript body or success claim changed.
+
+| Region | Reader | Scale 0.5 native F1 (%) | Scale 1.0 native F1 (%) | AEF (%) | Current public envelope (%) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Haidian | MLP | 83.3993 | 83.2842 | 83.8754 | 84.6595 |
+| Haidian | CNN | 84.2501 | 84.1505 | 84.3817 | 85.4545 |
+| Harbin | MLP | 56.4678 | 56.3926 | 58.3955 | 57.9986 |
+| Harbin | CNN | 60.5823 | 59.8979 | 58.7958 | 61.0796 |
+| Auckland | MLP | 62.4387 | 63.1000 | 63.4338 | 63.3369 |
+| Auckland | CNN | 59.0787 | 60.0764 | 64.6834 | 64.7244 |
+
+These are exploratory balanced-v2 calibration macro F1 scores, not blind or
+full-region query results. The worse-slot margins are -5.6457 and -4.6480
+percentage points for scales 0.5 and 1.0, respectively. Both fail acceptance.
+Reduced relation-training error therefore did not establish downstream usefulness.
+Several simultaneous changes prevent assigning the failure to a single cause.
+
+The public-only Harbin CNN reached 61.0796%, increasing its previous reference
+floor of 60.7554%. This stronger floor is retained for every subsequent method;
+no favorable regional/task/reader combination is selected for the native model.
+A comparison of nine common candidates from five independently audited balanced-v2
+studies now uses this same current envelope. The earlier semantic-residual case
+remains closest, but still misses its weakest slot by 1.5267 percentage points.
+This comparison refits no models or heads and does not cover every historical
+version. No candidate has fulfilled the common three-region goal.
