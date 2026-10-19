@@ -85,3 +85,14 @@ The first three regional native projection bundles have completed; their paired
 and then leases unused devices 1–7 for the fixed readers. Quiet dependent audit
 and deterministic-grid observers are live. Device 0 is excluded. No complete
 primary-task score or accepted common model is available at this point.
+
+All nine formal projection bundles and eighteen exports have completed. The
+matched-projection audit passed: public PCA/scaler parameters are bitwise equal
+across the three roles within each region, source tile counts match registration,
+and observed sample-position hashes match the saved records. Public sampling
+includes all 320/422/320 regional tiles. Native visual samples cover 320 Haidian,
+422 Harbin and 316 Auckland tiles; four Auckland tiles have no usable native
+visual samples, and retain their public block. These observations are retained
+explicitly rather than claiming complete aerial coverage. Seven NPU workers have
+started the unchanged thirty-six MLP/CNN reader jobs. No complete primary result
+is available at this stage.
