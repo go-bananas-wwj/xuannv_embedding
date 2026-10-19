@@ -139,3 +139,29 @@ subsequent batch gathering takes0.060 seconds, and ten complete updates take4.13
 seconds in the isolated gate. These timings exclude full queue contention and
 reader fitting. Three-region restart/export and recovery gates also pass. This
 performance improvement does not establish an accuracy gain or complete the goal.
+
+
+## Public-source and supervision lineage
+
+A traced audit of the current candidate's dependencies confirms that its public
+anchor combines16 projected temporal features,16 projected public Sentinel-2 RGB
+context features and32 projected public physical statistics. Its regional
+public temporal teacher has no local imagery source. That teacher includes
+Copernicus GLO-30 surface height and derived slope/aspect in addition to the three
+satellite sequences; describe this full inventory rather than calling it solely
+a three-satellite input. Neither the teacher nor the current refinement consumes
+LINZ LiDAR or the primary CLCD/Dynamic World/LCDB reference files.
+
+All three context roles use the same global SAT-493M weights and image
+normalization. Public RGB is the median of the registered twelve monthly public
+observations. A cache named for a high-resolution configuration may supply only
+geographic records when external rasters override image loading; source lineage
+is established from the actual raster branch, not directory names. Working-grid
+resampling does not add observed spatial detail. OSM unknown provenance remains
+unknown; LINZ building overlap through OSM must be audited before describing a
+building comparison as independent of all encoder supervision.
+
+These source facts do not establish downstream accuracy. The three-region common
+acceptance gate, matched label exposure and all negative task results remain
+required. GitHub CI for the resident-input implementation passed quality,
+test/package, clean-wheel installation and secret scanning.
