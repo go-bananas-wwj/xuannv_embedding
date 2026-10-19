@@ -62,7 +62,6 @@ main(['data', COMMAND, '--help'])
     [
         "prepare-targets",
         "prepare-multisource",
-        "prepare-target-comparison",
         "prepare-training-pool",
     ],
 )
@@ -75,11 +74,10 @@ def test_supervised_experiment_preparation_help(command) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    expected = "--local-plan" if command == "prepare-target-comparison" else "--prepared-root"
-    assert expected in result.stdout
+    assert "--prepared-root" in result.stdout
 
 
-@pytest.mark.parametrize("command", ["warmup-target-heads", "diagnose-target-heads"])
+@pytest.mark.parametrize("command", ["warmup-target-heads"])
 def test_frozen_head_workflow_help(command):
     result = subprocess.run(
         [sys.executable, "-m", "xuannv_embedding.cli", "experiment", command, "--help"],

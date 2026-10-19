@@ -503,58 +503,6 @@ def model_state_digest(model):
     return sha.hexdigest()
 
 
-def adapt_inputs(args):
-    """Register an unchanged original model under an explicit corrected input policy."""
-    from xuannv_embedding.training.checkpoint import save_training_checkpoint
-    from xuannv_embedding.training.optimizer import build_optimizer
-
-    if args.output.exists():
-        raise ValueError("Preprocessing baseline output must be a new directory")
-    config, system, original = load_model(args.config, args.checkpoint, torch.device("cpu"))
-    state_sha = model_state_digest(system.model)
-    raw = yaml.safe_load(args.config.read_text())
-    raw["model"]["annual_exact_mask_coverage"] = True
-    raw["experiment"]["name"] += "_exact_input_baseline"
-    args.output.mkdir(parents=True)
-    config_path = args.output / "config.yaml"
-    config_path.write_text(yaml.safe_dump(raw, sort_keys=False))
-    adapted = Config.from_yaml(config_path)
-    optimizer = build_optimizer(
-        system, lr=adapted.training.lr, weight_decay=adapted.training.weight_decay
-    )
-    save_training_checkpoint(
-        args.output / "model.pt",
-        model=system.model,
-        criterion=system.criterion,
-        optimizer=optimizer,
-        scheduler=None,
-        epoch=original["epoch"],
-        config_sha256=digest(config_path),
-        git_sha=_git_sha(),
-        source_schema={key: asdict(value) for key, value in adapted.model.input_sources.items()},
-        regions=[dc.region for dc in adapted.data.datasets],
-        metrics={
-            "checkpoint_kind": "preprocessing_only_adapter",
-            "optimizer_steps": 0,
-            "model_state_sha256": state_sha,
-            "source_checkpoint_sha256": digest(args.checkpoint),
-            "source_config_sha256": digest(args.config),
-            "source_git_sha": original["git_sha"],
-            "inherited_training_epoch": original["epoch"],
-            "source_code_sha256": _source_code_sha256(),
-        },
-    )
-    _, restored, _ = load_model(config_path, args.output / "model.pt", torch.device("cpu"))
-    if model_state_digest(restored.model) != state_sha:
-        raise RuntimeError("Preprocessing adapter unexpectedly changed model parameters")
-    print(
-        json.dumps(
-            {"adapter": str(args.output), "model_state_sha256": state_sha, "optimizer_steps": 0}
-        ),
-        flush=True,
-    )
-
-
 def evaluation_manifest(source: Path, destination: Path, wanted: set[str]) -> Path:
     """Freeze the small labelled subset once instead of re-reading GBs per model."""
     import fcntl
@@ -724,93 +672,6 @@ def probe(args) -> None:
             city_probe(plan, root, args.arm, device)
 
 
-def freeze_confirmation(args) -> None:
-    """Freeze additional existing weak labels before inspecting candidate results."""
-    from xuannv_embedding.utils.manifest import IndexedManifest
-
-    plan = json.loads(args.plan.read_text())
-    candidate_labels = json.loads((args.labels / "labels.json").read_text())
-    old_labels = json.loads((Path(plan["labels"]) / "labels.json").read_text())
-    excluded = {row["patch_id"] for row in old_labels["records"]} | {
-        row[2] for row in json.loads(Path(plan["cities"]).read_text())
-    }
-    wanted = {row["patch_id"] for row in candidate_labels["records"]} - excluded
-    root = args.plan.parent / "confirmation"
-    if (root / "plan.json").exists():
-        raise ValueError("Confirmation set is already frozen")
-    year = candidate_labels["year"]
-    source_root = Path(next(row["original"] for row in plan["datasets"] if row["year"] == year))
-    actual_split = {}
-    counts = {}
-    for split in ["train", "validation", "test"]:
-        source = source_root / f"{year}.{split}.manifest.jsonl"
-        target = evaluation_manifest(source, root / "development_data" / source.name, wanted)
-        records = IndexedManifest(target)
-        counts[split] = len(records)
-        for record in records:
-            if record.patch_id in actual_split:
-                raise ValueError("Confirmation patch appears in multiple source splits")
-            actual_split[record.patch_id] = split
-    selected = []
-    labels_root = root / "labels"
-    labels_root.mkdir(exist_ok=True)
-    for row in candidate_labels["records"]:
-        if row["patch_id"] not in actual_split:
-            continue
-        path = args.labels / row["file"]
-        if digest(path) != row["sha256"]:
-            raise ValueError("Confirmation label digest differs")
-        destination = labels_root / row["file"]
-        if not destination.exists():
-            destination.symlink_to(path.resolve())
-        selected.append({**row, "annual_split": actual_split[row["patch_id"]]})
-    labels = {
-        **candidate_labels,
-        "records": selected,
-        "independent_evaluation": False,
-        "policy": {
-            **candidate_labels["policy"],
-            "current_experiment": (
-                "Existing weak labels; exclude development IDs. Fit heads only on current annual "
-                "train positions; evaluate once on current annual validation/test positions "
-                "after choosing one candidate on development evidence. Not independent truth."
-            ),
-        },
-    }
-    write_json(labels_root / "labels.json", labels)
-    write_json(root / "empty_cities.json", [])
-    # Source positions absent from the annual release cannot be exported. The
-    # cached records already contain exactly the remaining IDs; align its request identity.
-    actual_digest = hashlib.sha256("\n".join(sorted(actual_split)).encode()).hexdigest()
-    for path in (root / "development_data").glob("*.origin.json"):
-        identity = json.loads(path.read_text())
-        identity["wanted_sha256"] = actual_digest
-        write_json(path, identity)
-    frozen = {
-        **plan,
-        "schema": "xuannv.annual-abc.confirmation.v1",
-        "confirmation_only": True,
-        "development_only": False,
-        "labels": str(labels_root.resolve()),
-        "cities": str((root / "empty_cities.json").resolve()),
-        "counts": counts,
-        "absent_from_current_annual": sorted(wanted - set(actual_split)),
-        "parent_plan_sha256": digest(args.plan),
-        "created_utc": datetime.now(timezone.utc).isoformat(),
-    }
-    write_json(root / "plan.json", frozen)
-    print(
-        json.dumps(
-            {
-                "confirmation": counts,
-                "excluded_development": len(excluded),
-                "missing": len(wanted - set(actual_split)),
-            }
-        ),
-        flush=True,
-    )
-
-
 def compare(args) -> None:
     from xuannv_embedding.downstream.annual_ablation import compare as compare_probes
 
@@ -821,34 +682,6 @@ def compare(args) -> None:
         args.arms or list(plan["arms"]),
         reference=args.reference,
     )
-
-
-def selection(args) -> None:
-    from xuannv_embedding.downstream.annual_ablation import SELECTION_PROTOCOL, select_candidate
-
-    if args.command == "lock-selection":
-        destination = args.plan.parent / "selection_protocol.json"
-        if destination.exists():
-            raise ValueError("Selection protocol is already locked")
-        write_json(
-            destination,
-            {
-                "protocol": SELECTION_PROTOCOL,
-                "locked_utc": datetime.now(timezone.utc).isoformat(),
-                "source_code_sha256": _source_code_sha256(),
-            },
-        )
-    else:
-        result = select_candidate(
-            json.loads(args.plan.read_text()), args.plan.parent / "evaluation"
-        )
-        print(json.dumps(result, ensure_ascii=False), flush=True)
-
-
-def confirmation_osm(args) -> None:
-    from xuannv_embedding.data_process.confirmation_osm import prepare_confirmation_osm
-
-    prepare_confirmation_osm(args.plan, args.snapshot, args.snapshot_date)
 
 
 def evaluate_arm(args) -> None:
@@ -1033,15 +866,6 @@ def _development_probe(args):
     probe(args)
 
 
-def prepare_target_comparison(args):
-    from xuannv_embedding.training.target_comparison import prepare_comparison
-
-    result = prepare_comparison(args.local_plan, args.evaluation_plan, args.output)
-    print(
-        json.dumps({"comparison_configs_prepared": len(result["arms"]), "training_started": False})
-    )
-
-
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv experiment", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1089,12 +913,6 @@ def main(argv=None) -> int:
     command.add_argument("--arm", required=True)
     command.set_defaults(handler=_development_probe)
     command = commands.add_parser(
-        "prepare-target-comparison", help="Freeze a bounded two-recipe, two-seed comparison"
-    )
-    for name in ("local-plan", "evaluation-plan", "output"):
-        command.add_argument(f"--{name}", required=True, type=Path)
-    command.set_defaults(handler=prepare_target_comparison)
-    command = commands.add_parser(
         "warmup-target-heads", help="Train independent readouts with the annual encoder frozen"
     )
     for name in ("config", "initialize-config", "checkpoint", "output"):
@@ -1105,16 +923,6 @@ def main(argv=None) -> int:
     command.add_argument("--readout-state", type=Path)
     command.add_argument("--device", default="cuda")
     command.set_defaults(handler=_warmup_target_heads)
-    command = commands.add_parser(
-        "diagnose-target-heads", help="Attribute fixed TRAIN gradients before/after head warmup"
-    )
-    for name in ("config", "initialize-config", "checkpoint", "warmup", "positions", "output"):
-        command.add_argument(f"--{name}", required=True, type=Path)
-    command.add_argument("--midpoint", type=Path)
-    command.add_argument("--mask-seed", type=int, default=9)
-    command.add_argument("--noise-seed", type=int, default=2026)
-    command.add_argument("--device", default="cuda:0")
-    command.set_defaults(handler=_diagnose_target_heads)
     command = commands.add_parser(
         "prepare", help="Freeze paired ABC configs and stratified sample IDs"
     )
@@ -1144,26 +952,6 @@ def main(argv=None) -> int:
     command.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
     command.add_argument("--arms", nargs="+")
     command.set_defaults(handler=run)
-    command = commands.add_parser(
-        "freeze-confirmation", help="Lock additional weak-label spatial holdout"
-    )
-    command.add_argument("--plan", required=True, type=Path)
-    command.add_argument("--labels", required=True, type=Path)
-    command.set_defaults(handler=freeze_confirmation)
-    command = commands.add_parser(
-        "adapt-inputs", help="Register corrected preprocessing with unchanged weights"
-    )
-    command.add_argument("--config", required=True, type=Path)
-    command.add_argument("--checkpoint", required=True, type=Path)
-    command.add_argument("--output", required=True, type=Path)
-    command.set_defaults(handler=adapt_inputs)
-    command = commands.add_parser(
-        "freeze-confirmation-osm", help="Extract local dated OSM for fine confirmation"
-    )
-    command.add_argument("--plan", required=True, type=Path)
-    command.add_argument("--snapshot", required=True, type=Path)
-    command.add_argument("--snapshot-date", required=True)
-    command.set_defaults(handler=confirmation_osm)
     for name, handler in [("reconstruction", reconstruction), ("export", export), ("probe", probe)]:
         command = commands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path)
@@ -1189,10 +977,6 @@ def main(argv=None) -> int:
     command.add_argument("--reference", default="original")
     command.add_argument("--arms", nargs="+")
     command.set_defaults(handler=compare)
-    for name in ["lock-selection", "select"]:
-        command = commands.add_parser(name)
-        command.add_argument("--plan", required=True, type=Path)
-        command.set_defaults(handler=selection)
     command = commands.add_parser(
         "evaluate-arm", help="Run all paired diagnostics for one artifact"
     )
@@ -1220,9 +1004,3 @@ def _warmup_target_heads(args):
     from xuannv_embedding.training.target_warmup import warmup
 
     warmup(args)
-
-
-def _diagnose_target_heads(args):
-    from xuannv_embedding.training.target_gradients import diagnose
-
-    diagnose(args)

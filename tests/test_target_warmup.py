@@ -9,10 +9,6 @@ from test_annual_model import annual_config
 from test_target_supervision import target_spec
 from torch import nn
 
-from xuannv_embedding.training.target_gradients import (
-    gradient_statistics,
-    single_task_objectives,
-)
 from xuannv_embedding.training.target_warmup import (
     FORMAT,
     HeadReadouts,
@@ -118,31 +114,6 @@ def test_readout_artifact_strictly_checks_original_encoder_and_target_contract(t
         restore_warmed_heads(path, module, **{**args, "expected_model_sha256": "b" * 64})
     with pytest.raises(ValueError, match="identity"):
         restore_warmed_heads(path, module, **{**args, "expected_contract": {}})
-
-
-def test_single_task_gradients_sum_to_the_actual_weighted_production_objective():
-    cfg = config()
-    heads = HeadReadouts(cfg, [42]).readouts["42"]
-    data = batch()
-    features = data["source_frames"]["features"].requires_grad_()
-    terms = single_task_objectives(cfg, heads, features, data["independent_targets"])
-    full = heads.loss(heads(features), data["independent_targets"])["total"]
-    sum_gradient = torch.autograd.grad(sum(terms.values()), features, retain_graph=True)[0]
-    full_gradient = torch.autograd.grad(full, features)[0]
-    assert torch.allclose(sum(terms.values()), full)
-    assert torch.allclose(sum_gradient, full_gradient, atol=1e-8)
-
-
-def test_gradient_cosine_distinguishes_opposition_from_missing_support():
-    vectors = {
-        "image": {"embedding": torch.tensor([2.0, 0])},
-        "auxiliary_total": {"embedding": torch.tensor([-1.0, 0])},
-        "absent": {"embedding": torch.zeros(2)},
-    }
-    result = gradient_statistics(vectors)["embedding"]
-    assert result["cosines"]["image"]["auxiliary_total"] == -1
-    assert result["cosines"]["image"]["absent"] is None
-    assert result["auxiliary_to_image_norm_ratio"] == 0.5
 
 
 def test_readout_continuation_preserves_optimizer_and_checks_traversal_identity(tmp_path):
