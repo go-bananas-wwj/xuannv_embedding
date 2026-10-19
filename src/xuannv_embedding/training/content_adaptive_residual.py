@@ -6,7 +6,9 @@ import argparse
 import json
 import math
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import torch
@@ -63,7 +65,10 @@ def _reference(value, *, array=False):
 
 
 def specification(path):
-    spec = _read(path)
+    return validate_specification(_read(path))
+
+
+def validate_specification(spec):
     expected = {
         "schema",
         "index",
@@ -299,10 +304,14 @@ class TrainingData:
         return public, semantic, geometry, physical, visible, labels, domain
 
 
-def update(model, batch, weights, optimizer, spec, current):
+def _forward(model, batch, spec, current):
+    return model(*batch[:5])
+
+
+def update(model, batch, weights, optimizer, spec, current, *, forward_function=None):
     optimizer.zero_grad(set_to_none=True)
     with base._autocast(spec, batch[0].device):
-        output = model(*batch[:5])
+        output = (forward_function or _forward)(model, batch, spec, current)
         losses = adaptive_residual_loss(output, batch[5], batch[6], weights, **spec["loss"])
     if not torch.isfinite(losses["loss"]):
         raise FloatingPointError("Nonfinite adaptive gate loss")
@@ -319,20 +328,39 @@ def update(model, batch, weights, optimizer, spec, current):
     for group in optimizer.param_groups:
         group["lr"] = rate
     optimizer.step()
-    return {
+    metrics = {
         **{k: v.detach() for k, v in losses.items()},
         "gradient_norm": norm.detach(),
         "mean_alpha": output.alpha.detach().mean(),
     }
+    if hasattr(output, "expert_weights"):
+        means = output.expert_weights.detach().mean((0, 2, 3, 4))
+        metrics.update(
+            {
+                name + "_weight": means[i]
+                for i, name in enumerate(["public", "semantic", "geometry"])
+            }
+        )
+    return metrics
 
 
-def train(path, *, max_updates=None):
+@dataclass(frozen=True)
+class AdaptiveRuntime:
+    specification: Callable = specification
+    identity: Callable = identity
+    data: Callable = TrainingData
+    model: Callable = ContentAdaptiveResidual
+    forward: Callable = _forward
+
+
+def train(path, *, max_updates=None, runtime: AdaptiveRuntime | None = None):
+    runtime = runtime or AdaptiveRuntime()
     if max_updates is not None and (type(max_updates) is not int or max_updates < 1):
         raise ValueError("Partial training limit must be positive")
-    spec, index = specification(path)
-    root, ident = Path(spec["output"]), identity(path)
+    spec, index = runtime.specification(path)
+    root, ident = Path(spec["output"]), runtime.identity(path)
     with base.ownership(root, ident, spec["reserve_gib"]):
-        data = TrainingData(spec, index)
+        data = runtime.data(spec, index)
         final, latest, status = root / "model.weights.pt", root / "latest.pt", root / "status.json"
         if final.exists():
             saved = torch.load(str(final), weights_only=True, map_location="cpu")
@@ -349,14 +377,14 @@ def train(path, *, max_updates=None):
                 and _read(status)["model_sha256"] != digest
             ):
                 raise ValueError("Adaptive final payload changed")
-            cold = ContentAdaptiveResidual(**spec["model"])
+            cold = runtime.model(**spec["model"])
             cold.load_state_dict(saved["model"], strict=True)
             result = {**saved["summary"], "model_sha256": digest}
             dump(status, result)
             return result
         device = base._device(spec)
         torch.manual_seed(spec["seed"])
-        model = ContentAdaptiveResidual(**spec["model"]).to(device)
+        model = runtime.model(**spec["model"]).to(device)
         model.set_teacher(data.teacher_state)
         optimizer = torch.optim.AdamW(
             [p for p in model.parameters() if p.requires_grad],
@@ -402,7 +430,9 @@ def train(path, *, max_updates=None):
         for current in range(step, limit):
             ids = batch_indices(data.n, spec["batch_size"], spec["seed"], current)
             batch = resident.batch(ids)
-            metrics = update(model, batch, weights, optimizer, spec, current)
+            metrics = update(
+                model, batch, weights, optimizer, spec, current, forward_function=runtime.forward
+            )
             step = current + 1
             seen.update(ids)
             if step % 25 == 0 or step == limit:
@@ -440,7 +470,16 @@ def train(path, *, max_updates=None):
             "unique_training_tiles": len(seen),
             "weak_domain_sha256": data.domain_sha256,
             "class_weights": {k: v.tolist() for k, v in data.class_weights.items()},
-            "only_gate_parameters_optimized": True,
+            "only_gate_parameters_optimized": all(
+                not p.requires_grad
+                for head in [model.worldcover_head, model.area_head, model.geometry_head]
+                for p in head.parameters()
+            ),
+            "auxiliary_heads_optimized": any(
+                p.requires_grad
+                for head in [model.worldcover_head, model.area_head, model.geometry_head]
+                for p in head.parameters()
+            ),
             "trainable_parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
             "teacher_sources": spec["teacher"],
         }
@@ -454,9 +493,10 @@ def train(path, *, max_updates=None):
         return result
 
 
-def export(path):
-    spec, index = specification(path)
-    root, ident = Path(spec["output"]), identity(path)
+def export(path, *, runtime: AdaptiveRuntime | None = None):
+    runtime = runtime or AdaptiveRuntime()
+    spec, index = runtime.specification(path)
+    root, ident = Path(spec["output"]), runtime.identity(path)
     with base.ownership(root, ident, spec["reserve_gib"]):
         final = root / "model.weights.pt"
         terminal_status = root / "status.json"
@@ -467,9 +507,9 @@ def export(path):
         saved = torch.load(str(final), weights_only=True, map_location="cpu")
         if saved["identity"] != ident or saved["step"] != spec["steps"]:
             raise ValueError("Adaptive export requires terminal source-bound weights")
-        data = TrainingData(spec, index, load_weak=False)
+        data = runtime.data(spec, index, load_weak=False)
         device = base._device(spec)
-        model = ContentAdaptiveResidual(**spec["model"]).to(device)
+        model = runtime.model(**spec["model"]).to(device)
         model.load_state_dict(saved["model"], strict=True)
         model.eval()
         out = root / "embedding"
@@ -494,7 +534,7 @@ def export(path):
                 ids = list(range(start, min(data.n, start + min(spec["batch_size"], 8))))
                 batch = base._move(data.batch(ids), device)
                 with base._autocast(spec, device):
-                    output = model(*batch[:5]).embedding
+                    output = runtime.forward(model, batch, spec, spec["steps"]).embedding
                 value = output.float().cpu().numpy().astype(np.float16)
                 if not np.isfinite(value).all():
                     raise FloatingPointError("Adaptive export overflow")

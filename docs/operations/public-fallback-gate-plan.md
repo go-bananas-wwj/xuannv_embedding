@@ -49,3 +49,39 @@ penalty and keep six strict AEF/public wins plus each region's mean AEF gain of 
 least 0.5 points. Only an eligible common case receives frozen full-region queries.
 Source/rebuild, contribution, costs and remaining paper tasks still require proof
 after any primary success. No manuscript body or accepted-model claim follows.
+
+The package model, staged trainer/runtime and CLI are now implemented. All 33
+focused tests across the new and previous gate pipelines passed; the complete
+1,146-test CPU suite, formatting, static checks, repository policy and package
+builds passed. Wheel and sdist production files match the tested source exactly.
+All nine real region/role input, normalization, weak-domain and source-export
+contracts passed. Three public-expert provenance reports bind the original public
+satellite RGB producers, public temporal queries and shared anchor dependencies;
+these metadata checks do not replace full raw inference replay.
+
+Three real NPU mini runs exercised a shortened two-update head-only stage,
+recovery into joint learning and cold output on two audit tiles. The reports
+explicitly retain the full original regional index and four partial updates.
+Auxiliary heads changed, source normalization did not, expert weights summed to
+one, FP32 output/logits and coordinate bounds passed, and arrays were finite.
+
+| Candidate batch | Joint samples/s | Joint peak allocated GiB |
+| --- | ---: | ---: |
+| 64 | 526.17 | 19.97 |
+| 128 | 540.66 | 30.13 |
+| 256 | 555.98 | 50.44 |
+
+Each profile followed 200 head-only updates and ten joint warm-up updates, then
+timed ten joint updates. The fixed rule selected batch 256. The full 422-tile
+resident run recovered from update 200 to joint update 210, with peak allocation
+50.44 GiB and finite checkpoint tensors. Formal specifications now freeze batch
+256 across all eighteen fits. These gates contain no primary-task score choice.
+No preflight checkpoint initializes a formal run.
+
+Only the failed preceding gate study's reconstructible annual outputs and
+evaluation grids were retired: 49 paths, 36 physical files and an observed free
+space increase of exactly 31.7112 GiB, leaving about 148.63 GiB. Its weights,
+source code, original predictions/results, sampling and figures remain. All current
+public-reference and public/semantic/geometry source arrays were excluded. The
+next stage is formal training and the complete unchanged primary evaluation;
+source closure, costs, contribution and remaining paper tasks still require proof.
