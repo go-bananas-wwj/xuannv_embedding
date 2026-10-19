@@ -27,3 +27,22 @@ learned public vector. Full software and real B64 warm-up/recovery checks preced
 formal fitting. The fixed balanced-v2 readers, all classes and nondecreasing public
 reference envelope remain unchanged. The paper body stays untouched until all
 scientific/source/contribution requirements are supported by actual results.
+
+The implementation at commit `2e3e735` passed all 1,113 CPU tests, formatting,
+static checks, repository policy and package construction. Three actual regional
+mini runs passed training, recovery and export. Both larger regions also passed
+all-resident batch-64 checks across the 200-update burn-in transition, including
+recovery at update 200. The source-binding audit checked the actual identities of
+all five checkpoints; copied historical hash fields in gate-registration metadata
+were explicitly excluded as proof.
+
+A separate metadata audit checked every one of the eighteen registered fit
+specifications against its prior matching source role. Observations, geographic
+indices, weak sources, physical time contracts and training budgets remain equal;
+only the registered method settings and output locations differ. This audit reads
+no primary reference pixels and does not prove complete upstream provenance or
+accuracy. Formal fitting is active on devices 1–7, with no new primary scores yet.
+A bounded observer can prepare deterministic evaluation grids without fitting
+heads or computing scores; hardlinks share those grids with the formal queue.
+The fixed reserve remains 100 GiB. No success claim or paper edit follows these
+software and configuration checks.
