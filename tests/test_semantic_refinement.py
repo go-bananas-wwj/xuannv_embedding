@@ -146,3 +146,24 @@ def test_padded_alignment_matches_existing_frozen_export_geometry():
     assert torch.equal(actual, old_align(x, (73, 101), (16, 16), patch=16))
     actual.square().mean().backward()
     assert torch.isfinite(x.grad).all() and x.grad.abs().sum() > 0
+
+
+def test_resident_and_streaming_updates_produce_identical_model_parameters(tmp_path, monkeypatch):
+    path, spec = fixture_spec(tmp_path)
+    refinement.train(path)
+    expected = torch.load(str(Path(spec["output"]) / "model.weights.pt"), weights_only=True)
+
+    class StreamingAdapter:
+        def __init__(self, data, device):
+            self.data = data
+            self.resident_bytes = 0
+
+        def batch(self, ids):
+            return self.data.batch(ids)
+
+    monkeypatch.setattr(refinement, "ResidentFeatures", StreamingAdapter)
+    spec["output"] = str(tmp_path / "streaming")
+    dump(path, spec)
+    refinement.train(path)
+    actual = torch.load(str(Path(spec["output"]) / "model.weights.pt"), weights_only=True)
+    assert all(torch.equal(expected["model"][k], actual["model"][k]) for k in expected["model"])

@@ -23,7 +23,7 @@ from xuannv_embedding.data_process.osm_weak_targets import (
 from xuannv_embedding.export.context import dump, sha
 from xuannv_embedding.models import semantic_residual
 from xuannv_embedding.models.semantic_residual import SemanticResidualFusion, semantic_loss
-from xuannv_embedding.training import frozen_fusion
+from xuannv_embedding.training import frozen_fusion, resident_features
 from xuannv_embedding.training.cli import _setup_device
 from xuannv_embedding.training.frozen_fusion import (
     atomic_save,
@@ -31,6 +31,7 @@ from xuannv_embedding.training.frozen_fusion import (
     source_array,
     verified,
 )
+from xuannv_embedding.training.resident_features import ResidentFeatures
 
 
 def specification(path):
@@ -276,6 +277,7 @@ def implementation():
         "training": sha(__file__),
         "model": sha(semantic_residual.__file__),
         "base_data": sha(frozen_fusion.__file__),
+        "resident_features": sha(resident_features.__file__),
     }
 
 
@@ -393,12 +395,24 @@ def train(path, *, max_updates=None):
             )
 
         checkpoint()
+        resident = ResidentFeatures(data, device)
+        dump(
+            root / "input-residency.json",
+            {
+                "state": "complete",
+                "tiles": data.n,
+                "bytes": resident.resident_bytes,
+                "device": str(device),
+                "canonical_streaming_dtype_preserved": True,
+                "sampling_and_label_exposure_unchanged": True,
+            },
+        )
         weights = {k: v.to(device) for k, v in data.class_weights.items()}
         model.train()
         limit = min(spec["steps"], step + max_updates) if max_updates is not None else spec["steps"]
         for current in range(step, limit):
             ids = batch_indices(data.n, spec["batch_size"], spec["seed"], current)
-            batch = _move(data.batch(ids), device)
+            batch = _move(resident.batch(ids), device)
             _, s, d, _, _, t, visible, labels = batch
             optimizer.zero_grad(set_to_none=True)
             with _autocast(spec, device):

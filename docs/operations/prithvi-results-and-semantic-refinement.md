@@ -113,3 +113,29 @@ and terminal export. Full-fusion BF16 batch64 on actual observations passes at
 13.8 GiB peak allocation; a three-update synthetic batch64 also passes. These
 checks validate execution, not downstream improvement. All numerical receipts,
 source identities, maps and weights remain outside Git.
+
+
+## Frozen-input residency optimization
+
+The first full streaming attempt exposed substantial host batch overhead: two
+actual batch64 preparations took31.4–39.8 seconds under concurrent load. That
+attempt ended before any terminal model or primary reader score; its checkpoints,
+curves, source and process records were archived. No failed primary score was
+removed. The scientific recipe and all nine regional/role specifications stay
+unchanged.
+
+Canonical streamed float32 features, Boolean masks and integer targets are now
+loaded onto the assigned device once, then sampled by the same deterministic
+tile indices. This changes data transport only. CPU four-update model parameters
+remain bitwise equal to streaming. Actual NPU batch64 values, dtypes and strides
+match exactly; all three real mini-run exported embeddings are byte-identical.
+NPU parameter tensors are not all bitwise equal (largest observed absolute
+difference4.99e-7), although shared normalization buffers match exactly. Those
+measurements are retained rather than described as exact parameter equality.
+
+The largest real region,422 tiles, passes ten full-fusion BF16 updates at batch64
+with24.6 GiB peak device allocation. Its11.5 GB canonical input cache loads once;
+subsequent batch gathering takes0.060 seconds, and ten complete updates take4.13
+seconds in the isolated gate. These timings exclude full queue contention and
+reader fitting. Three-region restart/export and recovery gates also pass. This
+performance improvement does not establish an accuracy gain or complete the goal.
