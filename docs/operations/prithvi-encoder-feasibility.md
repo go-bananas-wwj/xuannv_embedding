@@ -131,3 +131,44 @@ full-query/frozen-head gates and separately verify high-resolution contribution.
 Full extraction/reader orchestration follows implementation and data-pipeline
 tests; registration is not a claim those exports have already run. The goal and
 manuscript remain unchanged until the complete scientific acceptance succeeds.
+
+## Input-unit correction during full exporter integration
+
+Integration found that `public_monthly_tensor.read_record` already returns
+calibrated values in canonical band order. The initial stand-alone Prithvi
+numerical-gate preparation applied the affine calibration a second time. China's
+blue medians were consequently near-0.10 instead of approximately0.07–0.08;
+Auckland's identity calibration was unchanged. Earlier CPU/native comparisons
+still checked the same mathematical encoder, but their physical-input validation
+claim is superseded. Keep those original files and mark the correction explicitly.
+No primary Prithvi score or full regional embedding had been produced from them.
+Other completed studies consume their correct existing monthly caches directly;
+the prototype error does not alter their classification results.
+
+Corrected preparation and complete pretrained CPU/NPU gates pass in separate v2
+artifact directories. The registered study has an input-unit amendment referencing
+those corrected proofs; its windows, labels, cohort, recipes and budgets do not
+change. The exporter calls the calibrated reader once and only applies the
+published model normalization. A DN/offset regression checks both the single
+application and canonical ordering, including narrow-NIR rather than red edge.
+
+## Exporter and actual pipeline checks
+
+The unique command `xuannv experiment prithvi-features` provides explicit extract
+and project phases. Extraction owns separate range locks and resumes a hashed,
+committed native/count prefix. Interrupted two-file finalization also recovers
+without repeating inference. Changed source identities, corrupted completed
+arrays, mixed numerical modes and unowned output directories are rejected.
+Projection requires complete, nonoverlapping coverage and fits one regional PCA
+across all shards. It records shard provenance and numerical mode and verifies
+completed outputs before reuse, including after native-cache removal.
+
+All25 targeted exporter tests and1,053 full tests pass. Black/Ruff pass. Real
+three-region pipeline gates use correctly calibrated observations: batch16
+normalized inputs match the corrected reference exactly, pretrained bfloat16
+outputs meet the declared error bound, and two actual CLI extraction shards merge
+into one4-tile64D regional projection. Every stored vector is finite; no primary
+reference map is accessed. Peak allocated tensor memory is about1.54GiB per NPU
+in the batch gate (runtime-reserved memory is separate). This demonstrates
+operational readiness, not downstream accuracy. The complete study still needs
+all280 conditions and the original scientific acceptance audit.
