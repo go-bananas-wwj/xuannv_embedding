@@ -126,3 +126,34 @@ including process initialization, input loading and checkpoint checks. It exclud
 frozen source fitting, public temporal-model training, DINO extraction/pretraining,
 data preparation/PCA, QA profiles, export and downstream scoring. It is not a
 complete pipeline cost or a comparison with AEF pretraining cost.
+
+The complete study failed acceptance. All eighteen fits/exports, thirty-six fresh
+readers and 240 new conditions completed; the independent saved-prediction audit
+passed and recomputed the same F1/IoU, supports, schedules and initializations. No
+candidate was eligible for frozen queries, and no query was launched. The public
+envelope did not improve or decrease. By the fixed minimum-six-margin rule,
+preservation 1.0 is the best common case, with worst margin −1.5203 points;
+preservation 0.2 has worst margin −1.6570 points.
+
+| Region | Reader | Native, preservation 1.0 | AEF | Strongest public |
+| --- | --- | ---: | ---: | ---: |
+| Haidian | MLP | 84.588 | 83.875 | 84.659 |
+| Haidian | CNN | 85.353 | 84.382 | 85.455 |
+| Harbin | MLP | 57.546 | 58.396 | 58.065 |
+| Harbin | CNN | 59.559 | 58.796 | 61.080 |
+| Auckland | MLP | 62.506 | 63.434 | 63.337 |
+| Auckland | CNN | 64.803 | 64.683 | 64.724 |
+
+Values are exploratory balanced-v2 calibration macro F1 percentages. The best
+case's regional mean AEF gains are +0.8420, −0.0428 and −0.4044 points respectively.
+All task records, including declines and native/degraded controls, remain retained.
+The current comparison covers fifteen common cases from eight independently
+audited balanced-v2 studies, all ineligible; it does not cover every historical
+experiment. The preceding fixed 15% residual mixture remains closest by the same
+current envelope, at worst −1.2105 points.
+
+In eight logged minibatches from the final 200 updates, the selected case's mean
+geometry weights are approximately 7.17%, 9.22% and 8.84% across the three regions,
+below their initial 14.25%. These logged averages are neither a full pixel census
+nor causal evidence that low geometry weight caused the primary-task deficits.
+Declining weak-label training loss did not ensure primary-task improvement.
