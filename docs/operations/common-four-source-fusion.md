@@ -84,3 +84,7 @@ Validation before launch: all 980 tests passed; Black, Ruff, the repository gate
 and source/wheel builds passed. The change does not modify neural architecture,
 checkpoint loading or the fixed reader implementation. Actual regional exports
 and their downstream performance still require the registered experiment.
+
+The study subsequently completed all 240 calibration conditions. Both profiles
+fail the registered gate; see the [complete paired result and next source ablation](calendar-observation-branch.md).
+No full-region query or paper success claim followed this failed gate.

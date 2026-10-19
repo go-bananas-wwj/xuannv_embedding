@@ -542,6 +542,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.data_process.public_monthly_tensor import main as monthly_main
 
         return monthly_main(forwarded[1:])
+    if forwarded and forwarded[0] == "public-calendar-statistics":
+        from xuannv_embedding.export.public_calendar import main as calendar_main
+
+        return calendar_main(forwarded[1:])
     if forwarded and forwarded[0] == "weak-semantic-context":
         from xuannv_embedding.export.weak_semantic_context import main as context_main
 
@@ -613,6 +617,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("public-monthly-tensor", help="保留日历顺序的公开时序张量", add_help=False)
+    sub.add_parser("public-calendar-statistics", help="保留公开观测的年度季节变化", add_help=False)
     sub.add_parser("temporal-feature-fusion", help="学习有日历关联的区域时序融合", add_help=False)
     sub.add_parser("weak-semantic-context", help="导出已有弱监督预测作为补充特征", add_help=False)
     sub.add_parser("public-terrain", help="准备有公开来源记录的地形特征", add_help=False)
