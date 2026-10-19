@@ -94,3 +94,11 @@ and schedules the dependent readers. Separate quiet observers prepare determinis
 reader grids and audit saved predictions after completion. The first live snapshot
 showed the initial seven fits at roughly 300–325 of 2,000 updates. No primary
 classification result or selected common case is available at this point.
+
+A read-only upstream preservation audit rehashed all 21 distinct frozen expert
+checkpoints used by the eighteen specifications. Every declared implementation
+fingerprint is covered by a complete archived snapshot, and each source is finite
+and records all regional tiles at its terminal update. The existing 115 preserved
+parameter/recipe copies match their originals. This is a declared-source and copy
+preservation check: it does not prove imported dependency closure or raw-image,
+transform and PCA inference replay. No source model or reader was fitted again.
