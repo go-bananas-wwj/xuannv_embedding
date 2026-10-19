@@ -102,3 +102,12 @@ and records all regional tiles at its terminal update. The existing 115 preserve
 parameter/recipe copies match their originals. This is a declared-source and copy
 preservation check: it does not prove imported dependency closure or raw-image,
 transform and PCA inference replay. No source model or reader was fitted again.
+
+Cold NPU replay of the frozen expert sources subsequently passed for all 21
+distinct checkpoints. Forty-two original first/last export batches, using their
+archived source snapshots, original normalization, AMP and batching, match the
+stored float16 arrays bit for bit (maximum absolute difference zero). The check
+used otherwise idle devices 3–5 while the remaining four formal fits continued;
+no source training or downstream scoring was repeated. It covers inference from
+the existing frozen cache inputs. Raw imagery, DINO feature extraction and fitted
+PCA replay remain outside this check. The replay controller completed normally.
