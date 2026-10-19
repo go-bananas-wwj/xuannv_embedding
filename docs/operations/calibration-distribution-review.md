@@ -1,4 +1,10 @@
-# Calibration distribution review and an unapproved supplemental cohort
+# Calibration distribution review and supplemental cohort
+
+**Current status:** the user approved adding the frozen balanced cohort on
+2026-10-19, while retaining all old results. Follow the
+[version 2 evaluation contract](balanced-calibration-v2.md). The review below
+records the original proposal before that approval; its old metrics remain
+version 1 results and are not relabelled as version 2.
 
 The common six-coordinate semantic budget completed all120 fixed conditions and
 failed acceptance. Native high-resolution macro-F1(MLP/CNN,percent) was
