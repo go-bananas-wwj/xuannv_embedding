@@ -20,7 +20,10 @@ from xuannv_embedding.training.frozen_fusion import source_array, verified
 
 
 def specification(path):
-    value = base._json(Path(path))
+    return validate_specification(base._json(Path(path)))
+
+
+def validate_specification(value):
     if (
         set(value) != {"schema", "base", "temporal", "diversity"}
         or value["schema"] != "time-modulated-refinement-v1"

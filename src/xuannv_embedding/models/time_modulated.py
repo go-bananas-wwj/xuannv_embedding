@@ -14,6 +14,7 @@ class TimeModulatedFusion(nn.Module):
     def __init__(self, **kwargs) -> None:
         super().__init__()
         self.base = SemanticResidualFusion(**kwargs)
+        self.collect_local_geometry = False
         self.register_buffer("query_mean", torch.zeros(1, 64, 1, 1))
         self.register_buffer("query_std", torch.ones(1, 64, 1, 1))
         self.affine = nn.Conv2d(64, 2048, 1)
@@ -100,6 +101,9 @@ class TimeModulatedFusion(nn.Module):
             ),
             0,
         )
+        teacher = (
+            (local * m).sum(1) / m.sum(1).clamp_min(1e-6) if self.collect_local_geometry else None
+        )
         query = torch.where(qm > 0, queries.detach().float(), 0)
         query = torch.where(
             qm > 0,
@@ -129,7 +133,7 @@ class TimeModulatedFusion(nn.Module):
         pooled = (modulated.reshape(b, v, 1024, h, w) * weights).sum(1)
         coverage = m.amax(1)
         raw = torch.where(coverage > 0, pooled * self.base.context_std + self.base.context_mean, 0)
-        return self.base(
+        output = self.base(
             public,
             spectral,
             detail,
@@ -140,6 +144,10 @@ class TimeModulatedFusion(nn.Module):
             burnin=burnin,
             trainable_context=True,
         )
+        if teacher is not None:
+            output.local_teacher = teacher.detach()
+            output.local_teacher_mask = coverage.detach()
+        return output
 
 
 def diversity_loss(white_features, domain, *, step):

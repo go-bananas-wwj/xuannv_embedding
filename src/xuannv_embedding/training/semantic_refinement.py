@@ -351,6 +351,7 @@ class RefinementRuntime:
     model: Callable = SemanticResidualFusion
     forward: Callable = _forward
     extra_loss: Callable | None = None
+    batch_loss: Callable | None = None
 
 
 def train(path, *, max_updates=None, runtime: RefinementRuntime | None = None):
@@ -454,6 +455,10 @@ def train(path, *, max_updates=None, runtime: RefinementRuntime | None = None):
                     extra = runtime.extra_loss(out, visible, current, spec)
                     loss["loss"] = loss["loss"] + extra.pop("loss")
                     loss.update(extra)
+                if runtime.batch_loss is not None:
+                    addition = runtime.batch_loss(out, batch, current, spec)
+                    loss["loss"] = loss["loss"] + addition.pop("loss")
+                    loss.update(addition)
             if not torch.isfinite(loss["loss"]):
                 raise FloatingPointError("Nonfinite semantic refinement loss")
             loss["loss"].backward()
@@ -497,6 +502,8 @@ def train(path, *, max_updates=None, runtime: RefinementRuntime | None = None):
             del batch, out, loss, targets, s, d, t, visible, labels, _
             if runtime.extra_loss is not None:
                 del extra
+            if runtime.batch_loss is not None:
+                del addition
         if step < spec["steps"]:
             result = {"state": "checkpointed", "step": step, "unique_training_tiles": len(seen)}
             dump(status, result)

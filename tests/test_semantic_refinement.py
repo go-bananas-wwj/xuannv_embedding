@@ -192,7 +192,7 @@ def test_conditional_schema_requires_explicit_architecture_and_recovers_joint_we
     assert np.isfinite(np.load(Path(spec["output"]) / "embedding/annual.npy")).all()
 
 
-@pytest.mark.parametrize("with_auxiliary", [False, True])
+@pytest.mark.parametrize("with_auxiliary", [False, True, "batch"])
 def test_training_releases_previous_batch_outputs_and_targets_before_next_forward(
     tmp_path, monkeypatch, with_auxiliary
 ):
@@ -221,6 +221,12 @@ def test_training_releases_previous_batch_outputs_and_targets_before_next_forwar
 
     monkeypatch.setattr(refinement, "semantic_loss", observed_loss)
     runtime = refinement.RefinementRuntime(
-        forward=forward, extra_loss=auxiliary if with_auxiliary else None
+        forward=forward,
+        extra_loss=auxiliary if with_auxiliary is True else None,
+        batch_loss=(
+            (lambda output, batch, step, spec: auxiliary(output, batch[6], step, spec))
+            if with_auxiliary == "batch"
+            else None
+        ),
     )
     assert refinement.train(path, runtime=runtime)["state"] == "complete"

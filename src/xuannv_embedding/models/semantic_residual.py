@@ -46,6 +46,8 @@ class SemanticOutput:
     detail_mask: torch.Tensor
     context_mask: torch.Tensor
     white_features: torch.Tensor
+    local_teacher: torch.Tensor | None = None
+    local_teacher_mask: torch.Tensor | None = None
 
 
 class SemanticResidualFusion(nn.Module):
