@@ -11,7 +11,7 @@ every region. It ranks closest among thirteen completed common public algorithms
 using the current worst-six-slot comparison; it is not chosen separately by city
 or reader. Its three existing outputs have passed shared public-anchor, index,
 public/physical normalization and weak-source-reference checks against the semantic
-source. Full genuine-public lineage and payload checks remain required before fits.
+source. The subsequent provenance and real-data gates described below passed before formal fits.
 The semantic and geometry experts stay matched to each native/public/degraded role.
 All three source encoders and source feature arrays remain frozen.
 
@@ -40,10 +40,10 @@ limit. Benchmark only after the head-warm-up and ten joint warm-up updates, then
 time ten joint updates. A full 422-tile selected-batch recovery check must cross
 update 200 into update 210; early head-only memory is not sufficient evidence.
 
-Registration precedes new model weights or scores. Package implementation,
-failing-first behavior and recovery tests, full software/package checks, real
-regional transition/recovery/inference checks and storage preparation are pending.
-Formal fitting has not started. Intended scope remains eighteen regional/role fits,
+Registration preceded new model weights or scores. Package implementation,
+failing-first behavior and recovery tests, software/package checks, real regional
+transition/recovery/inference checks and storage preparation subsequently passed.
+Formal fitting now covers eighteen regional/role fits,
 thirty-six readers and all 240 unchanged balanced-v2 conditions. Select one global
 penalty and keep six strict AEF/public wins plus each region's mean AEF gain of at
 least 0.5 points. Only an eligible common case receives frozen full-region queries.
@@ -83,5 +83,14 @@ evaluation grids were retired: 49 paths, 36 physical files and an observed free
 space increase of exactly 31.7112 GiB, leaving about 148.63 GiB. Its weights,
 source code, original predictions/results, sampling and figures remain. All current
 public-reference and public/semantic/geometry source arrays were excluded. The
-next stage is formal training and the complete unchanged primary evaluation;
+current stage is formal training and the complete unchanged primary evaluation;
 source closure, costs, contribution and remaining paper tasks still require proof.
+
+Formal fitting has started from immutable source commit
+`5ebdfde7f566ba22cc679af6f94adfb79f3e8a04`, which is synchronized to GitHub.
+Seven verified workers use devices 1–7; device 0 is excluded. A bounded local
+controller records process identities, limits retries, checks the storage reserve,
+and schedules the dependent readers. Separate quiet observers prepare deterministic
+reader grids and audit saved predictions after completion. The first live snapshot
+showed the initial seven fits at roughly 300–325 of 2,000 updates. No primary
+classification result or selected common case is available at this point.
