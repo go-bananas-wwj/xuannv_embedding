@@ -79,3 +79,14 @@ after update three. All 1099 tests pass. Original interrupted checkpoints and
 OOM records are retained. Only the equivalent engine identity is rebound after
 payload comparison, allowing the original matched study to resume without
 changing the model, loss, batch, data exposure or downstream protocol.
+
+The six-view Haidian checkpoint after 200 warm-up updates exposed an additional
+allocator-fragmentation failure during backward, despite the fresh eight-update
+gate. The installed TorchNPU allocator supports the documented
+[`expandable_segments:True` option](https://github.com/Ascend/pytorch/blob/master/docs/zh/api/environment_variable/memory_management/PYTORCH_NPU_ALLOC_CONF.md).
+Using this allocation policy, the original checkpoint completed 50 consecutive
+full updates at batch 64 with zero allocation failures. Model code, loss,
+optimizer, sampling and fit specifications were unchanged. Other workers were
+handed off at their next atomic checkpoint; completed models were retained.
+The restarted controller applies the same allocation policy to all subsequent
+fits and readers. This remains an execution check, with primary F1 scores pending.
