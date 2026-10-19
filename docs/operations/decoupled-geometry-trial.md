@@ -84,3 +84,13 @@ bind that same payload, and their completed output identities match their exact
 recipe checksums and registered regional tile counts. This extends the earlier
 header-only inventory. It does not rehash every feature array, rerun extraction,
 prove the full raw-source closure or constitute a selected-model release.
+
+All eighteen fits have now reached update 2,000 with their registered all-region
+tile counts. The terminal-weight audit matched every current payload to its frozen
+source identity and checked public/query normalization plus weak-domain/class-weight
+equality across all roles and cases within each region. Twelve new checkpoints
+passed CPU strict loading and finite-state checks; six earlier proofs were reused
+only after exact current payload-checksum equality. No encoder or reader fitting,
+inference or task scoring was repeated for this integrity check. Remaining exports
+and the complete primary evaluation still have to finish; no accuracy acceptance
+or selected-model release is established by these checks.
