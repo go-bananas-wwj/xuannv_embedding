@@ -212,3 +212,26 @@ Select one global candidate by its worst margin, then mean; do not select differ
 coefficients by region, reader or task. Do not start formal fitting until CPU and
 real missing-source/recovery/full-region memory gates pass. More epochs alone are
 not the first response to training losses that have largely plateaued.
+
+
+## Readout budget and cached failure diagnosis
+
+The main reader protocol fits independent binary one-versus-rest tasks and
+averages all registered task F1s within each region. It is not the score of a
+jointly normalized multiclass predictor. MLP/CNN use the dense known valid pixels
+in each task's20 selected support tiles. In the completed study this is roughly
+34,559–34,562 pixels in Haidian,261,990–307,106 in Harbin and158,140–174,706 in
+Auckland. The separate linear-reader4096-point cap does not apply to these neural
+readers. They train100 full-tile updates with batch size2 and clipped positive
+class weighting, with identical support and batch schedules for all methods.
+Saved neural scores are logits, with calibration-selected logit thresholds.
+
+A cached-prediction diagnosis covers all40 native conditions. Auckland's urban
+park/open-space MLP obtains nearly the same number of true positives as AEF
+(6,972 versus6,847), but substantially more false positives (9,958 versus3,332),
+primarily on productive grassland. Manuka/Kanuka false positives mostly fall on
+indigenous forest; Harbin grass also confuses tree-covered locations. This
+supports investigating contextual value interactions rather than merely adding
+training epochs. These destinations are reference classes for independent binary
+tasks, not a new multiclass confusion matrix or a replacement evaluation scope.
+All negative tasks and cached predictions remain part of the study evidence.
