@@ -67,3 +67,15 @@ Each now uses statistics from its own observed public feature coordinates; query
 statistics remain exactly shared across all roles and candidates within a region.
 A label-free diagnostic found 17.4–20.0% clipping with unrelated anchor statistics.
 This input correction was recorded before formal weights or primary scores.
+
+The initial cold single-pass memory check proved insufficient: consecutive formal
+training exhausted memory at the transition from burn-in. The trainer now releases
+previous batch, output and reconstruction-target references before the next step.
+Regression tests reproduce the retained references on the old implementation.
+An AST audit finds only reference deletions; CPU old/new model and optimizer
+states, including migrated recovery, are bit-exact. Both real full-resident
+batch-64 gates then completed eight updates, burn-in transition and recovery
+after update three. All 1099 tests pass. Original interrupted checkpoints and
+OOM records are retained. Only the equivalent engine identity is rebound after
+payload comparison, allowing the original matched study to resume without
+changing the model, loss, batch, data exposure or downstream protocol.

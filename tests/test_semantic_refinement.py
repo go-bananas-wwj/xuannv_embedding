@@ -190,3 +190,37 @@ def test_conditional_schema_requires_explicit_architecture_and_recovers_joint_we
     assert all(torch.equal(state[k], full[k]) for k in state)
     refinement.export(path)
     assert np.isfinite(np.load(Path(spec["output"]) / "embedding/annual.npy")).all()
+
+
+@pytest.mark.parametrize("with_auxiliary", [False, True])
+def test_training_releases_previous_batch_outputs_and_targets_before_next_forward(
+    tmp_path, monkeypatch, with_auxiliary
+):
+    import weakref
+
+    path, _ = fixture_spec(tmp_path)
+    previous = {"output": None, "targets": [], "inputs": []}
+    original_loss = refinement.semantic_loss
+
+    def observed_loss(output, labels, targets, *args, **kwargs):
+        previous["targets"] = [weakref.ref(v) for v in targets.values() if v is not None]
+        return original_loss(output, labels, targets, *args, **kwargs)
+
+    def forward(model, batch, shape, *, burnin=False):
+        assert previous["output"] is None or previous["output"]() is None
+        assert all(ref() is None for ref in previous["targets"])
+        assert all(ref() is None for ref in previous["inputs"])
+        value = refinement._forward(model, batch, shape, burnin=burnin)
+        previous["output"] = weakref.ref(value)
+        previous["inputs"] = [weakref.ref(v) for v in batch if isinstance(v, torch.Tensor)]
+        return value
+
+    def auxiliary(output, visible, step, spec):
+        variance = output.white_features.square().mean()
+        return {"variance": variance, "loss": variance * 0}
+
+    monkeypatch.setattr(refinement, "semantic_loss", observed_loss)
+    runtime = refinement.RefinementRuntime(
+        forward=forward, extra_loss=auxiliary if with_auxiliary else None
+    )
+    assert refinement.train(path, runtime=runtime)["state"] == "complete"

@@ -492,6 +492,11 @@ def train(path, *, max_updates=None, runtime: RefinementRuntime | None = None):
                     checkpoint()
                     raise RuntimeError("Semantic refinement disk reserve reached")
                 checkpoint()
+            # Do not overlap the next large forward with the preceding batch,
+            # predictions or normalized reconstruction targets still in locals.
+            del batch, out, loss, targets, s, d, t, visible, labels, _
+            if runtime.extra_loss is not None:
+                del extra
         if step < spec["steps"]:
             result = {"state": "checkpointed", "step": step, "unique_training_tiles": len(seen)}
             dump(status, result)
