@@ -614,6 +614,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.training.decoupled_geometry import main as separated_main
 
         return separated_main(forwarded[1:])
+    if forwarded and forwarded[0] == "content-adaptive-residual":
+        from xuannv_embedding.training.content_adaptive_residual import main as adaptive_main
+
+        return adaptive_main(forwarded[1:])
     if forwarded and forwarded[0] == "prithvi-features":
         from xuannv_embedding.export.prithvi_features import main as prithvi_main
 
@@ -668,6 +672,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("time-modulated", help="按真实观测时间引导地方视觉特征融合", add_help=False)
     sub.add_parser("gated-geometry", help="自适应空间融合与地方视觉相似关系保持", add_help=False)
     sub.add_parser("decoupled-geometry", help="公共语义约束与地方细节独立学习", add_help=False)
+    sub.add_parser("content-adaptive-residual", help="按内容学习有界特征融合比例", add_help=False)
     sub.add_parser("prithvi-features", help="公开时序预训练特征与完整区域投影", add_help=False)
     sub.add_parser("semantic-features", help="静态高分语义特征与无标签投影", add_help=False)
     sub.add_parser("regional-tuning", help="验证集选参并监控有界区域实验", add_help=False)

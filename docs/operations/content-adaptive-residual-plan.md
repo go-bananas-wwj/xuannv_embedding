@@ -60,3 +60,38 @@ require every region's mean AEF gain of at least 0.5 points. Only an eligible
 case gets frozen full-region queries. Complete source/rebuild, contribution,
 compute-cost and remaining paper-task evidence is still required after any
 primary success. All negatives remain; no Overleaf success claim is supported yet.
+
+The package implementation is now present with a dedicated strict training and
+export command. Nineteen behavioral tests cover clipping, convex bounds, frozen
+heads/source gradients, exact CPU recovery, invalid identities, duplicate fields,
+CLI routing, terminal-payload integrity and batch/output lifetime. All 1,132 CPU
+tests, formatting, static checks, repository policy and package builds passed;
+wheel and sdist copies of the new production modules exactly match the source.
+All nine real region/role source and weak-domain contracts passed.
+
+Three real NPU checks used the full original regional index with two-update
+partial training, two further updates through recovery, and cold inference on
+two audit tiles. No four-update checkpoint was labelled a terminal fit. All
+heads/statistics stayed unchanged, FP32 alpha/output/logits and componentwise
+bounds passed, and output arrays were finite. These checks do not score tasks.
+
+| Candidate batch | Measured samples/s | Peak allocated GiB |
+| --- | ---: | ---: |
+| 64 | 771.47 | 15.57 |
+| 128 | 801.38 | 22.97 |
+| 256 | 818.03 | 37.78 |
+
+The predeclared hardware rule selected batch 256. The full 422-tile resident check
+then trained 100 updates, recovered to update 110 and retained the same 37.78 GiB
+peak with finite source-bound weights. The formal eighteen specifications now
+freeze batch 256 for every case, role and region; none uses the preflight weights
+as an initialization. These are hardware and integrity checks, not accuracy or
+statistical-significance evidence. Formal fitting and the unchanged complete
+primary evaluation are the next stage.
+
+A further 29 unique obsolete evaluation grids from two completed negative studies
+were retired after enumerating 52 hardlink paths. Actual free-space growth equals
+30.4612 GiB, leaving about 149.35 GiB. All 23 protected current-reference/source
+arrays, every source annual embedding and weight, original scores, predictions,
+labels, masks and figures remain. Per-file identity/deletion records are retained
+outside Git; the removed grids can be rebuilt without refitting old readers.
