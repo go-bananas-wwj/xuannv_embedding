@@ -235,3 +235,45 @@ supports investigating contextual value interactions rather than merely adding
 training epochs. These destinations are reference classes for independent binary
 tasks, not a new multiclass confusion matrix or a replacement evaluation scope.
 All negative tasks and cached predictions remain part of the study evidence.
+
+
+## Conditional-context trial completed: no common accepted model
+
+Both preservation settings completed eighteen terminal fits and thirty-six readers,
+covering all240 conditions. The dependent CPU audit independently reproduces the
+saved-prediction F1/IoU counts, shared support/target coordinates, frozen head
+payloads and global candidate ranking. Neither setting passes the common gate.
+The earlier semantic-residual family remains the closest completed common case.
+
+| Region | Context0.05 MLP/CNN F1 | Context0.20 MLP/CNN F1 |
+| --- | ---: | ---: |
+| Haidian | 84.414 / 84.493 | 84.501 / 84.612 |
+| Harbin | 56.618 / 58.060 | 56.531 / 58.747 |
+| Auckland | 63.678 / 64.934 | 63.676 / 64.668 |
+
+Context0.05 exceeds AEF with both Auckland readers, and its native-minus-degraded
+Auckland gains are0.862/0.598 points, but Harbin worsens. Its regional mean AEF
+advantage in Auckland is only0.247 points, below the fixed0.5-point requirement.
+The worst margins are minus2.695 and2.008 points respectively. No regional model
+splicing or full-query promotion follows from these results. All positive and
+negative conditions remain recorded.
+
+A source-only audit finds correct RGB channel metadata and no large systematic
+Harbin translation relative to public RGB in the sampled images. At10m audit
+sampling,32/29/31 credible Haidian/Harbin/Auckland matches are within one pixel;
+this does not establish subpixel accuracy. No shifts were applied. A concrete
+input-coverage gap was found instead: the current Harbin local RGB composite
+contains June/August/September/October views, while an authorized9April2025 view
+exists inside the registered twelve-month public window. Legacy May–October
+optical preparation excluded it. Its RGB/mask windows have now been materialized
+for all422 unchanged geographic tiles; a separate complete-view composite is being
+prepared. Original data, features, models and scores remain unchanged. Actual
+acquisition days and month-only intervals are preserved separately from synthetic
+first-of-month filenames. No new model has been trained on this corrected input.
+
+Public annual RGB and the local growing-season views also differ in acquisition
+support. The next design must inspect date-aware public/local pairing and optional
+context contribution before assuming more epochs or more spatial mixing will
+resolve the regional tradeoff. Feature correlation diagnostics are descriptive;
+they do not prove a classification cause. Paper body updates remain deferred until
+one common method actually clears all regional requirements.
