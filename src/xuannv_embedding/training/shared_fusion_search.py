@@ -123,6 +123,8 @@ def read_plan(path):
                     ["public", "semantic", "raw", "terrain"],
                     ["public", "semantic", "raw", "context"],
                     ["public", "semantic", "raw", "terrain", "context"],
+                    ["public", "public_visual", "semantic", "raw"],
+                    ["public", "public_visual", "raw"],
                 ]
                 or len(recipe["dimensions"]) != len(recipe["sources"])
                 or sum(recipe["dimensions"]) != 64
@@ -130,6 +132,10 @@ def read_plan(path):
             ):
                 raise ValueError("Invalid shared observation fusion recipe")
             _normalization_options(recipe, len(recipe["sources"]))
+            if "public_visual" in recipe["sources"] and any(
+                "public_visual" not in r for r in regions
+            ):
+                raise ValueError("Frozen public visual features are required in every region")
             if "terrain" in recipe["sources"] and any("terrain" not in r for r in regions):
                 raise ValueError("Public terrain must be provided in every registered region")
             if "context" in recipe["sources"] and (
@@ -151,7 +157,7 @@ def prepare_sources(plan, region):
     root = Path(plan["output"]) / region["name"] / "inputs"
     root.mkdir(parents=True, exist_ok=True)
     refs = {}
-    extra = [name for name in ["terrain", "context"] if name in region]
+    extra = [name for name in ["terrain", "context", "public_visual"] if name in region]
     names = ["public", "semantic", "raw", *extra]
     for name in names:
         value = region[name]
@@ -200,6 +206,7 @@ def prepare_sources(plan, region):
         or arrays["raw"].shape != (shape[0], 95, *shape[-2:])
         or ("terrain" in arrays and arrays["terrain"].shape != (shape[0], 5, *shape[-2:]))
         or ("context" in arrays and arrays["context"].shape != (shape[0], 11, *shape[-2:]))
+        or ("public_visual" in arrays and arrays["public_visual"].shape != shape)
     ):
         raise ValueError("Shared input index, footprint or channel dimensions differ")
     return refs, index

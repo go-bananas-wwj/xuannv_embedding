@@ -366,3 +366,73 @@ def test_shared_semantic_context_and_terrain_keep_equal_output_budget(tmp_path, 
     identity = json.loads((path.parent / "identity.json").read_text())
     assert set(identity["sources"]) == set(recipe["sources"])
     assert export_candidate(plan, region, recipe) == path
+
+
+@pytest.mark.parametrize("include_local", [True, False])
+def test_shared_public_visual_skip_preserves_independent_observation_sources(
+    tmp_path, include_local
+):
+    plan, region, _, _ = fixture_inputs(tmp_path)
+    path = tmp_path / "public_visual.npy"
+    np.save(path, np.random.default_rng(46).normal(size=(22, 64, 2, 2)).astype(np.float32))
+    region["public_visual"] = {
+        **ref(path),
+        "layout": "nchw",
+        "index_sha256": region["index"]["sha256"],
+    }
+    recipe = {
+        "name": "visual_skip",
+        "kind": "blocks",
+        "sources": (
+            ["public", "public_visual", "semantic", "raw"]
+            if include_local
+            else ["public", "public_visual", "raw"]
+        ),
+        "dimensions": [8, 8, 24, 24] if include_local else [8, 32, 24],
+    }
+    regions = [{**region, "name": name} for name in ["a", "b", "c"]]
+    rp, ap, sp = tmp_path / "regions.json", tmp_path / "anchor.json", tmp_path / "plan.json"
+    dump(rp, {"regions": regions})
+    dump(
+        ap,
+        {
+            "state": "complete",
+            "selection_uses_validation_only": True,
+            "values": {
+                r["name"]: {h: {"aef": 0.6, "public": 0.5} for h in ["mlp", "conv3x3"]}
+                for r in regions
+            },
+        },
+    )
+    plan.update(schema="shared-fusion-search-v1", regions=ref(rp), anchor=ref(ap), recipes=[recipe])
+    dump(sp, plan)
+    read_plan(sp)
+    feature = export_candidate(plan, region, recipe)
+    assert np.load(feature).shape == (22, 64, 2, 2)
+    identity = json.loads((feature.parent / "identity.json").read_text())
+    assert set(identity["sources"]) == set(recipe["sources"])
+    assert (
+        json.loads((feature.parent / "status.json").read_text())["labels_used_for_projection"]
+        is False
+    )
+    assert export_candidate(plan, region, recipe) == feature
+    regions[1].pop("public_visual")
+    dump(rp, {"regions": regions})
+    plan["regions"] = ref(rp)
+    dump(sp, plan)
+    with pytest.raises(ValueError, match="public visual.*every region"):
+        read_plan(sp)
+
+
+@pytest.mark.parametrize("wrong_index", [True, False])
+def test_shared_public_visual_skip_rejects_incompatible_geography_or_width(tmp_path, wrong_index):
+    plan, region, recipe, _ = fixture_inputs(tmp_path)
+    path = tmp_path / "public_visual.npy"
+    np.save(path, np.zeros((22, 64 if wrong_index else 63, 2, 2), np.float32))
+    region["public_visual"] = {
+        **ref(path),
+        "layout": "nchw",
+        "index_sha256": "0" * 64 if wrong_index else region["index"]["sha256"],
+    }
+    with pytest.raises(ValueError, match="index|dimensions"):
+        export_candidate(plan, region, recipe)
