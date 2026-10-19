@@ -91,3 +91,25 @@ Label rasterization/model/trainer code, tests and real NPU gates must precede
 formal training. This registration is not evidence those models already trained.
 Original model bundles, all failures, introduction/related work and the Overleaf
 body remain protected. The overall three-region goal is still unachieved.
+
+
+## Implemented pre-training gates
+
+The generic `osm-weak-targets` and `semantic-refinement` experiment commands now
+prepare known-only weak labels, train the residual learner and export a terminal
+64D embedding. Configurations reject evaluation fields and unknown or duplicate
+keys. Training serializes recovery state atomically, checks output ownership,
+cycles through every tile and records weak-label domains and class weights.
+Per-source unlabelled statistics reset the same seed independently so a missing
+optional source cannot change the public statistics. Native context alignment
+matches the frozen exporter, including padding, and remains differentiable without
+an export-module dependency in the model.
+
+CPU tests cover nonunit-anchor identity, exact missing-source fallback, final
+preservation, frozen-input gradients, matched label exposure, deterministic
+interrupted recovery, geographic mismatches and cold export. Real NPU gates use
+two actual tiles in each region, four updates with a restart after update two,
+and terminal export. Full-fusion BF16 batch64 on actual observations passes at
+13.8 GiB peak allocation; a three-update synthetic batch64 also passes. These
+checks validate execution, not downstream improvement. All numerical receipts,
+source identities, maps and weights remain outside Git.

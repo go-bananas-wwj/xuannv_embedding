@@ -590,6 +590,14 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.training.representation_search import main as search_main
 
         return search_main(forwarded[1:])
+    if forwarded and forwarded[0] == "osm-weak-targets":
+        from xuannv_embedding.data_process.osm_weak_targets import main as osm_main
+
+        return osm_main(forwarded[1:])
+    if forwarded and forwarded[0] == "semantic-refinement":
+        from xuannv_embedding.training.semantic_refinement import main as refinement_main
+
+        return refinement_main(forwarded[1:])
     if forwarded and forwarded[0] == "prithvi-features":
         from xuannv_embedding.export.prithvi_features import main as prithvi_main
 
@@ -638,6 +646,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("public-statistics", help="按波段名称汇总公开时序观测", add_help=False)
     sub.add_parser("fusion-transfer", help="固定融合配方的跨区域评测", add_help=False)
     sub.add_parser("representation-search", help="固定维度融合的验证集搜索", add_help=False)
+    sub.add_parser("osm-weak-targets", help="已知 OSM 标签的地理对齐弱监督", add_help=False)
+    sub.add_parser("semantic-refinement", help="保持公共表征的多源语义残差训练", add_help=False)
     sub.add_parser("prithvi-features", help="公开时序预训练特征与完整区域投影", add_help=False)
     sub.add_parser("semantic-features", help="静态高分语义特征与无标签投影", add_help=False)
     sub.add_parser("regional-tuning", help="验证集选参并监控有界区域实验", add_help=False)
