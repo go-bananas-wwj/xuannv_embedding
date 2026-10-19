@@ -77,3 +77,11 @@ predictions, thresholds, source and active public/raw-visual inputs remain.
 No formal subspace fit, export or primary score preceded the completed checks.
 The extra visual branch currently uses local optical imagery; public Sentinel-1
 information remains in the public expert, and no new local SAR branch is claimed.
+
+Formal fitting has started from immutable source commit
+`e9111814764afa25bdfbae1cdf535cf496fd2642`, synchronized to GitHub after all checks.
+The first three regional native projection bundles have completed; their paired
+64D exports are running. A bounded controller uses three CPU fit/export workers
+and then leases unused devices 1–7 for the fixed readers. Quiet dependent audit
+and deterministic-grid observers are live. Device 0 is excluded. No complete
+primary-task score or accepted common model is available at this point.
