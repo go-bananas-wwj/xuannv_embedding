@@ -56,3 +56,37 @@ Until these requirements are met, leave the paper body and goal status unchanged
 The latest software gates and a running extraction queue prove neither accuracy
 nor a three-region methodological success. Exact read-only fetch receipts,
 source/feature identities, approved cohort and all task records stay outside Git.
+
+## Current time-guided trial, still awaiting primary scores
+
+The current registered study has two common configurations, eighteen matched
+regional fits and thirty-six MLP/CNN readers, covering all240 primary conditions.
+A read-only audit checked all eighteen frozen fit specifications and thirteen
+available checkpoint snapshots: public and monthly-query normalization is exact
+across roles/cases within a region. Actual regional weights also recover the
+learned public branch exactly when both local paths are absent. These checks do
+not establish that either candidate beats AEF.
+
+The high-resolution fusion currently returns one static64D vector for the
+observation period. Its twelve monthly public guidance maps are intermediate
+inputs, not twelve high-resolution monthly outputs. The temporal teacher uses
+calendar/Fourier summaries with a spatial CNN. Local optical observations number
+six, five and one in the three regions; an uncertain-year aerial observation is
+not copied into twelve fictitious acquisitions. Haidian's final April30 image
+retains its author-assigned May analysis bin separately from physical time.
+
+Describe the actual95D annual-statistics reconstruction and weak WorldCover/OSM
+objectives, plus the one common variance/covariance setting if selected. Do not
+attribute the legacy dense monthly reconstruction, vMF objective or direct local
+SAR branch to these states. Distinguish independent regional models from a
+verified shared global coordinate space: within-region success does not prove
+zero-shot weight transfer, cross-region retrieval or interchangeable classifiers.
+
+A missing-local-source test of a trained native model differs from the separately
+trained genuine-public control. The matched public RGB and10m-information local
+controls remain necessary for attribution. All extra tasks and figures retained
+in the paper must use the chosen current model. A gap-fill experiment must mask
+the target before recomputing upstream statistics, guides, public RGB composites
+and anchors; regressing a hidden observation from an embedding that already
+contains it is not a held-out reconstruction test. Keep the introduction and
+related work, and do not change Overleaf until the scientific gates pass.
