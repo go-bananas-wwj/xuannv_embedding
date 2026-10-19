@@ -277,3 +277,30 @@ context contribution before assuming more epochs or more spatial mixing will
 resolve the regional tradeoff. Feature correlation diagnostics are descriptive;
 they do not prove a classification cause. Paper body updates remain deferred until
 one common method actually clears all regional requirements.
+
+
+## Public monthly guidance preparation
+
+The existing public temporal encoder already returns twelve monthly64D feature
+maps; their mean is its annual output. An inference-only
+`temporal-public-queries` command now exports observed-center monthly guidance on
+a fixed context grid. It requires a genuinely public terminal checkpoint, strict
+source identities and twelve unique consecutive calendar bins. Map targets and
+local images are not loaded. Fractional observation coverage is retained and
+unobserved values cannot contaminate interpolation. Float32 values, atomic payload
+publication and checksum-verified partial-prefix recovery preserve provenance.
+
+Three actual regional gates export two tiles, recover and export two more. All
+four replayed annual outputs in each region exactly match the existing annual
+cache. This proves reuse of the old public model for guidance, not an accuracy
+improvement. Whole-region export follows the registered numerical/source gates;
+no encoder retraining or new primary readout is part of that preparation.
+
+Time records separate physical acquisition from analysis-bin naming. Raw Planet
+metadata confirms30April2026; the legacy cache records the author's explicit
+assignment of that acquisition to the May analysis bin. Both facts are retained.
+Harbin filenames/registry provide day or month precision; month-only delivery
+never becomes an asserted first-of-month acquisition. The LINZ2024 aerial view
+retains year precision unless more exact provenance is available, and stays one
+actual view. Missing October coverage in fifteen Harbin tiles is represented by
+explicit empty masks, not an invented optical observation.
