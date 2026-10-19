@@ -54,8 +54,11 @@ class SemanticResidualFusion(nn.Module):
         width: int = 128,
         public_residual_scale: float = 0.25,
         local_residual_scale: float = 0.5,
+        interaction_layers: int = 0,
     ) -> None:
         super().__init__()
+        if type(interaction_layers) is not int or interaction_layers not in {0, 1, 2}:
+            raise ValueError("Semantic interaction layer count must be zero, one or two")
         if (
             type(width) is not int
             or width < 8
@@ -101,6 +104,24 @@ class SemanticResidualFusion(nn.Module):
         self.spectral_head = nn.Conv2d(64, 95, 1)
         self.detail_head = nn.Conv2d(64, 64, 1)
         self.context_head = nn.Conv2d(64, 64, 1)
+        # Construct after the original heads to retain common seeded initialization.
+        mixer = []
+        for layer in range(interaction_layers):
+            dilation = layer + 1
+            mixer.extend(
+                [
+                    nn.Conv2d(
+                        3 * width + 2 if layer == 0 else width,
+                        width,
+                        3,
+                        padding=dilation,
+                        dilation=dilation,
+                    ),
+                    nn.GroupNorm(1, width),
+                    nn.GELU(),
+                ]
+            )
+        self.local_mixer = nn.Sequential(*mixer) if mixer else None
 
     def set_statistics(self, name: str, mean: torch.Tensor, std: torch.Tensor) -> None:
         if name not in {"public", "spectral", "detail", "context", "context_target"}:
@@ -218,6 +239,12 @@ class SemanticResidualFusion(nn.Module):
                 c_hidden = torch.where(c_mask, numerator / coverage.clamp_min(1e-6), 0)
             else:
                 c_hidden = torch.zeros_like(d_hidden)
+            if self.local_mixer is not None:
+                joint = self.local_mixer(
+                    torch.cat([p_hidden, d_hidden, c_hidden, d_mask.float(), coverage], 1)
+                )
+                d_hidden = (d_hidden + joint) * d_mask
+                c_hidden = (c_hidden + joint) * c_mask
             scores = self.selector(
                 torch.cat([p_hidden, d_hidden, c_hidden, d_mask.float(), coverage], 1)
             )

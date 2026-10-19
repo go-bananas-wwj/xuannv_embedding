@@ -60,10 +60,16 @@ def specification(path):
     }
     if (
         set(spec) != expected
-        or spec["schema"] != "semantic-refinement-v1"
+        or spec["schema"] not in {"semantic-refinement-v1", "semantic-refinement-v2"}
         or set(spec["inputs"])
         != {"public", "spectral", "detail", "context", "context_mask", "context_target"}
-        or set(spec["model"]) != {"width", "public_residual_scale", "local_residual_scale"}
+        or set(spec["model"])
+        != {"width", "public_residual_scale", "local_residual_scale"}
+        | ({"interaction_layers"} if spec["schema"] == "semantic-refinement-v2" else set())
+        or (
+            spec["schema"] == "semantic-refinement-v2"
+            and spec["model"].get("interaction_layers") != 2
+        )
         or set(spec["loss"])
         != {"worldcover", "area", "geometry", "spectral", "detail", "context", "preservation"}
         or any(

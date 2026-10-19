@@ -167,3 +167,26 @@ def test_resident_and_streaming_updates_produce_identical_model_parameters(tmp_p
     refinement.train(path)
     actual = torch.load(str(Path(spec["output"]) / "model.weights.pt"), weights_only=True)
     assert all(torch.equal(expected["model"][k], actual["model"][k]) for k in expected["model"])
+
+
+def test_conditional_schema_requires_explicit_architecture_and_recovers_joint_weights(tmp_path):
+    path, spec = fixture_spec(tmp_path)
+    spec["schema"] = "semantic-refinement-v2"
+    dump(path, spec)
+    with pytest.raises(ValueError, match="specification"):
+        refinement.specification(path)
+    spec["model"]["interaction_layers"] = 2
+    dump(path, spec)
+    assert refinement.train(path, max_updates=2)["state"] == "checkpointed"
+    refinement.train(path)
+    state = torch.load(str(Path(spec["output"]) / "model.weights.pt"), weights_only=True)["model"]
+    other = copy.deepcopy(spec)
+    other["output"] = str(tmp_path / "conditional_full")
+    p = tmp_path / "conditional_full.json"
+    dump(p, other)
+    refinement.train(p)
+    full = torch.load(str(Path(other["output"]) / "model.weights.pt"), weights_only=True)["model"]
+    assert any(k.startswith("local_mixer.") for k in state)
+    assert all(torch.equal(state[k], full[k]) for k in state)
+    refinement.export(path)
+    assert np.isfinite(np.load(Path(spec["output"]) / "embedding/annual.npy")).all()

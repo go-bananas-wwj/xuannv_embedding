@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from xuannv_embedding.models.semantic_residual import SemanticResidualFusion, semantic_loss
@@ -125,3 +126,46 @@ def test_fine_coverage_cannot_expand_weak_map_label_domain():
     weights = {k: torch.ones(n) for k, n in [("worldcover", 12), ("area", 7), ("geometry", 4)]}
     losses = semantic_loss(out, labels, targets, values[-1], weights)
     assert all(losses[k] == 0 for k in ["worldcover", "area", "geometry"])
+
+
+def test_conditional_context_keeps_the_original_public_start_and_shared_initial_parameters():
+    torch.manual_seed(41)
+    base = SemanticResidualFusion(width=16)
+    torch.manual_seed(41)
+    conditional = SemanticResidualFusion(width=16, interaction_layers=2)
+    assert all(torch.equal(v, conditional.state_dict()[k]) for k, v in base.state_dict().items())
+    values = sample()
+    assert torch.equal(run(conditional, values).embedding, values[0])
+    with pytest.raises(ValueError, match="interaction"):
+        SemanticResidualFusion(interaction_layers=-1)
+
+
+def test_conditional_local_value_changes_with_public_context_before_gate_learning():
+    values = list(sample())
+    model = SemanticResidualFusion(width=16, interaction_layers=2)
+    with torch.no_grad():
+        model.detail_delta.weight.normal_(std=0.1)
+        model.context_delta.weight.normal_(std=0.1)
+    first = run(model, values)
+    values[0] = -values[0]
+    second = run(model, values)
+    # Zero selector weights keep the source gate fixed; the value must use public context.
+    assert torch.equal(first.gates, second.gates)
+    assert not torch.allclose(first.white_delta, second.white_delta)
+    second.white_delta.square().mean().backward()
+    assert model.local_mixer[0].weight.grad.abs().sum() > 0
+
+
+def test_conditional_mixer_cannot_leak_local_bias_when_sources_are_absent():
+    values = list(sample())
+    model = SemanticResidualFusion(width=16, interaction_layers=2)
+    with torch.no_grad():
+        model.detail_delta.bias.fill_(2)
+        model.context_delta.bias.fill_(-2)
+        model.public_delta.bias.fill_(0.2)
+    values[2] = None
+    values[3] = None
+    values[4] = None
+    out = run(model, values)
+    assert torch.equal(out.embedding, out.public_embedding)
+    assert torch.count_nonzero(out.gates[:, 1:]) == 0

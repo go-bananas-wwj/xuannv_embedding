@@ -165,3 +165,50 @@ These source facts do not establish downstream accuracy. The three-region common
 acceptance gate, matched label exposure and all negative task results remain
 required. GitHub CI for the resident-input implementation passed quality,
 test/package, clean-wheel installation and secret scanning.
+
+
+## Completed learned-refinement result and next common architecture
+
+All nine terminal regional/role fits and eighteen fresh readers completed all120
+registered conditions. A separate audit of saved predictions reproduces F1/IoU
+from thresholded counts, verifies the exact AEF target locations and shared support,
+checks identical reader initialization/batch schedules and100 optimizer updates,
+and reproduces the failed common gate. No model inference was repeated for this
+integrity check. The new common candidate is closer than the preceding completed
+family, but is not accepted for frozen queries or paper success claims.
+
+| Region | High-res MLP F1 | AEF MLP F1 | High-res CNN F1 | AEF CNN F1 |
+| --- | ---: | ---: | ---: | ---: |
+| Haidian | 84.731 | 83.875 | 85.299 | 84.382 |
+| Harbin | 57.834 | 58.396 | 59.553 | 58.796 |
+| Auckland | 62.384 | 63.434 | 64.916 | 64.683 |
+
+The strongest-public floor is still enforced: Haidian CNN is0.156 percentage
+points behind its new public role, and Harbin CNN is1.203 points behind the
+retained public reference. Harbin and Auckland MLP remain below AEF. All per-task
+results, including weak Auckland Urban Parkland/Open Space and Manuka/Kanuka
+scores, are retained. Strong Exotic Forest and crop results do not replace these
+failures. Native-minus-degraded comparisons are mixed and remain fully reported.
+
+The native embedding grid is10m. The locked Haidian CLCD readout uses its30m Albers
+reference grid, while Harbin and Auckland use10m reference grids. This grid
+inventory is unchanged across models; do not describe every reference score as
+10m. The native-feature projection covers each fixed valid reference location.
+
+Current source gates mix separately computed public and local value updates.
+They can choose the magnitude of a local update, but its value vector does not
+itself jointly encode the public temporal/spectral context. The next registered
+family adds a shared public/detail/context mixer with two3x3 layers at dilations1
+and2 before the local delta projections and source gate. This puts contextual
+interactions directly into each64D feature for both readers. Zero last projections,
+public-only value updates and exact missing-local fallback remain required.
+
+Two predeclared preservation weights,0.05 and0.20, are compared with that one
+architecture. Each coefficient is applied uniformly across all regions and roles;
+eighteen independent fits yield thirty-six readers/all240 conditions. Every other
+source, weak target, step count, seed and evaluation rule stays fixed. Public
+references include both new public roles and the nondecreasing old envelope.
+Select one global candidate by its worst margin, then mean; do not select different
+coefficients by region, reader or task. Do not start formal fitting until CPU and
+real missing-source/recovery/full-region memory gates pass. More epochs alone are
+not the first response to training losses that have largely plateaued.
