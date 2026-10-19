@@ -96,3 +96,34 @@ visual samples, and retain their public block. These observations are retained
 explicitly rather than claiming complete aerial coverage. Seven NPU workers have
 started the unchanged thirty-six MLP/CNN reader jobs. No complete primary result
 is available at this stage.
+
+The study completed all 36 fresh readers and 240 conditions and failed the
+complete acceptance. Independent saved-prediction verification passed. No frozen
+query was eligible or launched, and the public envelope remains unchanged. The
+48/16 allocation is the best common case by the fixed minimum-six-margin rule,
+with worst margin −3.1697 points; the 32/32 allocation has worst margin −3.5076.
+
+| Region | Reader | Native 48/16 | AEF | Strongest public |
+| --- | --- | ---: | ---: | ---: |
+| Haidian | MLP | 82.005 | 83.875 | 84.659 |
+| Haidian | CNN | 85.202 | 84.382 | 85.455 |
+| Harbin | MLP | 56.398 | 58.396 | 58.065 |
+| Harbin | CNN | 59.592 | 58.796 | 61.080 |
+| Auckland | MLP | 61.542 | 63.434 | 63.337 |
+| Auckland | CNN | 61.555 | 64.683 | 64.724 |
+
+These are exploratory calibration macro F1 percentages, not blind geographic
+performance. Both readers' regional mean AEF changes for the 48/16 allocation are
+−0.5250, −0.6008 and −2.5100 points. All negative tasks, public and degraded
+controls, projection bundles and source records remain retained. The current
+comparison now contains seventeen common cases from nine independently audited
+balanced-v2 studies, all ineligible; it is not the full historical experiment set.
+
+Source geometry also exposed a limitation worth testing: the direct visual
+branch has 40x40 native DINO tokens over a 1,280 m footprint, or 32 m per token.
+The prepared RGB grid is 2 m, but the 16-pixel token patch spans 32 m. Interpolation
+to the public 10 m grid adds no native visual detail. This statement applies to
+this trial's direct visual branch, not every historical branch or the full mixed
+embedding. First-tile checks in all nine region/role sources confirm existing
+640x640 RGB working grids and permit explicit 5x5 subpixel groups. They are
+feasibility/geometry diagnostics, not whole-region quality or causal proof.
