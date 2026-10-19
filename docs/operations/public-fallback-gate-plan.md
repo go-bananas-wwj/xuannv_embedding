@@ -111,3 +111,18 @@ used otherwise idle devices 3–5 while the remaining four formal fits continued
 no source training or downstream scoring was repeated. It covers inference from
 the existing frozen cache inputs. Raw imagery, DINO feature extraction and fitted
 PCA replay remain outside this check. The replay controller completed normally.
+
+All eighteen formal fits and exports have now completed. The matched-training
+audit passed for all eighteen: terminal steps and full regional coverage match the
+registration, public normalization is frozen and equal within each region, and
+weak domains/class weights match across both cases and all roles. All auxiliary
+heads were optimized as declared. Seven workers have started the unchanged MLP and
+3x3 CNN calibration readers; no complete primary result is available yet.
+
+The eighteen successful training process receipts total 4.5279 NPU-hours, with
+46.82 minutes from first training start to last training finish. Individual
+processes took 899.60–916.00 seconds. This is incremental gate-training runtime,
+including process initialization, input loading and checkpoint checks. It excludes
+frozen source fitting, public temporal-model training, DINO extraction/pretraining,
+data preparation/PCA, QA profiles, export and downstream scoring. It is not a
+complete pipeline cost or a comparison with AEF pretraining cost.
