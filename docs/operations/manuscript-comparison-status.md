@@ -11,6 +11,6 @@
 | score_without_geometry_haidian | complete |
 | score_binary_coverage_haidian | complete |
 | score_aef_highres_guide_haidian | complete |
-| score_aef_public_guide_haidian | pending |
-| score_aef_degraded_guide_haidian | pending |
+| score_aef_public_guide_haidian | complete |
+| score_aef_degraded_guide_haidian | running |
 | summary_haidian | pending |
