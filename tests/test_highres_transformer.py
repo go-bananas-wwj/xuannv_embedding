@@ -146,3 +146,33 @@ def test_static_highres_missing_pixels_restore_base_and_receive_gradients():
     result.embedding_map.square().mean().backward()
     grad = model.encoders["optical"].projection.weight.grad
     assert grad is not None and torch.isfinite(grad).all() and grad.abs().sum() > 0
+
+
+def test_joint_mode_updates_public_backbone_without_changing_checkpoint_keys():
+    model, x, m, t, hi, valid = example()
+    keys = set(model.state_dict())
+    model.set_freeze_base(False)
+    model.train()
+    result = model(x, m, t, hi, valid)
+    result.reconstructions["s2_recon"].square().mean().backward()
+    gradients = [p.grad for p in model.base.parameters() if p.grad is not None]
+    assert gradients and any(g.abs().sum() > 0 for g in gradients)
+    assert all(torch.isfinite(g).all() for g in gradients)
+    assert set(model.state_dict()) == keys
+    model.set_freeze_base(True)
+    assert not any(p.requires_grad for p in model.base.parameters())
+
+
+def test_joint_constructor_and_missing_static_observation_match_public_base():
+    model, x, m, t, hi, valid = example(allow_base_only=True)
+    joint = HighResTransformerModel(
+        copy.deepcopy(model.base),
+        {"optical": 3},
+        {"optical_recon": 3},
+        settings=model.settings,
+        freeze_base=False,
+    ).eval()
+    missing = {"optical": torch.zeros_like(valid["optical"][:, 0])}
+    images = {"optical": torch.full_like(hi["optical"][:, 0], float("nan"))}
+    actual = joint(x, m, t, images, missing).embedding_map
+    torch.testing.assert_close(actual, joint.base(x, m, t).embedding_map, rtol=0, atol=0)

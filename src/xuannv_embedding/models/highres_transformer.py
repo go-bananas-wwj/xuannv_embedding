@@ -249,8 +249,8 @@ class CrossResolutionInjector(nn.Module):
 class HighResTransformerModel(nn.Module):
     def __init__(self, base, sources, targets, *, settings, freeze_base):
         super().__init__()
-        if not freeze_base:
-            raise ValueError("transformer adapter currently requires freeze_base")
+        if type(freeze_base) is not bool:
+            raise ValueError("freeze_base must be an explicit boolean")
         if base.stp_encoder.precision_scale != 1:
             raise ValueError("transformer adapter requires precision_scale=1")
         if not settings.injection_blocks or max(settings.injection_blocks) >= len(
@@ -271,12 +271,24 @@ class HighResTransformerModel(nn.Module):
         self.new_decoders = nn.ModuleDict(
             {k: ContinuousDecoder(base.embed_dim, c) for k, c in targets.items()}
         )
-        base.requires_grad_(False)
+        self.set_freeze_base(freeze_base)
+
+    def set_freeze_base(self, freeze_base: bool) -> None:
+        """Switch optimization mode without adding or renaming checkpoint tensors."""
+        if type(freeze_base) is not bool:
+            raise ValueError("freeze_base must be an explicit boolean")
+        self.freeze_base = freeze_base
+        self.base.requires_grad_(not freeze_base)
+        if freeze_base:
+            for parameter in self.base.parameters():
+                parameter.grad = None
+        self.train(self.training)
 
     def train(self, mode=True):
         super().train(mode)
         # Preserve deterministic base vMF output; only STP needs training-mode checkpointing.
-        self.base.eval()
+        if self.freeze_base:
+            self.base.eval()
         self.base.stp_encoder.train(mode)
         return self
 
