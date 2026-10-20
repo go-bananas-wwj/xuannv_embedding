@@ -9,26 +9,28 @@ from xuannv_embedding.training import manuscript_followup as followup
 from xuannv_embedding.training.shared_fusion_search import ref
 
 
+@pytest.mark.parametrize("query_only_tiles", [0, 1])
 def test_frozen_followup_runs_both_actual_readout_heads_against_registered_aef(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, query_only_tiles
 ):
     rng = np.random.default_rng(41)
-    values = rng.normal(size=(22, 64, 8, 8)).astype(np.float32)
+    count = 22 + query_only_tiles
+    values = rng.normal(size=(count, 64, 8, 8)).astype(np.float32)
     features = tmp_path / "features.npy"
     np.save(features, values)
     baseline = tmp_path / "aef.npy"
     np.save(baseline, values.transpose(0, 2, 3, 1))
     valid = tmp_path / "valid.npy"
-    np.save(valid, np.ones((22, 8, 8), bool))
+    np.save(valid, np.ones((count, 8, 8), bool))
     labels = tmp_path / "labels.npz"
     np.savez(labels, target=(values[:, 0] > 0).astype(np.int8))
-    records = [{"patch_id": str(i), "bounds": [80 * i, 0, 80 * (i + 1), 80]} for i in range(22)]
+    records = [{"patch_id": str(i), "bounds": [80 * i, 0, 80 * (i + 1), 80]} for i in range(count)]
     index = tmp_path / "index.json"
     dump(index, {"crs": "EPSG:32650", "records": records})
     data = {
         "state": "complete",
         "protocol": "full-region-data-v1",
-        "indices": list(range(22)),
+        "indices": list(range(count)),
         "records": records,
         "train_positions": list(range(20)),
         "calibration_positions": [20, 21],
@@ -95,6 +97,24 @@ def test_frozen_followup_runs_both_actual_readout_heads_against_registered_aef(
     assert {row["head"] for row in result["rows"]} == {"mlp", "conv3x3"}
     assert result["all_support_and_scored_positions_match_AEF"] is True
     assert followup.score(path) == result
+    monkeypatch.setattr(full, "_fit", lambda *a, **k: pytest.fail("query must reuse frozen heads"))
+    query = followup.query(path)
+    assert query["heads_refitted"] is False
+    assert query["thresholds_refitted"] is False
+    assert len(query["rows"]) == 2
+    for row in query["rows"]:
+        assert row["all_region"]["observations"] == count * 8 * 8
+        assert row["outside_support_and_calibration"]["observations"] == query_only_tiles * 8 * 8
+    registered_query = tmp_path / "query.json"
+    dump(
+        registered_query,
+        {
+            "schema": "manuscript-frozen-query-v1",
+            "jobs": [ref(tmp_path / job["spec"]) for job in result["jobs"]],
+            "output": str(tmp_path / "registered-query"),
+        },
+    )
+    assert followup.query_jobs(registered_query) == query
 
 
 @pytest.mark.parametrize("policy", [None, "registered_basic"])

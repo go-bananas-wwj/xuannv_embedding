@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+from sklearn.metrics import average_precision_score
 
 from xuannv_embedding.data_process.retention import apply_manifest, file_identity
 from xuannv_embedding.downstream import full_region_readouts as full
@@ -16,6 +17,20 @@ from xuannv_embedding.export import manuscript_controls, manuscript_model
 from xuannv_embedding.export.context import dump, sha
 from xuannv_embedding.training.frozen_fusion import verified
 from xuannv_embedding.training.shared_fusion_search import reader_jobs
+
+
+def _feature(producer):
+    if producer["kind"] == "trained":
+        status = manuscript_model.export(
+            verified(producer["spec"]), producer["phase"], "npu:0", fraction=producer["coverage"]
+        )
+        return verified(status["features"])
+    if producer["kind"] == "control":
+        status = manuscript_controls.export(verified(producer["spec"]), "npu:0")
+        return verified(status["features"])
+    if producer["kind"] == "frozen":
+        return verified(producer["features"])
+    raise ValueError("Unregistered feature producer")
 
 
 def score(path):
@@ -45,18 +60,7 @@ def score(path):
                     raise ValueError("Completed prediction changed")
         return old_result
     producer = spec["producer"]
-    if producer["kind"] == "trained":
-        status = manuscript_model.export(
-            verified(producer["spec"]), producer["phase"], "npu:0", fraction=producer["coverage"]
-        )
-        feature = verified(status["features"])
-    elif producer["kind"] == "control":
-        status = manuscript_controls.export(verified(producer["spec"]), "npu:0")
-        feature = verified(status["features"])
-    elif producer["kind"] == "frozen":
-        feature = verified(producer["features"])
-    else:
-        raise ValueError("Unregistered feature producer")
+    feature = _feature(producer)
     jobs = reader_jobs(
         {"output": str(root / "readers")},
         region,
@@ -163,6 +167,104 @@ def score(path):
             dump(ledger, manifest)
             dump(root / "retention-result.json", apply_manifest(ledger, root / "deletions.jsonl"))
     return result
+
+
+def _outside_metrics(truth, scores, threshold):
+    truth = np.asarray(truth, bool)
+    prediction = np.asarray(scores) >= threshold
+    tp = int((truth & prediction).sum())
+    fp = int((~truth & prediction).sum())
+    fn = int((truth & ~prediction).sum())
+    return {
+        "observations": len(truth),
+        "f1": 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None,
+        "iou": tp / (tp + fp + fn) if tp + fp + fn else None,
+        "ap": float(average_precision_score(truth, scores)) if truth.any() else None,
+        "threshold": threshold,
+    }
+
+
+def _frozen_queries(jobs, output):
+    rows = []
+    for entry in jobs:
+        path = verified(entry)
+        spec, data, _ = full.specification(path)
+        if spec["head"] not in {"mlp", "conv3x3"}:
+            raise ValueError("Registered manuscript queries require MLP or CNN")
+        full.run(path, "full_region")
+        root = Path(spec["output"])
+        for row in json.loads((root / "full_region/results.json").read_text()):
+            key = row["key"]
+            calibration = json.loads((root / "calibration/records" / (key + ".json")).read_text())
+            threshold = calibration["row"]["metrics"]["threshold"]
+            if row["metrics"]["threshold"] != threshold:
+                raise ValueError("Full-region threshold differs from the frozen calibration")
+            prediction = root / "full_region/predictions" / spec["model"] / (key + ".npz")
+            if sha(prediction) != row["prediction_sha256"]:
+                raise ValueError("Frozen query prediction identity changed")
+            excluded = set(calibration["support"]["support_tiles"]) | {
+                data["indices"][i] for i in data["calibration_positions"]
+            }
+            with np.load(prediction) as arrays:
+                keep = ~np.isin(arrays["tiles"], list(excluded))
+                outside = _outside_metrics(arrays["truth"][keep], arrays["scores"][keep], threshold)
+            rows.append(
+                {
+                    "head": spec["head"],
+                    "task": row["task"],
+                    "all_region": row["metrics"],
+                    "outside_support_and_calibration": outside,
+                    "excluded_tile_ids": sorted(excluded),
+                    "prediction": {"path": str(prediction), "sha256": row["prediction_sha256"]},
+                }
+            )
+    result = {
+        "state": "complete",
+        "heads_refitted": False,
+        "thresholds_refitted": False,
+        "rows": rows,
+        "scope": "exploratory regional mapping, not a new blind test",
+        "all_region_includes_support_and_calibration": True,
+    }
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    dump(output / "result.json", result)
+    return result
+
+
+def query(path):
+    result = score(path)
+    spec = json.loads(path.read_text())
+    root = Path(spec["output"])
+    before = {job["spec"]: sha(job["spec"]) for job in result["jobs"]}
+    feature = _feature(spec["producer"])
+    jobs = reader_jobs(
+        {"output": str(root / "readers")},
+        spec["region"],
+        {
+            "name": spec["case"],
+            "kind": "registered_manuscript_comparison",
+            "producer": spec["producer"],
+        },
+        feature,
+    )
+    if jobs != result["jobs"] or any(sha(job["spec"]) != before[job["spec"]] for job in jobs):
+        raise ValueError("Rebuilt query inputs differ from the calibrated representation")
+    return _frozen_queries(
+        [{"path": job["spec"], "sha256": before[job["spec"]]} for job in jobs],
+        root / "frozen-query",
+    )
+
+
+def query_jobs(path):
+    spec = json.loads(path.read_text())
+    if (
+        set(spec) != {"schema", "jobs", "output"}
+        or spec["schema"] != "manuscript-frozen-query-v1"
+        or not spec["jobs"]
+    ):
+        raise ValueError("Invalid frozen query registration")
+    return _frozen_queries(spec["jobs"], spec["output"])
 
 
 def summarize(path):
@@ -291,7 +393,11 @@ def summarize(path):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--spec", type=Path, required=True)
-    parser.add_argument("--phase", choices=["score", "summary"], required=True)
+    parser.add_argument(
+        "--phase", choices=["score", "summary", "query", "query-jobs"], required=True
+    )
     args = parser.parse_args(argv)
-    score(args.spec) if args.phase == "score" else summarize(args.spec)
+    {"score": score, "summary": summarize, "query": query, "query-jobs": query_jobs}[args.phase](
+        args.spec
+    )
     return 0
