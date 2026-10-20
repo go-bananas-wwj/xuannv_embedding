@@ -534,6 +534,26 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     forwarded = list(argv) if argv is not None else sys.argv[1:]
+    if forwarded and forwarded[0] == "manuscript-queue":
+        from xuannv_embedding.training.manuscript_queue import main as queue_main
+
+        return queue_main(forwarded[1:])
+    if forwarded and forwarded[0] == "manuscript-followup":
+        from xuannv_embedding.training.manuscript_followup import main as followup_main
+
+        return followup_main(forwarded[1:])
+    if forwarded and forwarded[0] == "manuscript-model-export":
+        from xuannv_embedding.export.manuscript_model import main as model_export_main
+
+        return model_export_main(forwarded[1:])
+    if forwarded and forwarded[0] == "manuscript-frozen-control":
+        from xuannv_embedding.export.manuscript_controls import main as controls_main
+
+        return controls_main(forwarded[1:])
+    if forwarded and forwarded[0] == "manuscript-retraining":
+        from xuannv_embedding.training.manuscript_study import main as manuscript_main
+
+        return manuscript_main(forwarded[1:])
     if forwarded and forwarded[0] == "temporal-feature-fusion":
         from xuannv_embedding.training.temporal_fusion import main as temporal_main
 
@@ -672,6 +692,11 @@ def main(argv: list[str] | None = None) -> int:
         return regional_main(forwarded[1:])
     parser = argparse.ArgumentParser(prog="xuannv experiment")
     sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("manuscript-queue", help="冻结源码的分阶段实验与有界恢复", add_help=False)
+    sub.add_parser("manuscript-followup", help="同口径读出与三区验收汇总", add_help=False)
+    sub.add_parser("manuscript-model-export", help="导出统一重训模型及缺测对照", add_help=False)
+    sub.add_parser("manuscript-frozen-control", help="相同影像引导与简单融合对照", add_help=False)
+    sub.add_parser("manuscript-retraining", help="统一规则重训原稿架构", add_help=False)
     sub.add_parser("public-monthly-tensor", help="保留日历顺序的公开时序张量", add_help=False)
     sub.add_parser("public-calendar-statistics", help="保留公开观测的年度季节变化", add_help=False)
     sub.add_parser("temporal-feature-fusion", help="学习有日历关联的区域时序融合", add_help=False)
