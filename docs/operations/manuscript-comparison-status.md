@@ -5,5 +5,5 @@
 | 实验 | 状态 |
 | --- | --- |
 | query_selected_method_haidian | complete |
-| query_AEF_haidian | running |
+| query_AEF_haidian | complete |
 | query_basic_public_haidian | running |
