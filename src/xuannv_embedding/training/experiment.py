@@ -626,6 +626,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.data_process.subpixel_rgb import main as pixel_cache_main
 
         return pixel_cache_main(forwarded[1:])
+    if forwarded and forwarded[0] == "rgb-guided-refinement":
+        from xuannv_embedding.export.rgb_guided_refinement import main as guided_main
+
+        return guided_main(forwarded[1:])
     if forwarded and forwarded[0] == "subpixel-tail-residual":
         from xuannv_embedding.export.subpixel_tail_residual import main as pixel_tail_main
 
@@ -691,6 +695,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("content-adaptive-residual", help="按内容学习有界特征融合比例", add_help=False)
     sub.add_parser("public-fallback-gate", help="公共表征退路与分阶段融合训练", add_help=False)
     sub.add_parser("subpixel-rgb-cache", help="流式保存单元内部 RGB 与观测掩膜", add_help=False)
+    sub.add_parser("rgb-guided-refinement", help="冻结 RGB 引导的同网格特征细化", add_help=False)
     sub.add_parser("subpixel-tail-residual", help="保护公共方向并加入细纹理残差", add_help=False)
     sub.add_parser("public-visual-subspace", help="公共与观测视觉特征的独立子空间", add_help=False)
     sub.add_parser("prithvi-features", help="公开时序预训练特征与完整区域投影", add_help=False)
