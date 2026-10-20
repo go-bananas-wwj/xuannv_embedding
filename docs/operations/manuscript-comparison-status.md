@@ -8,7 +8,7 @@
 | public_haidian | complete |
 | highres_haidian | complete |
 | score_original_public_haidian | failed |
-| score_original_highres_haidian | pending |
+| score_original_highres_haidian | failed |
 | score_simple_concat_haidian | failed |
 | score_dino_context_haidian | failed |
 | score_without_geometry_haidian | failed |
