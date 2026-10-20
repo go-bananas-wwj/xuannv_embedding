@@ -157,7 +157,7 @@ def run(path):
             repo = Path(plan["publication_repository"])
             doc = repo / "docs/operations/manuscript-comparison-status.md"
             lines = [
-                "# 三区原稿重训与融合对照状态",
+                "# 原稿重训与融合对照状态",
                 "",
                 "自动阶段记录，不代表精度验收或论文结论。",
                 "",
