@@ -6,4 +6,4 @@
 | --- | --- |
 | query_selected_method_haidian | complete |
 | query_AEF_haidian | complete |
-| query_basic_public_haidian | running |
+| query_basic_public_haidian | complete |
