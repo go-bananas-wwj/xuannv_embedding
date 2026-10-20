@@ -64,6 +64,25 @@ def test_continuation_timeout_does_not_restart_active_controller(monkeypatch, tm
         queue.after_active_queue(path)
 
 
+def test_evaluation_continuation_waits_for_both_external_queues(monkeypatch, tmp_path):
+    plan = tmp_path / "evaluation.json"
+    plan.write_text(json.dumps({"output": str(tmp_path), "timeout_seconds": 300}))
+    dependencies = []
+    for name in ["training", "readers"]:
+        root = tmp_path / name
+        root.mkdir()
+        path = root / "plan.json"
+        path.write_text(json.dumps({"output": str(root)}))
+        dependencies.append(path)
+    locks = []
+    monkeypatch.setattr(queue.fcntl, "flock", lambda f, m: locks.append((f.name, m)))
+    monkeypatch.setattr(queue, "run", lambda path: path)
+    assert queue.after_active_queue(plan, dependencies) == plan
+    assert [name for name, mode in locks if mode != queue.fcntl.LOCK_UN] == [
+        str(p.parent / "queue.lock") for p in dependencies
+    ]
+
+
 def test_worker_preserves_cann_python_paths_after_pinned_source(monkeypatch, tmp_path):
     monkeypatch.setenv("PYTHONPATH", "/opt/cann/python/site-packages:/opt/cann/opp")
     monkeypatch.setenv("RANK", "5")

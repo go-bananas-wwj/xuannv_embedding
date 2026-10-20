@@ -1,0 +1,96 @@
+import json
+
+import numpy as np
+
+from xuannv_embedding.downstream import full_region_readouts as full
+from xuannv_embedding.export.context import dump
+from xuannv_embedding.training import manuscript_followup as followup
+from xuannv_embedding.training.shared_fusion_search import ref
+
+
+def test_frozen_followup_runs_both_actual_readout_heads_against_registered_aef(
+    tmp_path, monkeypatch
+):
+    rng = np.random.default_rng(41)
+    values = rng.normal(size=(22, 64, 8, 8)).astype(np.float32)
+    features = tmp_path / "features.npy"
+    np.save(features, values)
+    baseline = tmp_path / "aef.npy"
+    np.save(baseline, values.transpose(0, 2, 3, 1))
+    valid = tmp_path / "valid.npy"
+    np.save(valid, np.ones((22, 8, 8), bool))
+    labels = tmp_path / "labels.npz"
+    np.savez(labels, target=(values[:, 0] > 0).astype(np.int8))
+    records = [{"patch_id": str(i), "bounds": [80 * i, 0, 80 * (i + 1), 80]} for i in range(22)]
+    index = tmp_path / "index.json"
+    dump(index, {"crs": "EPSG:32650", "records": records})
+    data = {
+        "state": "complete",
+        "protocol": "full-region-data-v1",
+        "indices": list(range(22)),
+        "records": records,
+        "train_positions": list(range(20)),
+        "calibration_positions": [20, 21],
+        "calibration_cohort": {"name": "fixed-fixture"},
+        "features": {"aef": ref(baseline)},
+        "valid": ref(valid),
+        "labels": ref(labels),
+        "size": 8,
+        "crs": "EPSG:32650",
+        "tasks": {"C": {"reference": ["target"]}, "R": {}, "Q": {}},
+    }
+    datafile = tmp_path / "data.json"
+    dump(datafile, data)
+    anchors = {}
+    for head in ["mlp", "conv3x3"]:
+        job = {
+            "protocol": full.PROTOCOL,
+            "data": ref(datafile),
+            "model": "aef",
+            "head": head,
+            "budget": 20,
+            "seed": 41,
+            "device": "cpu",
+            "archives": {},
+            "output": str(tmp_path / "aef" / head),
+        }
+        path = tmp_path / f"aef-{head}.json"
+        dump(path, job)
+        full.run(path, "calibration")
+        anchors[head] = ref(path)
+    original_jobs = followup.reader_jobs
+
+    def cpu_readers(*args):
+        jobs = original_jobs(*args)
+        for job in jobs:
+            path = tmp_path / job["spec"]
+            spec = json.loads(path.read_text())
+            spec["device"] = "cpu"
+            dump(path, spec)
+        return jobs
+
+    monkeypatch.setattr(followup, "reader_jobs", cpu_readers)
+    path = tmp_path / "followup.json"
+    dump(
+        path,
+        {
+            "schema": "manuscript-followup-v1",
+            "region": {
+                "name": "region_a",
+                "index": ref(index),
+                "evaluation": ref(datafile),
+                "task_source": "reference",
+                "support_seed": 41,
+                "aef_jobs": anchors,
+            },
+            "case": "fixture",
+            "producer": {"kind": "frozen", "features": ref(features)},
+            "output": str(tmp_path / "separate-reader-root"),
+            "retire_arrays": False,
+        },
+    )
+    result = followup.score(path)
+    assert result["state"] == "complete"
+    assert {row["head"] for row in result["rows"]} == {"mlp", "conv3x3"}
+    assert result["all_support_and_scored_positions_match_AEF"] is True
+    assert followup.score(path) == result

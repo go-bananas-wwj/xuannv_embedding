@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -56,9 +57,14 @@ def test_shared_export_never_opens_evaluation_maps_and_keeps_public_fallback(tmp
     assert export_candidate(plan, region, recipe) == path
 
 
-def test_shared_reader_registration_keeps_masks_supports_and_all_registered_tasks(tmp_path):
+@pytest.mark.parametrize("separate_reader_root", [False, True])
+def test_shared_reader_registration_keeps_masks_supports_and_all_registered_tasks(
+    tmp_path, separate_reader_root
+):
     plan, region, recipe, records = fixture_inputs(tmp_path)
     feature = export_candidate(plan, region, recipe)
+    if separate_reader_root:
+        plan["output"] = str(tmp_path / "independent-readers")
     valid = tmp_path / "valid.npy"
     np.save(valid, np.ones((22, 2, 2), bool))
     labels = tmp_path / "labels.npz"
@@ -84,7 +90,7 @@ def test_shared_reader_registration_keeps_masks_supports_and_all_registered_task
     region["evaluation"] = ref(datafile)
     jobs = reader_jobs(plan, region, recipe, feature)
     assert len(jobs) == 2
-    data_output = feature.parent.parent / "data.json"
+    data_output = Path(plan["output"]) / region["name"] / recipe["name"] / "data.json"
     result = json.loads(data_output.read_text())
     assert result["valid"] == data["valid"] and result["labels"] == data["labels"]
     assert result["train_positions"] == data["train_positions"]

@@ -451,6 +451,7 @@ def reader_jobs(plan, region, recipe, feature):
     source = region["task_source"]
     data["tasks"] = {"C": {source: data["tasks"]["C"][source]}, "R": {}, "Q": {}}
     root = Path(plan["output"]) / region["name"] / recipe["name"]
+    root.mkdir(parents=True, exist_ok=True)
     values = np.load(feature, mmap_mode="r")
     valid = np.load(verified(data["valid"]), mmap_mode="r")
     target = root / "evaluation-features.npy"

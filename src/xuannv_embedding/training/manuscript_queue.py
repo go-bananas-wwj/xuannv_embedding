@@ -78,23 +78,25 @@ def recover_dependencies(jobs, states):
                 changed = True
 
 
-def after_active_queue(path):
+def after_active_queue(path, wait_for=None):
     """Wait quietly for the current controller; never interrupt its active training."""
     plan = json.loads(path.read_text())
     deadline = time.monotonic() + plan["timeout_seconds"]
-    root = Path(plan["output"])
-    with (root / "queue.lock").open("a") as lock:
-        while True:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
-                    raise TimeoutError(
-                        "Active experiment controller exceeded continuation deadline"
-                    )
-                time.sleep(60)
-        fcntl.flock(lock, fcntl.LOCK_UN)
+    for dependency in wait_for or [path]:
+        active = json.loads(Path(dependency).read_text())
+        root = Path(active["output"])
+        with (root / "queue.lock").open("a") as lock:
+            while True:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            "Active experiment controller exceeded continuation deadline"
+                        )
+                    time.sleep(60)
+            fcntl.flock(lock, fcntl.LOCK_UN)
     return run(path)
 
 
@@ -317,5 +319,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--after-active-queue", action="store_true")
+    parser.add_argument("--wait-for-plan", type=Path, action="append")
     args = parser.parse_args(argv)
-    return after_active_queue(args.plan) if args.after_active_queue else run(args.plan)
+    if args.wait_for_plan and not args.after_active_queue:
+        parser.error("--wait-for-plan requires --after-active-queue")
+    return (
+        after_active_queue(args.plan, args.wait_for_plan)
+        if args.after_active_queue
+        else run(args.plan)
+    )

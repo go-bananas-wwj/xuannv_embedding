@@ -65,7 +65,7 @@ def score(path):
     )
     results = []
     for job in jobs:
-        full.main(["--spec", job["spec"], "--phase", "calibration"])
+        full.run(Path(job["spec"]), "calibration")
         sp = json.loads(Path(job["spec"]).read_text())
         data = json.loads(verified(sp["data"]).read_text())
         reference = json.loads(verified(region["evaluation"]).read_text())
