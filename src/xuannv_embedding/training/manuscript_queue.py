@@ -48,6 +48,23 @@ def _terminate(process):
         process.wait()
 
 
+def worker_environment(source, git_sha, cards):
+    env = os.environ.copy()
+    paths = [str(Path(source) / "src"), *env.get("PYTHONPATH", "").split(os.pathsep)]
+    env.update(
+        PYTHONPATH=os.pathsep.join(dict.fromkeys(p for p in paths if p)),
+        XUANNV_GIT_SHA=git_sha,
+        ASCEND_RT_VISIBLE_DEVICES=",".join(map(str, cards)),
+        PYTORCH_NPU_ALLOC_CONF="expandable_segments:True",
+        OMP_NUM_THREADS="1",
+        OPENBLAS_NUM_THREADS="1",
+        MKL_NUM_THREADS="1",
+    )
+    for key in ["RANK", "WORLD_SIZE", "LOCAL_RANK"]:
+        env.pop(key, None)
+    return env
+
+
 def run(path):
     plan = json.loads(path.read_text())
     if (
@@ -216,18 +233,7 @@ def run(path):
                         continue
                     cards = free[:count]
                     del free[:count]
-                    env = os.environ.copy()
-                    env.update(
-                        PYTHONPATH=str(source / "src"),
-                        XUANNV_GIT_SHA=plan["git_sha"],
-                        ASCEND_RT_VISIBLE_DEVICES=",".join(map(str, cards)),
-                        PYTORCH_NPU_ALLOC_CONF="expandable_segments:True",
-                        OMP_NUM_THREADS="1",
-                        OPENBLAS_NUM_THREADS="1",
-                        MKL_NUM_THREADS="1",
-                    )
-                    for k in ["RANK", "WORLD_SIZE", "LOCAL_RANK"]:
-                        env.pop(k, None)
+                    env = worker_environment(source, plan["git_sha"], cards)
                     work = root / "runtime" / job["id"]
                     work.mkdir(parents=True, exist_ok=True)
                     log = root / "logs" / (job["id"] + ".log")
