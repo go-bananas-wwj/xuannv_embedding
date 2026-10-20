@@ -118,6 +118,19 @@ def test_cache_streaming_manifest_and_reload_are_complete_and_label_free(tmp_pat
     assert not list(Path(spec["output"]).glob("*.partial.npy"))
 
 
+def test_individual_frames_reproduce_existing_mean_without_copies(tmp_path):
+    path, _ = cache_fixture(tmp_path)
+    spec, index = rgb.specification(path)
+    sources = rgb.Sources(spec, index)
+    frames = list(sources.frames(0))
+    assert len(frames) == 1
+    image, coverage = rgb.pool_rgb(frames, spec["source_shape"])
+    expected = rgb.pack_subpixels(image, coverage, factor=5)
+    actual = sources.tile(0)
+    for a, b in zip(actual, expected):
+        np.testing.assert_array_equal(a, b)
+
+
 def test_cache_rejects_changed_raster_payload_and_geographic_transform(tmp_path):
     import rasterio
 

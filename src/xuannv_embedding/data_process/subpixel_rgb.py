@@ -227,36 +227,33 @@ class Sources:
             seen.add(key)
             self.paths.append(paths)
 
-    def tile(self, position):
+    def frames(self, position):
+        """Read each registered observation once, preserving its coverage and order."""
         record = self.records[position]
         spec = self.spec
+        for paths in self.paths:
+            path = paths[position]
+            with rasterio.open(path) as source:
+                crs = CRS.from_user_input(source.crs)
+                if (
+                    source.count != 3
+                    or not crs.is_projected
+                    or any(abs(v - spec["working_pixel_m"]) > 1e-6 for v in source.res)
+                    or source.transform.b != 0
+                    or source.transform.d != 0
+                    or source.transform.a <= 0
+                    or source.transform.e >= 0
+                    or any(abs(axis.unit_conversion_factor - 1) > 1e-9 for axis in crs.axis_info)
+                ):
+                    raise ValueError("RGB raster resolution or north-up metric geometry differs")
+            image, mask = semantic_features.read_aerial_window(path, record)
+            if list(image.shape[-2:]) != spec["source_shape"]:
+                raise ValueError("RGB raster physical window geometry differs")
+            yield image.numpy(), mask.numpy()
 
-        def frames():
-            for paths in self.paths:
-                path = paths[position]
-                with rasterio.open(path) as source:
-                    crs = CRS.from_user_input(source.crs)
-                    if (
-                        source.count != 3
-                        or not crs.is_projected
-                        or any(abs(v - spec["working_pixel_m"]) > 1e-6 for v in source.res)
-                        or source.transform.b != 0
-                        or source.transform.d != 0
-                        or source.transform.a <= 0
-                        or source.transform.e >= 0
-                        or any(
-                            abs(axis.unit_conversion_factor - 1) > 1e-9 for axis in crs.axis_info
-                        )
-                    ):
-                        raise ValueError(
-                            "RGB raster resolution or north-up metric geometry differs"
-                        )
-                image, mask = semantic_features.read_aerial_window(path, record)
-                if list(image.shape[-2:]) != spec["source_shape"]:
-                    raise ValueError("RGB raster physical window geometry differs")
-                yield image.numpy(), mask.numpy()
-
-        image, coverage = pool_rgb(frames(), spec["source_shape"])
+    def tile(self, position):
+        spec = self.spec
+        image, coverage = pool_rgb(self.frames(position), spec["source_shape"])
         return pack_subpixels(image, coverage, factor=spec["factor"])
 
 
