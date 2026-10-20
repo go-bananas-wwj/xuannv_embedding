@@ -5,7 +5,7 @@
 | 实验 | 状态 |
 | --- | --- |
 | score_original_public_haidian | complete |
-| score_original_highres_haidian | running |
+| score_original_highres_haidian | complete |
 | score_simple_concat_haidian | running |
 | score_dino_context_haidian | running |
 | score_without_geometry_haidian | running |
