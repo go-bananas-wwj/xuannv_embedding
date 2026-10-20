@@ -5,7 +5,7 @@
 | 实验 | 状态 |
 | --- | --- |
 | score_simple_concat_haidian | complete |
-| score_dino_context_haidian | pending |
+| score_dino_context_haidian | complete |
 | score_without_geometry_haidian | pending |
 | score_binary_coverage_haidian | pending |
 | score_aef_highres_guide_haidian | pending |
