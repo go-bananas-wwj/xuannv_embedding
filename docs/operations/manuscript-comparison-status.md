@@ -8,7 +8,7 @@
 | score_original_highres_haidian | complete |
 | score_simple_concat_haidian | complete |
 | score_dino_context_haidian | complete |
-| score_without_geometry_haidian | running |
+| score_without_geometry_haidian | complete |
 | score_binary_coverage_haidian | running |
 | score_aef_highres_guide_haidian | running |
 | score_aef_public_guide_haidian | pending |
