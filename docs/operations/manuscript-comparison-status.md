@@ -1,13 +1,19 @@
-# 海淀先行实验进度
+# 原稿重训与融合对照状态
 
-北京时间 2026-10-20 12:27，按用户最新指示改为先完成海淀。
+自动阶段记录，不代表精度验收或论文结论。
 
-| 区域 | 当前状态 |
+| 实验 | 状态 |
 | --- | --- |
-| 海淀 | 六卡公共底座：10/2400；第七卡运行简单融合对照 |
-| 哈尔滨新区 | 本轮训练与自动续跑已停止，保留断点，待海淀完成后再推进 |
-| 奥克兰西部 | 本轮训练与自动续跑已停止，保留断点，待海淀完成后再推进 |
-
-海淀按导师意见完成公共/高分方案比较、机制贡献、非 OSM 地表覆盖结果、细节及复用证据。首轮两份终版主模型、九种比较条件，逐项任务与分类头结果完整保留。细节与结构消融接续主比较。
-
-本轮配置和实验顺序已登记；训练和评分尚未完成，暂不修改 Overleaf 正文。原三区同时训练的状态记录已经停止，不再自动接续。
+| base_haidian | complete |
+| public_haidian | pending |
+| highres_haidian | pending |
+| score_original_public_haidian | pending |
+| score_original_highres_haidian | pending |
+| score_simple_concat_haidian | failed |
+| score_dino_context_haidian | failed |
+| score_without_geometry_haidian | failed |
+| score_binary_coverage_haidian | failed |
+| score_aef_highres_guide_haidian | failed |
+| score_aef_public_guide_haidian | failed |
+| score_aef_degraded_guide_haidian | failed |
+| summary_haidian | dependency_failed |
