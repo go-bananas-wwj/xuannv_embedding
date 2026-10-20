@@ -65,6 +65,39 @@ def worker_environment(source, git_sha, cards):
     return env
 
 
+def recover_dependencies(jobs, states):
+    changed = True
+    while changed:
+        changed = False
+        for job in jobs:
+            row = states[job["id"]]
+            if row["state"] == "dependency_failed" and all(
+                states[d]["state"] not in {"failed", "dependency_failed"} for d in job["depends_on"]
+            ):
+                row["state"] = "pending"
+                changed = True
+
+
+def after_active_queue(path):
+    """Wait quietly for the current controller; never interrupt its active training."""
+    plan = json.loads(path.read_text())
+    deadline = time.monotonic() + plan["timeout_seconds"]
+    root = Path(plan["output"])
+    with (root / "queue.lock").open("a") as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "Active experiment controller exceeded continuation deadline"
+                    )
+                time.sleep(60)
+        fcntl.flock(lock, fcntl.LOCK_UN)
+    return run(path)
+
+
 def run(path):
     plan = json.loads(path.read_text())
     if (
@@ -106,6 +139,7 @@ def run(path):
             "plan_sha256": identity,
             "jobs": {j["id"]: {"state": "pending", "attempts": 0} for j in plan["jobs"]},
         }
+        recover_dependencies(plan["jobs"], state["jobs"])
         for row in state["jobs"].values():
             if row["state"] == "running":
                 pid = row.get("pid")
@@ -282,5 +316,6 @@ def run(path):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)
+    parser.add_argument("--after-active-queue", action="store_true")
     args = parser.parse_args(argv)
-    return run(args.plan)
+    return after_active_queue(args.plan) if args.after_active_queue else run(args.plan)
