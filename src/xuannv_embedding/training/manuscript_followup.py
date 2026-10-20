@@ -167,9 +167,13 @@ def score(path):
 
 def summarize(path):
     spec = json.loads(path.read_text())
+    required = {"schema", "prior", "followups", "output"}
+    policy = spec.get("public_reference_policy", "historical_envelope")
     if (
-        set(spec) != {"schema", "prior", "followups", "output"}
+        not required.issubset(spec)
+        or set(spec) - required - {"public_reference_policy"}
         or spec["schema"] != "manuscript-summary-v1"
+        or policy not in ("historical_envelope", "registered_basic")
     ):
         raise ValueError("Invalid summary registration")
     prior = json.loads(verified(spec["prior"]).read_text())
@@ -198,9 +202,9 @@ def summarize(path):
         gaps, means = [], {}
         for region in public:
             for head in ["mlp", "conv3x3"]:
-                floor = max(
-                    reference[region][head]["public"], public[region][head], aef[region][head]
-                )
+                floor = max(public[region][head], aef[region][head])
+                if policy == "historical_envelope":
+                    floor = max(floor, reference[region][head]["public"])
                 gaps.append(values[region][head] - floor)
             means[region] = float(
                 np.mean([values[region][h] - aef[region][h] for h in ["mlp", "conv3x3"]])
@@ -227,7 +231,11 @@ def summarize(path):
         "scores": scores,
         "gates": gates,
         "selected_for_query": selected,
-        "primary_references_unchanged": True,
+        "primary_references_unchanged": policy == "historical_envelope",
+        "public_reference_policy": policy,
+        "primary_public_reference": "original_public",
+        "historical_public_references": reference,
+        "evaluation_cohort_unchanged": True,
         "all_task_rows": records,
         "scientific_goal_complete": False,
         "next_step": (
@@ -253,6 +261,14 @@ def summarize(path):
         "# 原稿架构与逐期融合：统一校准比较",
         "",
         "本轮采用固定的区域制图校准，不属于盲测。",
+        "",
+        (
+            "主要公共对照为正常完成既定训练的基础公共三源版（original_public）；"
+            "历史最强公共版本保留记录，不作为主比较门槛。"
+            if policy == "registered_basic"
+            else "公共参照采用已登记的历史最强版本与本轮公共版的较高值。"
+        ),
+        "完整方案比较与对应方法内部的高分数据、融合模块贡献分别解释。",
         "",
         "| 方法 | 区域 | MLP F1（%） | CNN F1（%） |",
         "| --- | --- | ---: | ---: |",

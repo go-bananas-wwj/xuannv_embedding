@@ -1,6 +1,7 @@
 import json
 
 import numpy as np
+import pytest
 
 from xuannv_embedding.downstream import full_region_readouts as full
 from xuannv_embedding.export.context import dump
@@ -94,3 +95,55 @@ def test_frozen_followup_runs_both_actual_readout_heads_against_registered_aef(
     assert {row["head"] for row in result["rows"]} == {"mlp", "conv3x3"}
     assert result["all_support_and_scored_positions_match_AEF"] is True
     assert followup.score(path) == result
+
+
+@pytest.mark.parametrize("policy", [None, "registered_basic"])
+def test_summary_uses_explicit_public_reference_without_changing_scores(tmp_path, policy):
+    prior = tmp_path / "prior.json"
+    heads = ["mlp", "conv3x3"]
+    dump(
+        prior,
+        {
+            "scores": {
+                "aef": {"reference": {"region_a": dict.fromkeys(heads, 0.83)}},
+                "viewwise075": {"highres": {"region_a": dict.fromkeys(heads, 0.84)}},
+            },
+            "reference": {"region_a": {head: {"public": 0.90} for head in heads}},
+        },
+    )
+    followups = []
+    for case, value in [("original_public", 0.80), ("original_highres", 0.85)]:
+        root = tmp_path / case
+        root.mkdir()
+        spec = tmp_path / f"{case}.json"
+        dump(spec, {"case": case, "region": {"name": "region_a"}, "output": str(root)})
+        rows = [
+            {
+                "case": case,
+                "region": "region_a",
+                "head": head,
+                "task": "target",
+                "metrics": {"f1": value, "iou": value, "ap": value},
+            }
+            for head in heads
+        ]
+        dump(
+            root / "result.json",
+            {"state": "complete", "spec_sha256": ref(spec)["sha256"], "rows": rows},
+        )
+        followups.append(ref(spec))
+    spec = tmp_path / "summary.json"
+    document = {
+        "schema": "manuscript-summary-v1",
+        "prior": ref(prior),
+        "followups": followups,
+        "output": str(tmp_path / "report"),
+    }
+    if policy:
+        document["public_reference_policy"] = policy
+    dump(spec, document)
+    result = followup.summarize(spec)
+    assert result["selected_for_query"] == ("original_highres" if policy else None)
+    assert result["scores"]["original_public"]["region_a"]["mlp"] == 0.80
+    assert result["scores"]["original_highres"]["region_a"]["mlp"] == 0.85
+    assert len(result["all_task_rows"]) == 4
