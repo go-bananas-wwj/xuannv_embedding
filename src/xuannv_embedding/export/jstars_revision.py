@@ -297,13 +297,23 @@ def main(argv=None):
     from pathlib import Path
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("phase", choices=["guide", "score", "case"])
+    parser.add_argument("phase", choices=["guide", "score", "case", "source-case", "figures"])
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args(argv)
-    {"guide": export_guidance, "score": score_frozen, "case": run_case}[args.phase](
-        args.spec, args.device
-    )
+    if args.phase == "source-case":
+        from xuannv_embedding.export.journal_sources import run_absent_case
+
+        run_absent_case(args.spec, args.device)
+    elif args.phase == "figures":
+        from xuannv_embedding.downstream.journal_figures import geographic_cases
+
+        geographic_cases(args.spec)
+    else:
+        {"guide": export_guidance, "score": score_frozen, "case": run_case}[args.phase](
+            args.spec, args.device
+        )
+
     return 0
 
 
