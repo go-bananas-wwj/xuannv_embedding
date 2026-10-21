@@ -342,6 +342,7 @@ def main(argv=None):
             "cost-public",
             "cost-native",
             "cost-vision",
+            "fusion-control",
             "figures",
         ],
     )
@@ -355,6 +356,10 @@ def main(argv=None):
             public_profile(args.spec)
         else:
             native_profile(args.spec, args.device)
+    elif args.phase == "fusion-control":
+        from xuannv_embedding.export.journal_matched_fusion import run
+
+        run(args.spec, args.device)
     elif args.phase == "cost-vision":
         from xuannv_embedding.export.journal_resources import public_vision_profile
 
