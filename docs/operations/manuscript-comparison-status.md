@@ -4,4 +4,5 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| binary_coverage_matched | complete |
+| public_temporal | complete |
+| native_replay | failed |
