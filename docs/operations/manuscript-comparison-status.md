@@ -4,4 +4,5 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| whole_local_absence | complete |
+| coverage50 | complete |
+| coverage25 | complete |
