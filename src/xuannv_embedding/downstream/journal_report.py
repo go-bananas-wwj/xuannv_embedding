@@ -150,11 +150,42 @@ def build(root, paper):
             ["引导条件", "MLP", "CNN"],
             rows,
         )
+    source_coverage = []
+    for fraction, relative in [
+        (0.5, "raw-missingness/coverage50/evaluation/result.json"),
+        (0.25, "raw-missingness/coverage25/evaluation/result.json"),
+        (0.0, "whole-source-zero/evaluation/result.json"),
+    ]:
+        path = root / "jstars-revision" / relative
+        if path.exists():
+            result = read(path)
+            if result["state"] == "complete":
+                source_coverage.append((fraction, result))
+    if source_coverage:
+
+        def means(rows, key):
+            return [
+                f"{100*np.mean([x[key]['f1'] for x in rows if x['head']==h]):.3f}"
+                for h in ["mlp", "conv3x3"]
+            ]
+
+        rows = [["100" + chr(92) + "%"] + means(full["完整逐期融合"]["rows"], "all_region")]
+        for fraction, result in source_coverage:
+            rows.append([f"{100*fraction:.0f}" + chr(92) + "%"] + means(result["rows"], "metrics"))
+        _table(
+            out / "jstars_source_coverage.tex",
+            "完整地方来源缺测的固定模型与固定分类头评价。覆盖比例相对原有有效观测计算；原始影像与派生特征同步处理，模型、PCA及阈值固定。",
+            "tab:jstars-source-coverage",
+            "lrr",
+            ["地方覆盖保留", "MLP", "CNN"],
+            rows,
+        )
     ledger = {
         "method": "viewwise075",
         "sources": sources,
         "full_region_methods": list(full),
         "complete_guidance_cases": completed,
+        "complete_raw_source_fractions": [x[0] for x in source_coverage],
         "pending_guidance_cases": [x for x in cases if x not in completed],
         "historical_manuscript_metrics_reassigned": False,
     }

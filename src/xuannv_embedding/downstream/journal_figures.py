@@ -146,3 +146,107 @@ def geographic_cases(path):
         },
     )
     return out
+
+
+def architecture(output):
+    from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(14, 3.8))
+    ax.set_xlim(-1, 16)
+    ax.set_ylim(-1.2, 3.5)
+    ax.axis("off")
+    nodes = {
+        "public": (0.2, 2.1, "Public observations\nS1 / S2 / Landsat + terrain"),
+        "anchor": (3.0, 2.1, "Frozen public encoding\n64D anchor + 95D statistics"),
+        "local": (0.2, -0.1, "Actual local optical views\nRGB + coverage + dates"),
+        "vision": (3.0, -0.1, "Frozen DINOv3 + PCA\n1024D features / 64D detail"),
+        "fusion": (6.1, 1.0, "Regional fusion\nSemantic + structural branches"),
+        "base": (8.8, 1.0, "Shared-coordinate base\nB = 0.85 Es + 0.15 Eg"),
+        "guide": (11.6, 1.0, "Per-view frozen AnyUp\nCoverage-weighted increments"),
+        "output": (14.3, 1.0, "Reusable embedding\n64D / 10 m grid"),
+    }
+    for name, (x, y, label) in nodes.items():
+        fill = "#e8f5f2" if name in ["fusion", "guide", "output"] else "#edf1f6"
+        ax.add_patch(
+            FancyBboxPatch(
+                (x - 1.15, y - 0.48),
+                2.3,
+                0.96,
+                boxstyle="round,pad=0.06",
+                facecolor=fill,
+                edgecolor="#365366",
+                linewidth=1.1,
+            )
+        )
+        ax.text(x, y, label, ha="center", va="center", fontsize=8.7)
+
+    def arrow(a, b, curve=0):
+        x, y, _ = nodes[a]
+        xx, yy, _ = nodes[b]
+        ax.add_patch(
+            FancyArrowPatch(
+                (x + 1.2, y),
+                (xx - 1.2, yy),
+                arrowstyle="-|>",
+                mutation_scale=12,
+                color="#526775",
+                connectionstyle=f"arc3,rad={curve}",
+            )
+        )
+
+    for a, b in [
+        ("public", "anchor"),
+        ("local", "vision"),
+        ("anchor", "fusion"),
+        ("vision", "fusion"),
+        ("fusion", "base"),
+        ("base", "guide"),
+        ("guide", "output"),
+    ]:
+        arrow(a, b)
+    ax.add_patch(
+        FancyArrowPatch(
+            (1.4, -0.18),
+            (11.6, 0.48),
+            arrowstyle="-|>",
+            mutation_scale=12,
+            color="#2b9787",
+            connectionstyle="arc3,rad=.22",
+        )
+    )
+    ax.text(
+        6.0,
+        2.7,
+        "Regional weak supervision: WorldCover + OSM",
+        fontsize=9,
+        ha="center",
+        color="#365366",
+    )
+    ax.annotate(
+        "",
+        xy=(6.1, 1.54),
+        xytext=(6.1, 2.43),
+        arrowprops={"arrowstyle": "-|>", "color": "#526775", "linestyle": ":"},
+    )
+    ax.text(
+        14.3,
+        -0.1,
+        "Classification / retrieval\nCoverage estimation",
+        ha="center",
+        va="center",
+        fontsize=9,
+        color="#365366",
+    )
+    ax.annotate(
+        "",
+        xy=(14.3, 0.15),
+        xytext=(14.3, 0.47),
+        arrowprops={"arrowstyle": "-|>", "color": "#526775"},
+    )
+    fig.tight_layout()
+    fig.savefig(output / "architecture.pdf", bbox_inches="tight")
+    fig.savefig(output / "architecture.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return output / "architecture.pdf"

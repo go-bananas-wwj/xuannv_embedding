@@ -299,12 +299,25 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "phase",
-        choices=["guide", "score", "case", "source-case", "raw-case", "auxiliary", "figures"],
+        choices=[
+            "guide",
+            "score",
+            "case",
+            "source-case",
+            "raw-case",
+            "auxiliary",
+            "mixed",
+            "figures",
+        ],
     )
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args(argv)
-    if args.phase == "auxiliary":
+    if args.phase == "mixed":
+        from xuannv_embedding.downstream.journal_mixed import run
+
+        run(args.spec)
+    elif args.phase == "auxiliary":
         from xuannv_embedding.downstream.journal_auxiliary import run
 
         run(args.spec, args.device)
