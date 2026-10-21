@@ -308,13 +308,22 @@ def main(argv=None):
             "auxiliary",
             "mixed",
             "temporal",
+            "cost-public",
+            "cost-native",
             "figures",
         ],
     )
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args(argv)
-    if args.phase == "temporal":
+    if args.phase in {"cost-public", "cost-native"}:
+        from xuannv_embedding.export.journal_resources import native_profile, public_profile
+
+        if args.phase == "cost-public":
+            public_profile(args.spec)
+        else:
+            native_profile(args.spec, args.device)
+    elif args.phase == "temporal":
         from xuannv_embedding.export.journal_temporal import run
 
         run(args.spec, args.device)

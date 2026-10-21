@@ -241,9 +241,16 @@ def mixed_cases(root, paper):
     receipt = json.loads((root / "mixed-composition/reference.json").read_text())
     truth = np.load(verified(receipt["targets"]), mmap_mode="r")
     excluded = set(data["train_positions"]) | set(data["calibration_positions"])
-    candidates = [i for i in range(len(truth)) if i not in excluded]
-    ordered = sorted(candidates, key=lambda i: (float(truth[i].mean()), i))
-    selected = [ordered[round(q * (len(ordered) - 1))] for q in [0.25, 0.5, 0.75]]
+    candidates = []
+    for i in range(len(truth)):
+        crop = truth[i, 32:96, 32:96]
+        mixed = (crop > 0) & (crop < 1)
+        if i not in excluded and float(crop.mean()) >= 0.05 and float(mixed.mean()) >= 0.1:
+            candidates.append(i)
+    if len(candidates) < 3:
+        raise ValueError("Insufficient reference-defined building-composition cases")
+    ordered = sorted(candidates, key=lambda i: (float(truth[i, 32:96, 32:96].mean()), i))
+    selected = [ordered[round(0.75 * (len(ordered) - 1))]]
     raw_case = json.loads((root / "fine-detail/degraded/case.json").read_text())
     raw_source = json.loads(verified(raw_case["sources"]["context"]).read_text())
     feature = json.loads(verified(raw_source["feature_spec"]).read_text())
@@ -265,7 +272,7 @@ def mixed_cases(root, paper):
         p = root / "mixed-composition" / name / "readout-20"
         models[name] = load_readout(p, sha(p / "identity.json"))
         sources.append({"features": ref, "reader": str(p), "identity": sha(p / "identity.json")})
-    fig, axes = plt.subplots(3, 6, figsize=(13, 6.7), constrained_layout=True)
+    fig, axes = plt.subplots(1, 6, figsize=(13, 2.5), constrained_layout=True, squeeze=False)
     titles = [
         "Local RGB median",
         "10-m degraded RGB",
@@ -325,7 +332,7 @@ def mixed_cases(root, paper):
             dict(
                 position=i,
                 tile=record,
-                reference_mean=float(truth[i].mean()),
+                reference_mean=float(truth[i, 32:96, 32:96].mean()),
                 image_sources=image_sources,
                 shared_rgb_display_percentiles=[float(lo), float(hi)],
                 crop_output_rows=[32, 96],
@@ -337,8 +344,10 @@ def mixed_cases(root, paper):
     plt.close(fig)
     manifest = dict(
         selection=(
-            "25th,50th,75th percentile reference mean among tiles outside "
-            "all training and calibration positions; central640m crop"
+            "75th percentile central640m reference mean for a dense-building "
+            "structural illustration; tiles "
+            "outside all training and calibration positions; eligible central crops "
+            "have building fraction mean>=0.05 and mixed-cell share>=0.1; no prediction scores"
         ),
         reference=receipt["targets"],
         models=sources,
@@ -439,4 +448,119 @@ def per_target_tables(root, paper):
         sources=sources, rows=results, completed_jobs=len(sources), expected_jobs=len(registry)
     )
     (paper / "notes/jstars-task-results.json").write_text(json.dumps(ledger, indent=2) + "\n")
+    return ledger
+
+
+def temporal_tables(root, paper):
+    root, paper = Path(root), Path(paper)
+    paths = [
+        ("six", root.parent / "full-region/selected_method/result.json"),
+        ("spread", root / "temporal-source/three_spread/evaluation/result.json"),
+        ("consecutive", root / "temporal-source/three_consecutive/evaluation/result.json"),
+        ("one", root / "temporal-source/one_observation/evaluation/result.json"),
+    ]
+    results = []
+    for name, path in paths:
+        value = json.loads(path.read_text())
+        if value["state"] != "complete":
+            raise ValueError("Whole-source temporal condition incomplete")
+        key = "all_region" if name == "six" else "metrics"
+        numbers = []
+        for scope in [key, "outside_support_and_calibration"]:
+            for head in ["mlp", "conv3x3"]:
+                rows = [x for x in value["rows"] if x["head"] == head]
+                assert len(rows) == 4
+                numbers.append(f"{100*np.mean([x[scope]['f1'] for x in rows]):.3f}")
+        results.append(
+            dict(name=name, values=numbers, source={"path": str(path), "sha256": sha(path)})
+        )
+    labels = {
+        "six": ("六份实际观测", "Six actual observations"),
+        "spread": ("三份分散观测", "Three spread observations"),
+        "consecutive": ("三份连续观测", "Three consecutive observations"),
+        "one": ("一份实际观测", "One actual observation"),
+    }
+    for english in [False, True]:
+        _table(
+            paper / "tables" / ("en" if english else "") / "jstars_temporal.tex",
+            (
+                "Whole-source temporal retention with fixed model and reader parameters. "
+                "The temporal RGB median and derived local features are recomputed from "
+                "retained raw observations. Values are four-target mean F1 (percent)."
+                if english
+                else "完整地方来源的时间保留：固定模型、投影和读取器，"
+                "从保留原始观测重新生成中值合成及派生特征。"
+                "报告四类平均F1（百分数）。"
+            ),
+            "tab:jstars-temporal",
+            "lrrrr",
+            (
+                ["Condition", "All MLP", "All CNN", "Query MLP", "Query CNN"]
+                if english
+                else ["观测条件", "全区MLP", "全区CNN", "查询MLP", "查询CNN"]
+            ),
+            [[labels[x["name"]][int(english)], *x["values"]] for x in results],
+        )
+    (paper / "notes/jstars-temporal-ledger.json").write_text(json.dumps(results, indent=2) + "\n")
+    return results
+
+
+def fine_detail_tables(root, paper):
+    root, paper = Path(root), Path(paper)
+    results = []
+    for name, path, key in [
+        ("native", root.parent / "full-region/selected_method/result.json", "all_region"),
+        ("degraded", root / "fine-detail/degraded/evaluation/result.json", "metrics"),
+    ]:
+        value = json.loads(path.read_text())
+        if value["state"] != "complete":
+            raise ValueError("Fixed-weight fine-detail intervention incomplete")
+        results.append(
+            dict(
+                name=name,
+                result=value,
+                all_region_key=key,
+                source={"path": str(path), "sha256": sha(path)},
+            )
+        )
+    for english in [False, True]:
+        rows = []
+        for entry in results:
+            row = [NAMES[entry["name"]][int(english)]]
+            for scope in [entry["all_region_key"], "outside_support_and_calibration"]:
+                for head in ["mlp", "conv3x3"]:
+                    values = [x[scope]["f1"] for x in entry["result"]["rows"] if x["head"] == head]
+                    assert len(values) == 4
+                    row.append(f"{100*np.mean(values):.3f}")
+            rows.append(row)
+        _table(
+            paper / "tables" / ("en" if english else "") / "jstars_fine_detail.tex",
+            (
+                "Same-scene 10-m degradation with frozen weights, PCA, regional parameters, "
+                "readers, and thresholds. Dates, footprints, and color normalization are "
+                "retained. Four-target mean F1 (percent)."
+                if english
+                else "同景10米降质：固定视觉权重、PCA、区域融合参数、读取器及阈值；"
+                "日期、有效覆盖与颜色归一化一致。报告四类平均F1（百分数）。"
+            ),
+            "tab:jstars-fine-detail",
+            "lrrrr",
+            (
+                ["Input", "All MLP", "All CNN", "Query MLP", "Query CNN"]
+                if english
+                else ["输入", "全区MLP", "全区CNN", "查询MLP", "查询CNN"]
+            ),
+            rows,
+        )
+    ledger = dict(
+        sources=[x["source"] for x in results],
+        scope=(
+            "Same fixed native-trained model and readers; "
+            "degrade imagery before all local encoders"
+        ),
+        native_product_spacing_m=3,
+        degraded_spacing_m=10,
+        before_and_after_statistical_fits=False,
+    )
+    (paper / "notes/jstars-fine-detail-ledger.json").write_text(json.dumps(ledger, indent=2) + "\n")
     return ledger
