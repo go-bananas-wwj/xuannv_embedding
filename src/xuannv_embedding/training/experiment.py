@@ -650,6 +650,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.data_process.subpixel_rgb import main as pixel_cache_main
 
         return pixel_cache_main(forwarded[1:])
+    if forwarded and forwarded[0] == "journal-revision":
+        from xuannv_embedding.export.jstars_revision import main as journal_main
+
+        return journal_main(forwarded[1:])
     if forwarded and forwarded[0] == "viewwise-guided-refinement":
         from xuannv_embedding.export.viewwise_guided_refinement import main as viewwise_main
 
@@ -729,6 +733,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("content-adaptive-residual", help="按内容学习有界特征融合比例", add_help=False)
     sub.add_parser("public-fallback-gate", help="公共表征退路与分阶段融合训练", add_help=False)
     sub.add_parser("subpixel-rgb-cache", help="流式保存单元内部 RGB 与观测掩膜", add_help=False)
+    sub.add_parser("journal-revision", help="期刊观测干预与冻结读出", add_help=False)
     sub.add_parser("viewwise-guided-refinement", help="逐期 RGB 引导后融合特征", add_help=False)
     sub.add_parser("rgb-guided-refinement", help="冻结 RGB 引导的同网格特征细化", add_help=False)
     sub.add_parser("subpixel-tail-residual", help="保护公共方向并加入细纹理残差", add_help=False)
