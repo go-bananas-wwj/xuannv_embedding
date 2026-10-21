@@ -4,4 +4,5 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| one_observation | complete |
+| three_spread | complete |
+| three_consecutive | complete |
