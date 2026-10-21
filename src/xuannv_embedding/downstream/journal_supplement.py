@@ -652,3 +652,114 @@ def temporal_figure(root, paper):
     (paper / "notes/jstars-temporal-curve.json").write_text(
         json.dumps(dict(points=points, sources=sources), indent=2) + "\n"
     )
+
+
+def fixed_component_tables(root, paper):
+    root, paper = Path(root), Path(paper)
+    entries = [
+        (
+            ("完整融合", "Complete fusion"),
+            root.parent / "full-region/selected_method/result.json",
+            "all_region",
+        ),
+        (
+            ("关闭结构补充", "Structural increment off"),
+            root / "guidance-controls/without_geometry_fixed/evaluation/result.json",
+            "metrics",
+        ),
+        (("AEF", "AEF"), root.parent / "full-region/AEF/result.json", "all_region"),
+        (
+            ("AEF及相同引导", "AEF with the same guide"),
+            root / "guidance-controls/aef_guidance_nchw/evaluation/result.json",
+            "metrics",
+        ),
+    ]
+    values, sources = [], []
+    for labels, path, scope in entries:
+        result = json.loads(path.read_text())
+        if result["state"] != "complete":
+            raise ValueError("Fixed component comparison incomplete")
+        numbers = []
+        for head in ["mlp", "conv3x3"]:
+            rows = [x for x in result["rows"] if x["head"] == head]
+            assert len(rows) == 4
+            numbers.append(f"{100*np.mean([x[scope]['f1'] for x in rows]):.3f}")
+        for head in ["mlp", "conv3x3"]:
+            forest = next(
+                x for x in result["rows"] if x["head"] == head and x["task"] == "clcd_forest"
+            )
+            numbers.append(f"{100*forest[scope]['boundary_f1_1px']:.3f}")
+        values.append((labels, numbers))
+        sources.append({"path": str(path), "sha256": sha(path)})
+    for english in [False, True]:
+        _table(
+            paper / "tables" / ("en" if english else "") / "jstars_fixed_components.tex",
+            (
+                "固定读取器的组件干预，报告全区四类平均F1及林地边界F1（百分数）。"
+                "结构关闭固定完整流程读取器；AEF引导固定AEF读取器。干预导出采用批量2；"
+                "边界容差为一个CLCD原生参考像元（30米）。"
+                if not english
+                else "Fixed-reader component interventions: all-region four-target mean F1 and "
+                "forest boundary F1 (percent). Structural removal retains complete-fusion "
+                "readers; AEF guidance retains AEF readers. Intervention exports use batch2. "
+                "Boundary "
+                "tolerance is one native CLCD reference cell (30m)."
+            ),
+            "tab:jstars-fixed-components",
+            "lrrrr",
+            (
+                ["条件", "平均MLP", "平均CNN", "边界MLP", "边界CNN"]
+                if not english
+                else ["Condition", "Mean MLP", "Mean CNN", "Forest BF1 MLP", "Forest BF1 CNN"]
+            ),
+            [[labels[int(english)], *numbers] for labels, numbers in values],
+        )
+    (paper / "notes/jstars-fixed-components.json").write_text(
+        json.dumps(dict(sources=sources), indent=2) + "\n"
+    )
+    return sources
+
+
+def label_budgets(root, paper):
+    from xuannv_embedding.training.frozen_fusion import verified
+
+    root, paper = Path(root), Path(paper)
+    registry = json.loads(task_registry(root).read_text())
+    records = []
+    for dataset in sorted({x["dataset"] for x in registry}):
+        row = next(
+            x
+            for x in registry
+            if x["dataset"] == dataset
+            and x["model"] == "native"
+            and x["head"] == "mlp"
+            and x["budget"] == 20
+        )
+        job = json.loads(verified(row["spec"]).read_text())
+        data = json.loads(verified(job["reference"]).read_text())
+        valid = np.load(verified(data["valid"]), mmap_mode="r")
+        val = data["calibration_positions"]
+        with np.load(verified(data["labels"])) as labels:
+            counts = {
+                task: int(((labels[task][val] >= 0) & valid[val]).sum())
+                for tasks in data["tasks"]["C"].values()
+                for task in tasks
+            }
+        records.append(
+            dict(
+                dataset=dataset,
+                reference=job["reference"],
+                calibration_version=data.get("calibration_version"),
+                calibration_tiles=len(val),
+                calibration_label_cells_per_target=counts,
+                support_budgets=[5, 20],
+                support_unit="Fitting tiles per target",
+                retrieval_budget=3,
+                retrieval_unit=(
+                    "Positive connected components; "
+                    "prototype parameters come from training examples"
+                ),
+            )
+        )
+    (paper / "notes/jstars-label-budgets.json").write_text(json.dumps(records, indent=2) + "\n")
+    return records
