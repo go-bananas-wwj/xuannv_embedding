@@ -338,6 +338,7 @@ def main(argv=None):
             "auxiliary",
             "mixed",
             "temporal",
+            "temporal-guide",
             "cost-public",
             "cost-native",
             "figures",
@@ -353,6 +354,10 @@ def main(argv=None):
             public_profile(args.spec)
         else:
             native_profile(args.spec, args.device)
+    elif args.phase == "temporal-guide":
+        from xuannv_embedding.export.journal_temporal import continue_guidance
+
+        continue_guidance(args.spec, args.device)
     elif args.phase == "temporal":
         from xuannv_embedding.export.journal_temporal import run
 

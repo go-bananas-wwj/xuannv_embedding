@@ -118,6 +118,105 @@ def _empty_assets(root, index, raw, shape):
         return result
 
 
+def empty_slot_rasters(reference, output):
+    """Give each withheld calendar slot a distinct verified zero-coverage identity."""
+    import os
+
+    root = Path(output)
+    root.mkdir(parents=True, exist_ok=True)
+    original = read_json(verified(reference))
+    result = copy.deepcopy(original)
+    for i, row in enumerate(result["records"]):
+        source = verified(row["raster"])
+        with rasterio.open(source) as dataset:
+            if dataset.dataset_mask().any():
+                raise ValueError("Calendar placeholder must have zero coverage")
+        target = root / f"{i:04d}.tif"
+        if not target.exists():
+            os.link(source, target)
+        if sha(target) != row["raster"]["sha256"]:
+            raise ValueError("Empty slot image identity changed")
+        row["raster"] = {"path": str(target), "sha256": row["raster"]["sha256"]}
+    return _bind(root / "rasters.json", result)
+
+
+def prepare_guidance_continuation(path):
+    """Retain completed encoders/fusion and repair only empty calendar path identities."""
+    from xuannv_embedding.data_process import subpixel_rgb as rgb
+
+    spec = read_json(path)
+    if set(spec) != {"schema", "case", "output"} or spec["schema"] != "journal-temporal-guide-v1":
+        raise ValueError("Invalid temporal guidance continuation")
+    case = read_json(verified(spec["case"]))
+    if case.get("schema") != "journal-temporal-case-v1":
+        raise ValueError("Continuation requires a registered whole-source temporal case")
+    original_root, root = Path(case["output"]), Path(spec["output"])
+    root.mkdir(parents=True, exist_ok=True)
+    fusion_path = original_root / "fusion/status.json"
+    fusion = read_json(fusion_path)
+    if fusion["state"] != "complete" or not fusion["all_local_visual_sources_reencoded"]:
+        raise ValueError("Temporal continuation requires completed frozen upstream fusion")
+    fusion_spec = original_root / "fusion.json"
+    if (
+        fusion["identity"]["spec"] != sha(fusion_spec)
+        or read_json(fusion_spec)["original"] != case["original"]
+    ):
+        raise ValueError("Temporal upstream fusion binding changed")
+    verified(fusion["features"])
+    guide = read_json(verified(case["original_guide"]))
+    raw = read_json(verified(guide["rgb_sources"]))
+    views = []
+    for k in range(len(raw["views"])):
+        source = original_root / f"view-{k}.json"
+        value = read_json(source)
+        if value["slot"] != k or value["actual_observation_retained"] != (k in case["slots"]):
+            raise ValueError("Temporal continuation slots differ from original intervention")
+        if k not in case["slots"]:
+            if np.count_nonzero(np.load(verified(value["arrays"]["native-mask"]), mmap_mode="r")):
+                raise ValueError("Withheld temporal feature has nonzero coverage")
+            rasters = empty_slot_rasters(value["rasters"], root / "empty-slots" / str(k))
+            producer = read_json(verified(value["feature_spec"]))
+            producer.update(rasters=rasters, output=str(root / "empty-producers" / str(k)))
+            producer_ref = _bind(root / f"producer-{k}.json", producer)
+            value.update(rasters=rasters, feature_spec=producer_ref)
+        value["original_view"] = {"path": str(source), "sha256": sha(source)}
+        reference = _bind(root / f"view-{k}.json", value)
+        views.append(reference)
+        raw["views"][k].update(producer_spec=value["feature_spec"], rasters=value["rasters"])
+    raw["output"] = str(root / "preflight-only")
+    raw_ref = _bind(root / "preflight-rgb.json", raw)
+    checked, index = rgb.specification(Path(raw_ref["path"]))
+    rgb.Sources(checked, index)
+    guidance = _bind(
+        root / "guidance.json",
+        dict(
+            schema="jstars-raw-guidance-v1",
+            original_guide=case["original_guide"],
+            fusion={"path": str(fusion_path), "sha256": sha(fusion_path)},
+            views=views,
+            output=str(root / "guidance"),
+        ),
+    )
+    return case, guidance
+
+
+def continue_guidance(path, device):
+    case, reference = prepare_guidance_continuation(path)
+    result = guide_reencoded(Path(reference["path"]), device)
+    root = Path(case["output"])
+    score = _bind(
+        root / "score-recovery.json",
+        dict(
+            schema="jstars-frozen-intervention-v1",
+            region=case["region"],
+            feature=result["features"],
+            readers=case["readers"],
+            output=str(root / "evaluation"),
+        ),
+    )
+    return score_frozen(Path(score["path"]), device)
+
+
 def run(path, device):
     spec = read_json(path)
     required = {
@@ -195,7 +294,7 @@ def run(path, device):
             }
         else:
             arrays = empty["arrays"]
-            rasters = empty["rasters"]
+            rasters = empty_slot_rasters(empty["rasters"], root / "empty" / f"slot{k}")
             feature = read_json(verified(producer))
             feature.update(rasters=rasters, output=str(root / "empty" / f"slot{k}"))
             producer = _bind(root / f"empty-producer-{k}.json", feature)
