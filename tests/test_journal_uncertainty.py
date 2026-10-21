@@ -23,3 +23,23 @@ def test_query_statistics_exclude_global_ids_with_gaps_in_the_inventory():
     rows = [{"mixed_cells": [2, 0, 0.4, 0]}, {"mixed_cells": [8, 0, 7, 0]}]
     selected = query_statistics(rows, [11, 90], {90}, "mixed_cells")
     assert selected == [[2, 0.4]]
+
+
+def test_budget_comparison_uses_one_query_domain_outside_maximum_support_set():
+    from xuannv_embedding.downstream.journal_uncertainty import common_query_metrics
+
+    statistics = [{"mixed_cells": [2, 0.2, 0.4, 0]} for _ in range(4)]
+    small = {
+        "budget_tiles": 5,
+        "support_tile_ids": [10],
+        "calibration_tile_ids": [30],
+        "tile_error_statistics": statistics,
+    }
+    large = {**small, "budget_tiles": 20, "support_tile_ids": [10, 20]}
+    result = common_query_metrics(
+        {"native": {"rows": [small, large]}}, [10, 20, 30, 40], strata=["mixed_cells"]
+    )
+    assert result["excluded_global_tile_ids"] == [10, 20, 30]
+    assert [
+        row["metrics"]["mixed_cells"]["observations"] for row in result["models"]["native"]["rows"]
+    ] == [2, 2]

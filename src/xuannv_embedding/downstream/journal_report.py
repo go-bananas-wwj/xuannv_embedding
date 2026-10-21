@@ -88,7 +88,16 @@ def build(root, paper):
     )
     prior = read(root / "prior-haidian.json")
     controls = read(root / "report/completed-control-means.json")
-    rows = []
+    source_case = read(root / "jstars-revision/guidance-controls/no_guide/case.json")
+    aef_calibration = ["AEF"]
+    for head in ["mlp", "conv3x3"]:
+        job = read(Path(source_case["region"]["aef_jobs"][head]["path"]))
+        result = read(Path(job["output"]) / "calibration/results.json")
+        values = [x["metrics"]["f1"] for x in result]
+        if len(values) != 4:
+            raise ValueError("AEF calibration target inventory differs")
+        aef_calibration.append(f"{100*np.mean(values):.3f}")
+    rows = [aef_calibration]
     for role, name in [
         ("highres", "原生地方观测"),
         ("public", "同方法公共观测"),

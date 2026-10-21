@@ -54,6 +54,46 @@ def query_statistics(rows, indices, excluded, stratum):
     return [[x[stratum][0], x[stratum][2]] for x, i in zip(rows, indices) if i not in excluded]
 
 
+def common_query_metrics(
+    results, indices, *, strata=("all_cells", "mixed_cells", "interior_cells")
+):
+    """Compare all support budgets on cells outside the same reserved maximum support."""
+    from xuannv_embedding.downstream.journal_mixed import _summary
+
+    largest = max(results["native"]["rows"], key=lambda row: row["budget_tiles"])
+    support, calibration = set(largest["support_tile_ids"]), set(largest["calibration_tile_ids"])
+    excluded, models = support | calibration, {}
+    for model, result in results.items():
+        rows = []
+        for row in result["rows"]:
+            if (
+                set(row["calibration_tile_ids"]) != calibration
+                or not set(row["support_tile_ids"]) <= support
+                or len(row["tile_error_statistics"]) != len(indices)
+            ):
+                raise ValueError("Support/query reservation differs between composition conditions")
+            metrics = {}
+            for stratum in strata:
+                counts = np.sum(
+                    [
+                        x[stratum]
+                        for x, tile_id in zip(row["tile_error_statistics"], indices)
+                        if tile_id not in excluded
+                    ],
+                    axis=0,
+                )
+                metrics[stratum] = _summary(counts)
+            rows.append(dict(budget_tiles=row["budget_tiles"], metrics=metrics))
+        models[model] = dict(rows=rows)
+    return dict(
+        state="complete",
+        excluded_global_tile_ids=sorted(excluded),
+        models=models,
+        maximum_support_tiles=len(support),
+        scope="Identical query cells for every budget; reserve maximum support plus calibration",
+    )
+
+
 def build(root, paper):
     root, paper = Path(root), Path(paper)
     mixed = root / "mixed-composition-v2"
@@ -63,6 +103,14 @@ def build(root, paper):
     native = json.loads(native_path.read_text())
     spec = json.loads((mixed / "spec.json").read_text())
     data = json.loads(Path(spec["reference"]["path"]).read_text())
+    available = {"native": native}
+    for model in ["AEF", "public", "Raw180", "degraded"]:
+        candidate = mixed / model / "result.json"
+        if candidate.exists():
+            available[model] = json.loads(candidate.read_text())
+    common = common_query_metrics(available, data["indices"])
+    common_path = mixed / "common-query.json"
+    common_path.write_text(json.dumps(common, indent=2) + "\n")
     results, sources = [], [{"path": str(native_path), "sha256": sha(native_path)}]
     for model in ["AEF", "public", "Raw180", "degraded"]:
         path = mixed / model / "result.json"
@@ -74,7 +122,7 @@ def build(root, paper):
             for key in ["budget_tiles", "support_tile_ids", "calibration_tile_ids"]:
                 if a[key] != b[key]:
                     raise ValueError("Composition comparison partitions differ")
-            excluded = set(a["support_tile_ids"]) | set(a["calibration_tile_ids"])
+            excluded = set(common["excluded_global_tile_ids"])
             if len(a["tile_error_statistics"]) != len(b["tile_error_statistics"]):
                 raise ValueError("Composition tile inventories differ")
             for stratum in ["all_cells", "mixed_cells"]:
@@ -85,14 +133,30 @@ def build(root, paper):
                     b["tile_error_statistics"], data["indices"], excluded, stratum
                 )
                 result = paired_mae_interval(aa, bb)
-                scope = "outside_support_and_calibration"
-                expected = b["metrics"][scope][stratum]["mae"] - a["metrics"][scope][stratum]["mae"]
+                aa_summary = next(
+                    x
+                    for x in common["models"]["native"]["rows"]
+                    if x["budget_tiles"] == a["budget_tiles"]
+                )
+                bb_summary = next(
+                    x
+                    for x in common["models"][model]["rows"]
+                    if x["budget_tiles"] == b["budget_tiles"]
+                )
+                expected = (
+                    bb_summary["metrics"][stratum]["mae"] - aa_summary["metrics"][stratum]["mae"]
+                )
                 if not np.isclose(result["baseline_minus_fusion_mae"], expected, atol=1e-12):
                     raise ValueError("Bootstrap point estimate differs from frozen query")
                 results.append(
                     dict(baseline=model, budget=a["budget_tiles"], stratum=stratum, **result)
                 )
-    ledger = dict(sources=sources, results=results, code_sha256=sha(__file__))
+    ledger = dict(
+        sources=sources,
+        results=results,
+        common_query={"path": str(common_path), "sha256": sha(common_path)},
+        code_sha256=sha(__file__),
+    )
     (paper / "notes/jstars-composition-intervals.json").write_text(
         json.dumps(ledger, indent=2) + "\n"
     )

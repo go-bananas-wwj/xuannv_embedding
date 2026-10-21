@@ -14,7 +14,7 @@ NAMES = {
     "native": ("完整融合", "Viewwise fusion"),
     "public": ("同方法公共", "Matched public"),
     "AEF": ("AEF", "AEF"),
-    "Raw180": ("原始统计180维", "Raw statistics (180D)"),
+    "Raw180": ("原始观测180维", "Raw observations (180D)"),
     "degraded": ("同权重10米降质", "Fixed-weight 10-m degradation"),
 }
 
@@ -57,6 +57,13 @@ def build(root, paper):
             result = read(p)
             if result["state"] == "complete":
                 mixed.append(result)
+    common = None
+    if mixed:
+        from xuannv_embedding.downstream.journal_uncertainty import common_query_metrics
+
+        spec = json.loads((composition_root(root) / "spec.json").read_text())
+        reference_data = json.loads(Path(spec["reference"]["path"]).read_text())
+        common = common_query_metrics({x["model"]: x for x in mixed}, reference_data["indices"])
     summary = []
     for value in auxiliary:
         r, job = value["result"], value["registration"]
@@ -141,7 +148,11 @@ def build(root, paper):
         rows = []
         for result in mixed:
             for record in result["rows"]:
-                metrics = record["metrics"]["outside_support_and_calibration"]
+                metrics = next(
+                    x["metrics"]
+                    for x in common["models"][result["model"]]["rows"]
+                    if x["budget_tiles"] == record["budget_tiles"]
+                )
                 values = [NAMES[result["model"]][language], str(record["budget_tiles"])]
                 for stratum in ["all_cells", "mixed_cells"]:
                     values.extend(f"{metrics[stratum][k]:.4f}" for k in ["mae", "rmse"])
@@ -149,11 +160,13 @@ def build(root, paper):
         _table(
             out / "jstars_mixed.tex",
             (
-                "10米建筑覆盖比例：排除支持与校准图块后的MAE/RMSE。混合像元满足参考建筑比例"
+                "10米建筑覆盖比例：固定查询域的MAE/RMSE，排除20个候选支持图块及固定校准图块。"
+                "混合像元满足参考建筑比例"
                 "$0<f<1$；参考由CLSM机器提取建筑矢量在2米网格采样后聚合获得。"
                 if not english
-                else "Building fractions on the 10-m grid: MAE/RMSE outside support and "
-                "calibration tiles. Mixed cells satisfy reference fraction $0<f<1$. "
+                else "Building fractions on the 10-m grid: MAE/RMSE on fixed query cells "
+                "outside the maximum 20-support-tile reservation and calibration. "
+                "Mixed cells satisfy reference fraction $0<f<1$. "
                 "CLSM machine-derived footprints are sampled on a 2-m grid and aggregated."
             ),
             "tab:jstars-mixed",
@@ -210,7 +223,7 @@ def coverage_figure(root, paper):
                     }
                 )
     plt.rcParams.update({"font.size": 9, "pdf.fonttype": 42})
-    fig, ax = plt.subplots(figsize=(6.6, 3.0), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(3.4, 2.5), constrained_layout=True)
     for head, color, name in [("mlp", "#31688e", "MLP"), ("conv3x3", "#a34314", "CNN")]:
         for scope, style, suffix in [
             ("all_region", "-", "all region"),
@@ -460,7 +473,7 @@ def per_target_tables(root, paper):
     ledger = dict(
         sources=sources, rows=results, completed_jobs=len(sources), expected_jobs=len(registry)
     )
-    archive = root / "compiled-task-results.json"
+    archive = task_registry(root).parent / "compiled-task-results.json"
     archive.write_text(json.dumps(ledger, indent=2) + "\n")
     compact = dict(
         sources=sources,
@@ -588,3 +601,54 @@ def fine_detail_tables(root, paper):
     )
     (paper / "notes/jstars-fine-detail-ledger.json").write_text(json.dumps(ledger, indent=2) + "\n")
     return ledger
+
+
+def temporal_figure(root, paper):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+
+    root, paper = Path(root), Path(paper)
+    points = {}
+    sources = []
+    for name, path in [
+        ("six", root.parent / "full-region/selected_method/result.json"),
+        ("three_spread", root / "temporal-source/three_spread/evaluation/result.json"),
+        ("three_consecutive", root / "temporal-source/three_consecutive/evaluation/result.json"),
+        ("one", root / "temporal-source/one_observation/evaluation/result.json"),
+    ]:
+        result = json.loads(path.read_text())
+        if result["state"] != "complete":
+            raise ValueError("Temporal curve requires completed whole-source conditions")
+        key = "all_region" if name == "six" else "metrics"
+        points[name] = {
+            h: 100 * float(np.mean([x[key]["f1"] for x in result["rows"] if x["head"] == h]))
+            for h in ["mlp", "conv3x3"]
+        }
+        sources.append({"path": str(path), "sha256": sha(path)})
+    plt.rcParams.update({"font.size": 9, "pdf.fonttype": 42})
+    fig, ax = plt.subplots(figsize=(3.4, 2.5), constrained_layout=True)
+    handles = []
+    for head, color, name in [("mlp", "#31688e", "MLP"), ("conv3x3", "#a34314", "CNN")]:
+        line = ax.plot(
+            [1, 3, 6],
+            [points[n][head] for n in ["one", "three_spread", "six"]],
+            "o-",
+            color=color,
+            label=name,
+            linewidth=1.4,
+            markersize=4,
+        )[0]
+        handles.append(line)
+        ax.scatter([3], [points["three_consecutive"][head]], marker="^", color=color, s=40)
+    handles.append(Line2D([], [], marker="^", color="black", linestyle="", label="3 consecutive"))
+    ax.set(xlabel="Actual local observations", ylabel="Mean F1 (%)", xticks=[1, 3, 6])
+    ax.grid(alpha=0.2)
+    ax.legend(handles=handles, frameon=False, fontsize=7.5)
+    fig.savefig(paper / "figures/jstars_temporal.pdf")
+    plt.close(fig)
+    (paper / "notes/jstars-temporal-curve.json").write_text(
+        json.dumps(dict(points=points, sources=sources), indent=2) + "\n"
+    )
