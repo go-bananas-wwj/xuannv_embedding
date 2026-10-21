@@ -1,10 +1,23 @@
-# 原稿重训与融合对照状态
+# JSTARS论文修订验收状态
 
-自动阶段记录，不代表精度验收或论文结论。
+2026-10-21。终版方法为覆盖约束的逐期残差融合viewwise075，各区域分别拟合特征基和区域模块。
 
-| 实验 | 状态 |
+| 证据 | 完成状态 |
 | --- | --- |
-| osm_worldcover_public_conv3x3_20 | complete |
-| osm_worldcover_public_conv3x3_5 | complete |
-| osm_worldcover_public_mlp_20 | complete |
-| osm_worldcover_public_mlp_5 | complete |
+| 海淀四类、MLP/CNN全区及排除支持/校准位置的查询 | complete |
+| 相同预训练基础特征及引导增量的拼接/PCA对照 | complete |
+| 末端操作、同批次二值覆盖、固定结构关闭及AEF同引导 | complete |
+| 完整来源100/50/25/0%有效覆盖干预及空间域分析 | complete |
+| 完整来源6/3/1实际获取期及两种三期组合 | complete |
+| 原生/同景10米降质及共同查询建筑比例 | complete |
+| 锁定balanced-v2校准位置的105项任务复用配置 | complete |
+| 一次区域准备、编码与新增任务读取成本 | complete |
+| 哈尔滨五类、两种读取器及完整查询域 | complete |
+| 奥克兰十一类、两种读取器及完整查询域 | complete |
+
+全部主要地类在各自登记参考中报告，区域间保持独立参数。原稿网络及历史复用记录单独保存。
+图表来源、模型及预测身份由数据盘haidian_first_v14/jstars-revision中的完成回执登记。
+论文与完整逐类补充材料由独立论文工作树生成。
+
+当前源码通过1310项测试、Black、Ruff、仓库内容门禁及源码/轮子构建。
+NPU启动采用PYTHONPATH="$PWD/src:$PYTHONPATH"前置源码路径，保留既有CANN Python路径。
