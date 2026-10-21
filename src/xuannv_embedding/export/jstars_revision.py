@@ -47,6 +47,30 @@ def select_observations(frames, slots, fraction, tile_id, seed):
         raise ValueError("Selected observation slot exceeds the actual inventory")
 
 
+def binary_refine_views(base, frames, model, normalization, q_chunk_size, strength, view_count):
+    """Match the viewwise computation while replacing fractional coverage by presence."""
+    import torch
+
+    from xuannv_embedding.export import rgb_guided_refinement as legacy
+
+    if type(view_count) is not int or view_count < 1 or not 0 <= strength <= 1:
+        raise ValueError("Invalid binary coverage guidance")
+    delta, seen = torch.zeros_like(base), 0
+    for image, mask in frames:
+        guide, coverage = legacy.reconstruct_guide(image, mask, normalization)
+        refined = model(
+            guide.to(base.device), base, output_size=base.shape[-2:], q_chunk_size=q_chunk_size
+        ).float()
+        if refined.shape != base.shape or not torch.isfinite(refined).all():
+            raise ValueError("Invalid binary-coverage feature output")
+        coverage = (coverage.to(base.device) > 0).to(base.dtype)
+        delta += coverage * (refined - base) / view_count
+        seen += 1
+    if seen != view_count:
+        raise ValueError("Actual binary-guidance view count differs")
+    return base + strength * delta
+
+
 def export_guidance(path, device):
     """Intervene before terminal image guidance, retaining its upstream representation."""
     import json
@@ -67,7 +91,7 @@ def export_guidance(path, device):
     if (
         set(spec) != {"schema", "guide", "mode", "fraction", "slots", "seed", "output"}
         or spec["schema"] != "jstars-guidance-intervention-v1"
-        or spec["mode"] not in {"viewwise", "mean_first", "no_guide"}
+        or spec["mode"] not in {"viewwise", "mean_first", "no_guide", "binary_coverage"}
         or spec["fraction"] not in {0, 0.25, 0.5, 1}
         or type(spec["seed"]) is not int
         or not Path(spec["output"]).is_absolute()
@@ -136,7 +160,12 @@ def export_guidance(path, device):
             if model is None:
                 out = base
             else:
-                out = viewwise.refine_views(
+                refinement = (
+                    binary_refine_views
+                    if spec["mode"] == "binary_coverage"
+                    else viewwise.refine_views
+                )
+                out = refinement(
                     base,
                     iter(packed),
                     model,
@@ -158,6 +187,7 @@ def export_guidance(path, device):
         "features": {"path": str(dest), "sha256": sha(dest)},
         "shape": list(shape),
         "export_batch_size": 2,
+        "coverage_rule": "binary_positive" if spec["mode"] == "binary_coverage" else "fractional",
         "wall_seconds": time.monotonic() - started,
         "intervention_scope": "terminal_image_guidance",
         "upstream_local_information_retained": True,

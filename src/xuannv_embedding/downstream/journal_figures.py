@@ -35,6 +35,10 @@ def geographic_cases(path):
         name: json.loads(verified(ref).read_text())["rows"] for name, ref in spec["results"].items()
     }
     n, size = len(data["records"]), data["size"]
+    if len(native["records"]) != n or any(
+        a["patch_id"] != b["patch_id"] for a, b in zip(native["records"], data["records"])
+    ):
+        raise ValueError("Geographic case record order differs from optical sources")
     tasks = data["tasks"]["C"]
     tasks = next(iter(tasks.values()))
     fig, axes = plt.subplots(len(tasks), 2 + len(results), figsize=(13.5, 3.1 * len(tasks)))
@@ -96,6 +100,10 @@ def geographic_cases(path):
         for col, (name, entry) in enumerate(entries.items(), 2):
             p = verified(entry["prediction"])
             with np.load(p) as z:
+                if not np.array_equal(
+                    np.asarray(data["indices"])[z["valid_indices"] // (size * size)], z["tiles"]
+                ):
+                    raise ValueError("Geographic prediction global IDs do not match coordinates")
                 dense = np.full((n, size, size), -1, np.float32)
                 dense.ravel()[z["valid_indices"]] = (
                     z["scores"] >= entry["all_region"]["threshold"]
@@ -104,12 +112,12 @@ def geographic_cases(path):
                 aligned(dense[i]) + 1, vmin=0, vmax=2, cmap=cmap, interpolation="nearest"
             )
             if row == 0:
-                axes[row, col].set_title(name)
-        axes[row, 0].set_ylabel(names.get(task, task), fontsize=11)
+                axes[row, col].set_title(name, fontsize=14)
+        axes[row, 0].set_ylabel(names.get(task, task), fontsize=14)
         axes[row, 0].plot(
             [w * 0.08, w * 0.08 + 200 / (1280 / w)], [h * 0.92] * 2, color="white", linewidth=3
         )
-        axes[row, 0].text(w * 0.08, h * 0.88, "200 m", color="white", fontsize=9)
+        axes[row, 0].text(w * 0.08, h * 0.88, "200 m", color="white", fontsize=14)
         selected.append(
             {
                 "task": task,
@@ -125,8 +133,8 @@ def geographic_cases(path):
         for ax in axes[row]:
             ax.set_xticks([])
             ax.set_yticks([])
-    axes[0, 0].set_title("Local optical")
-    axes[0, 1].set_title("CLCD reference")
+    axes[0, 0].set_title("Local optical", fontsize=14)
+    axes[0, 1].set_title("CLCD reference", fontsize=14)
     fig.tight_layout()
     out = Path(spec["output"])
     out.mkdir(parents=True, exist_ok=True)
@@ -158,21 +166,25 @@ def architecture(output):
     ax.set_ylim(-1.2, 3.5)
     ax.axis("off")
     nodes = {
-        "public": (0.2, 2.1, "Public observations\nS1 / S2 / Landsat + terrain"),
+        "public": (0.2, 2.1, "Public observations\nS1 / S2 / Landsat\n+ terrain"),
         "anchor": (
             3.0,
             2.1,
-            "Public feature blocks\nTemporal16 + RGB16 + stats32\n64D anchor + 95D statistics",
+            "Public feature blocks\n16T + 16V + 32S\n64D anchor + stats95",
         ),
-        "local": (0.2, -0.1, "PlanetScope observations\n3 m product pixels\nDates + source masks"),
+        "local": (
+            0.2,
+            -0.1,
+            "Local optical images\nAcquisition intervals\nCoverage masks",
+        ),
         "vision": (
             3.0,
             -0.1,
-            "Frozen local DINOv3\nFine tokens: 8 m / PCA64\nContext tokens: 32 m / 1024D",
+            "Frozen DINOv3\nFine: 8 m, PCA64\nContext: 32 m, 1024D",
         ),
-        "fusion": (6.1, 1.0, "Regional fusion\nSemantic + structural branches"),
-        "base": (8.8, 1.0, "Shared-coordinate base\nB = 0.85 Es + 0.15 Eg"),
-        "guide": (11.6, 1.0, "Per-view frozen AnyUp\nCoverage-weighted increments"),
+        "fusion": (6.1, 1.0, "Regional fusion\nSemantic branch\n+ structural branch"),
+        "base": (8.8, 1.0, "Shared feature base\nB = .85Es + .15Eg"),
+        "guide": (11.6, 1.0, "Per-view AnyUp\nFrozen weights\nCoverage increments"),
         "output": (14.3, 1.0, "Reusable embedding\n64D / 10 m grid"),
     }
     for name, (x, y, label) in nodes.items():
@@ -188,7 +200,7 @@ def architecture(output):
                 linewidth=1.1,
             )
         )
-        ax.text(x, y, label, ha="center", va="center", fontsize=8.7)
+        ax.text(x, y, label, ha="center", va="center", fontsize=14)
 
     def arrow(a, b, curve=0):
         x, y, _ = nodes[a]
@@ -228,7 +240,7 @@ def architecture(output):
         6.0,
         2.7,
         "Regional weak supervision: WorldCover + OSM",
-        fontsize=9,
+        fontsize=13,
         ha="center",
         color="#365366",
     )
@@ -244,7 +256,7 @@ def architecture(output):
         "Classification / retrieval\nCoverage estimation",
         ha="center",
         va="center",
-        fontsize=9,
+        fontsize=13,
         color="#365366",
     )
     ax.annotate(
