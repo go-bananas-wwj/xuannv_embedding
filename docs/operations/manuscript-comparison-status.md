@@ -4,4 +4,13 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| aef_guidance_nchw | complete |
+| osm_worldcover_native_regression_20 | complete |
+| osm_worldcover_native_regression_5 | complete |
+| osm_worldcover_native_retrieval_3 | complete |
+| osm_worldcover_public_conv3x3_20 | failed |
+| osm_worldcover_public_conv3x3_5 | failed |
+| osm_worldcover_public_mlp_20 | failed |
+| osm_worldcover_public_mlp_5 | failed |
+| osm_worldcover_public_regression_20 | complete |
+| osm_worldcover_public_regression_5 | complete |
+| osm_worldcover_public_retrieval_3 | complete |
