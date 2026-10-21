@@ -4,5 +4,4 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| public_temporal | complete |
-| native_replay | failed |
+| one_observation | failed |
