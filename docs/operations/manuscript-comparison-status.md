@@ -4,6 +4,10 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| query_selected_method_haidian | complete |
-| query_AEF_haidian | complete |
-| query_basic_public_haidian | complete |
+| no_guide | complete |
+| mean_first | complete |
+| coverage50 | complete |
+| coverage25 | complete |
+| three_spread | complete |
+| three_consecutive | complete |
+| one_observation | complete |
