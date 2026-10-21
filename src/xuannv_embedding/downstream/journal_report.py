@@ -117,7 +117,10 @@ def build(root, paper):
         rows,
     )
     completed = []
-    rows = []
+    rows = [["完整逐期引导"]]
+    for head in ["mlp", "conv3x3"]:
+        values = [x["all_region"]["f1"] for x in full["完整逐期融合"]["rows"] if x["head"] == head]
+        rows[0].append(f"{100*np.mean(values):.3f}")
     cases = {
         "no_guide": "关闭末端引导",
         "mean_first": "先汇总再引导",
@@ -126,6 +129,7 @@ def build(root, paper):
         "three_spread": "三份分散观测引导",
         "three_consecutive": "三份连续观测引导",
         "one_observation": "一份观测引导",
+        "binary_coverage_matched": "同批次二值覆盖",
     }
     for case, name in cases.items():
         path = root / "jstars-revision/guidance-controls" / case / "evaluation/result.json"
@@ -230,6 +234,8 @@ def english_tables(paper):
         ),
     }
     replacements = {
+        "完整逐期引导": "Complete viewwise guidance",
+        "同批次二值覆盖": "Binary presence coverage",
         "完整逐期融合": "Viewwise fusion",
         "同方法公共条件": "Matched public role",
         "区域三源模型": "Three-source regional network",

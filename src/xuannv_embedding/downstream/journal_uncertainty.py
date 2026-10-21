@@ -56,13 +56,16 @@ def query_statistics(rows, indices, excluded, stratum):
 
 def build(root, paper):
     root, paper = Path(root), Path(paper)
-    native_path = root / "mixed-composition/native/result.json"
+    mixed = root / "mixed-composition-v2"
+    if not (mixed / "spec.json").exists():
+        mixed = root / "mixed-composition"
+    native_path = mixed / "native/result.json"
     native = json.loads(native_path.read_text())
-    spec = json.loads((root / "mixed-composition/spec.json").read_text())
+    spec = json.loads((mixed / "spec.json").read_text())
     data = json.loads(Path(spec["reference"]["path"]).read_text())
     results, sources = [], [{"path": str(native_path), "sha256": sha(native_path)}]
     for model in ["AEF", "public", "Raw180", "degraded"]:
-        path = root / "mixed-composition" / model / "result.json"
+        path = mixed / model / "result.json"
         if not path.exists():
             continue
         baseline = json.loads(path.read_text())

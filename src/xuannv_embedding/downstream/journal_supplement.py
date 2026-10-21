@@ -19,6 +19,16 @@ NAMES = {
 }
 
 
+def task_registry(root):
+    candidate = Path(root) / "reuse-v2/jobs.json"
+    return candidate if candidate.exists() else Path(root) / "auxiliary-jobs.json"
+
+
+def composition_root(root):
+    candidate = Path(root) / "mixed-composition-v2"
+    return candidate if (candidate / "spec.json").exists() else Path(root) / "mixed-composition"
+
+
 def build(root, paper):
     root, paper = Path(root), Path(paper)
     sources, auxiliary, mixed = [], [], []
@@ -27,7 +37,7 @@ def build(root, paper):
         sources.append({"path": str(path), "sha256": sha(path)})
         return json.loads(path.read_text())
 
-    registered = read(root / "auxiliary-jobs.json")
+    registered = read(task_registry(root))
     for job in registered:
         p = Path(job["output"]) / "result.json"
         if p.exists():
@@ -42,7 +52,7 @@ def build(root, paper):
                     raise ValueError("Auxiliary receipt does not match registration")
                 auxiliary.append({"registration": job, "result": result})
     for model in NAMES:
-        p = root / "mixed-composition" / model / "result.json"
+        p = composition_root(root) / model / "result.json"
         if p.exists():
             result = read(p)
             if result["state"] == "complete":
@@ -155,6 +165,8 @@ def build(root, paper):
     ledger = dict(
         sources=sources,
         expected_auxiliary_jobs=len(registered),
+        task_registry=str(task_registry(root)),
+        composition_study=str(composition_root(root)),
         completed_auxiliary_jobs=len(auxiliary),
         mixed_models=[r["model"] for r in mixed],
         task_means=summary,
@@ -236,9 +248,9 @@ def mixed_cases(root, paper):
     from xuannv_embedding.training.frozen_fusion import verified
 
     root, paper = Path(root), Path(paper)
-    spec = json.loads((root / "mixed-composition/spec.json").read_text())
+    spec = json.loads((composition_root(root) / "spec.json").read_text())
     data = json.loads(verified(spec["reference"]).read_text())
-    receipt = json.loads((root / "mixed-composition/reference.json").read_text())
+    receipt = json.loads((composition_root(root) / "reference.json").read_text())
     truth = np.load(verified(receipt["targets"]), mmap_mode="r")
     excluded = set(data["train_positions"]) | set(data["calibration_positions"])
     candidates = []
@@ -269,9 +281,10 @@ def mixed_cases(root, paper):
         arrays[name] = np.load(verified(ref), mmap_mode="r")
         if descriptor["layout"] == "nchw":
             arrays[name] = arrays[name].transpose(0, 2, 3, 1)
-        p = root / "mixed-composition" / name / "readout-20"
+        p = composition_root(root) / name / "readout-20"
         models[name] = load_readout(p, sha(p / "identity.json"))
         sources.append({"features": ref, "reader": str(p), "identity": sha(p / "identity.json")})
+    plt.rcParams.update({"font.size": 14, "pdf.fonttype": 42})
     fig, axes = plt.subplots(1, 6, figsize=(13, 2.5), constrained_layout=True, squeeze=False)
     titles = [
         "Local RGB median",
@@ -316,7 +329,7 @@ def mixed_cases(root, paper):
                 mapped = ax.imshow(values, cmap="viridis", vmin=0, vmax=1)
             ax.set(xticks=[], yticks=[])
             if row == 0:
-                ax.set_title(titles[column], fontsize=9)
+                ax.set_title(titles[column], fontsize=14)
             ax.plot([0.06, 0.21625], [0.06, 0.06], color="white", lw=2, transform=ax.transAxes)
             ax.text(
                 0.138125,
@@ -324,10 +337,10 @@ def mixed_cases(root, paper):
                 "100 m",
                 ha="center",
                 color="white",
-                fontsize=7,
+                fontsize=12,
                 transform=ax.transAxes,
             )
-        axes[row, 0].set_ylabel(f"Case {row + 1}", fontsize=9)
+        axes[row, 0].set_ylabel(f"Case {row + 1}", fontsize=14)
         records.append(
             dict(
                 position=i,
@@ -360,7 +373,7 @@ def mixed_cases(root, paper):
 
 def per_target_tables(root, paper):
     root, paper = Path(root), Path(paper)
-    registry = json.loads((root / "auxiliary-jobs.json").read_text())
+    registry = json.loads(task_registry(root).read_text())
     results, values, targets, sources = [], {}, set(), []
     for job in registry:
         path = Path(job["output"]) / "result.json"
@@ -447,7 +460,18 @@ def per_target_tables(root, paper):
     ledger = dict(
         sources=sources, rows=results, completed_jobs=len(sources), expected_jobs=len(registry)
     )
-    (paper / "notes/jstars-task-results.json").write_text(json.dumps(ledger, indent=2) + "\n")
+    archive = root / "compiled-task-results.json"
+    archive.write_text(json.dumps(ledger, indent=2) + "\n")
+    compact = dict(
+        sources=sources,
+        full_results={"path": str(archive), "sha256": sha(archive)},
+        completed_jobs=len(sources),
+        expected_jobs=len(registry),
+        result_rows=len(results),
+        targets=sorted(targets),
+        code_sha256=sha(__file__),
+    )
+    (paper / "notes/jstars-task-results.json").write_text(json.dumps(compact, indent=2) + "\n")
     return ledger
 
 
