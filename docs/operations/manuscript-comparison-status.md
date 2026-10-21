@@ -4,5 +4,4 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| without_geometry_fixed | complete |
-| aef_guidance_fixed | failed |
+| public_visual | complete |
