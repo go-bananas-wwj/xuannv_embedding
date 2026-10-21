@@ -51,6 +51,24 @@ def frozen_projection(native, mask, projection, source_shape, output_shape):
     return torch.where(denominator > 0.05, result, 0)
 
 
+def degrade_observation(image, coverage, pixel_m, target_m):
+    """Average observed values into coarse cells and restore only the sampling grid."""
+    factor = round(target_m / pixel_m)
+    if factor < 1 or abs(factor * pixel_m - target_m) > 1e-6:
+        raise ValueError("Degradation must use an integral physical grid ratio")
+    image, coverage = torch.as_tensor(image), torch.as_tensor(coverage)
+    if any(n % factor for n in image.shape[-2:]):
+        raise ValueError("Coarse cells must divide the observed footprint")
+    weights = coverage.float()
+    coarse_mask = F.avg_pool2d(weights, factor)
+    numerator = F.avg_pool2d(torch.where(weights > 0, image.float(), 0) * weights, factor)
+    reduced = torch.where(coarse_mask > 0, numerator / coarse_mask.clamp_min(1e-12), 0)
+    restored = F.interpolate(reduced[None], image.shape[-2:], mode="bilinear", align_corners=False)[
+        0
+    ]
+    return torch.where(coverage > 0, restored, 0).numpy(), coverage.numpy().copy()
+
+
 def reencode(path, device):
     """Mask native RGB before every encoder, then reuse its original projection."""
     from xuannv_embedding.export.public_visual_subspace import read_json
@@ -58,9 +76,11 @@ def reencode(path, device):
     spec = read_json(path)
     required = {"schema", "feature_spec", "projection", "fraction", "seed", "raw_output", "output"}
     if (
-        set(spec) != required
+        not required.issubset(spec)
+        or set(spec) - required - {"degrade_m"}
         or spec["schema"] != "jstars-raw-vision-v1"
         or spec["fraction"] not in {0.25, 0.5, 1}
+        or spec.get("degrade_m") not in {None, 10}
     ):
         raise ValueError("Invalid raw-observation intervention")
     original, cache = vision.read_spec(verified(spec["feature_spec"]))
@@ -93,6 +113,8 @@ def reencode(path, device):
         "fraction": spec["fraction"],
         "seed": spec["seed"],
     }
+    if spec.get("degrade_m") is not None:
+        raw_identity["degrade_m"] = spec["degrade_m"]
     header = raw / "identity.json"
     if header.exists() and json.loads(header.read_text()) != raw_identity:
         raise ValueError("Masked raster directory belongs to a different intervention")
@@ -105,6 +127,9 @@ def reencode(path, device):
             image, mask = retain_observation(
                 image.numpy(), mask.numpy(), spec["fraction"], str(i), spec["seed"]
             )
+            if spec.get("degrade_m") is not None:
+                pixel_m = (record["bounds"][2] - record["bounds"][0]) / image.shape[-1]
+                image, mask = degrade_observation(image, mask, pixel_m, spec["degrade_m"])
             h, w = image.shape[-2:]
             pending = target.with_suffix(".partial.tif")
             with rasterio.Env(GDAL_TIFF_INTERNAL_MASK=True):
