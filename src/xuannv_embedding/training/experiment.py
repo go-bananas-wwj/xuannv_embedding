@@ -542,6 +542,10 @@ def main(argv: list[str] | None = None) -> int:
         from xuannv_embedding.training.manuscript_followup import main as followup_main
 
         return followup_main(forwarded[1:])
+    if forwarded and forwarded[0] == "manuscript-figures":
+        from xuannv_embedding.downstream.manuscript_figures import main as figures_main
+
+        return figures_main(forwarded[1:])
     if forwarded and forwarded[0] == "manuscript-model-export":
         from xuannv_embedding.export.manuscript_model import main as model_export_main
 
@@ -694,6 +698,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("manuscript-queue", help="冻结源码的分阶段实验与有界恢复", add_help=False)
     sub.add_parser("manuscript-followup", help="同口径读出与三区验收汇总", add_help=False)
+    sub.add_parser("manuscript-figures", help="绘制已完成全区查询的全部类别成绩", add_help=False)
     sub.add_parser("manuscript-model-export", help="导出统一重训模型及缺测对照", add_help=False)
     sub.add_parser("manuscript-frozen-control", help="相同影像引导与简单融合对照", add_help=False)
     sub.add_parser("manuscript-retraining", help="统一规则重训原稿架构", add_help=False)
