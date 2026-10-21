@@ -4,4 +4,4 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| one_observation | failed |
+| one_observation | complete |
