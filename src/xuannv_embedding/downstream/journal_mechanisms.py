@@ -26,7 +26,7 @@ FROZEN = {
     "one_observation": ("末端单期", "Terminal1 date"),
     "binary_coverage_matched": ("同批次二值覆盖", "Binary presence"),
     "without_geometry_fixed": ("关闭结构补充", "Structural term off"),
-    "aef_guidance_fixed": ("AEF同引导", "AEF same guide"),
+    "aef_guidance_nchw": ("AEF同引导", "AEF same guide"),
 }
 TARGETS = {
     "clcd_crop": ("耕地", "Cropland"),
@@ -94,6 +94,11 @@ def build(study, paper):
         if result["state"] != "complete" or not result["calibration_only"]:
             raise ValueError("Expected completed calibration-only control")
         append(calibration, labels, result["rows"])
+    matched_path = root / "matched-feature-fusion/comparison/result.json"
+    if matched_path.exists():
+        matched = read(matched_path)
+        if matched["state"] == "complete":
+            append(calibration, ("同预训练特征拼接", "Shared-feature concat"), matched["rows"])
     for name, labels in [
         ("selected_method", ("原生完整", "Native complete")),
         ("AEF", ("AEF", "AEF")),

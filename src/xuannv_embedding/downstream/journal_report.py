@@ -117,6 +117,17 @@ def build(root, paper):
     for key, name in labels.items():
         x = controls[key]
         rows.append([name, f'{100*x["mlp"]:.3f}', f'{100*x["conv3x3"]:.3f}'])
+    matched_path = root / "jstars-revision/matched-feature-fusion/comparison/result.json"
+    if matched_path.exists():
+        matched = read(matched_path)
+        if matched["state"] == "complete":
+            matched_row = ["同预训练特征拼接与PCA"]
+            for head in ["mlp", "conv3x3"]:
+                values = [x["metrics"]["f1"] for x in matched["rows"] if x["head"] == head]
+                if len(values) != 4:
+                    raise ValueError("Matched-feature fusion target inventory differs")
+                matched_row.append(f"{100*np.mean(values):.3f}")
+            rows.append(matched_row)
     _table(
         out / "jstars_mechanisms.tex",
         "固定校准位置下的融合方案比较，四类平均F1（百分数）。本表与全区冻结查询分别报告。同方法原生、公共及降质条件用于分析观测贡献，其他条件用于检验方案组成和通用引导。",
@@ -250,6 +261,7 @@ def english_tables(paper):
         "区域三源模型": "Three-source regional network",
         "原生地方观测": "Native local observations",
         "同方法公共观测": "Matched public observations",
+        "同预训练特征拼接与PCA": "Shared-pretrained-feature concatenation + PCA",
         "同景降质地方观测": "Matched degraded-local role",
         "直接拼接与PCA": "Direct concatenation + PCA",
         "视觉上下文对照": "Visual-context features",
