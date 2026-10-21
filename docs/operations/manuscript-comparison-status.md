@@ -4,4 +4,5 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| native_replay | complete |
+| without_geometry_fixed | complete |
+| aef_guidance_fixed | failed |
