@@ -297,11 +297,17 @@ def main(argv=None):
     from pathlib import Path
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("phase", choices=["guide", "score", "case", "source-case", "figures"])
+    parser.add_argument(
+        "phase", choices=["guide", "score", "case", "source-case", "raw-case", "figures"]
+    )
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args(argv)
-    if args.phase == "source-case":
+    if args.phase == "raw-case":
+        from xuannv_embedding.export.journal_observations import run_raw_case
+
+        run_raw_case(args.spec, args.device)
+    elif args.phase == "source-case":
         from xuannv_embedding.export.journal_sources import run_absent_case
 
         run_absent_case(args.spec, args.device)
