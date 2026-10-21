@@ -307,13 +307,18 @@ def main(argv=None):
             "raw-case",
             "auxiliary",
             "mixed",
+            "temporal",
             "figures",
         ],
     )
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args(argv)
-    if args.phase == "mixed":
+    if args.phase == "temporal":
+        from xuannv_embedding.export.journal_temporal import run
+
+        run(args.spec, args.device)
+    elif args.phase == "mixed":
         from xuannv_embedding.downstream.journal_mixed import run
 
         run(args.spec)

@@ -119,53 +119,56 @@ def reencode(path, device):
     if header.exists() and json.loads(header.read_text()) != raw_identity:
         raise ValueError("Masked raster directory belongs to a different intervention")
     dump(header, raw_identity)
-    rows = []
-    for i, (record, source) in enumerate(zip(cache["records"], paths, strict=True)):
-        target = raw / f"{i:04d}.tif"
-        if not target.exists():
-            image, mask = vision.read_aerial_window(source, record)
-            image, mask = retain_observation(
-                image.numpy(), mask.numpy(), spec["fraction"], str(i), spec["seed"]
+    if spec["fraction"] == 1 and spec.get("degrade_m") is None:
+        manifest = verified(original["rasters"])
+    else:
+        rows = []
+        for i, (record, source) in enumerate(zip(cache["records"], paths, strict=True)):
+            target = raw / f"{i:04d}.tif"
+            if not target.exists():
+                image, mask = vision.read_aerial_window(source, record)
+                image, mask = retain_observation(
+                    image.numpy(), mask.numpy(), spec["fraction"], str(i), spec["seed"]
+                )
+                if spec.get("degrade_m") is not None:
+                    pixel_m = (record["bounds"][2] - record["bounds"][0]) / image.shape[-1]
+                    image, mask = degrade_observation(image, mask, pixel_m, spec["degrade_m"])
+                h, w = image.shape[-2:]
+                pending = target.with_suffix(".partial.tif")
+                with rasterio.Env(GDAL_TIFF_INTERNAL_MASK=True):
+                    with rasterio.open(
+                        pending,
+                        "w",
+                        driver="GTiff",
+                        height=h,
+                        width=w,
+                        count=3,
+                        dtype="float32",
+                        crs=record["crs"],
+                        transform=from_bounds(*record["bounds"], w, h),
+                        compress="deflate",
+                        tiled=True,
+                    ) as dst:
+                        dst.write(image)
+                        dst.write_mask((mask[0] > 0).astype("uint8") * 255)
+                pending.replace(target)
+            rows.append(
+                {
+                    **{k: record[k] for k in ["patch_id", "bounds", "crs"]},
+                    "raster": {"path": str(target), "sha256": sha(target)},
+                }
             )
-            if spec.get("degrade_m") is not None:
-                pixel_m = (record["bounds"][2] - record["bounds"][0]) / image.shape[-1]
-                image, mask = degrade_observation(image, mask, pixel_m, spec["degrade_m"])
-            h, w = image.shape[-2:]
-            pending = target.with_suffix(".partial.tif")
-            with rasterio.Env(GDAL_TIFF_INTERNAL_MASK=True):
-                with rasterio.open(
-                    pending,
-                    "w",
-                    driver="GTiff",
-                    height=h,
-                    width=w,
-                    count=3,
-                    dtype="float32",
-                    crs=record["crs"],
-                    transform=from_bounds(*record["bounds"], w, h),
-                    compress="deflate",
-                    tiled=True,
-                ) as dst:
-                    dst.write(image)
-                    dst.write_mask((mask[0] > 0).astype("uint8") * 255)
-            pending.replace(target)
-        rows.append(
+            if i % 40 == 0:
+                print("masked raw", root.name, i + 1, len(paths), flush=True)
+        manifest = raw / "rasters.json"
+        dump(
+            manifest,
             {
-                **{k: record[k] for k in ["patch_id", "bounds", "crs"]},
-                "raster": {"path": str(target), "sha256": sha(target)},
-            }
+                "schema": "semantic-raster-inputs-v1",
+                "records": rows,
+                "dependencies": [spec["feature_spec"]],
+            },
         )
-        if i % 40 == 0:
-            print("masked raw", root.name, i + 1, len(paths), flush=True)
-    manifest = raw / "rasters.json"
-    dump(
-        manifest,
-        {
-            "schema": "semantic-raster-inputs-v1",
-            "records": rows,
-            "dependencies": [spec["feature_spec"]],
-        },
-    )
     modified = copy.deepcopy(original)
     modified["rasters"] = {"path": str(manifest), "sha256": sha(manifest)}
     modified["output"] = str(root)

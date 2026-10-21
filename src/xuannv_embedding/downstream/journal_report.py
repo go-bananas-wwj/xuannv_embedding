@@ -193,3 +193,102 @@ def build(root, paper):
         json.dumps(ledger, ensure_ascii=False, indent=2) + "\n"
     )
     return ledger
+
+
+def english_tables(paper):
+    """Translate generated table labels while preserving every numeric body value."""
+    import re
+
+    paper = Path(paper)
+    output = paper / "tables/en"
+    output.mkdir(parents=True, exist_ok=True)
+    captions = {
+        "jstars_region": (
+            "Haidian mean F1 across four CLCD2025 targets (percent). Each "
+            "representation retains its calibrated reader and threshold. All-region "
+            "queries cover 320 tiles; the query-only columns exclude downstream "
+            "support and calibration tiles."
+        ),
+        "jstars_classes": (
+            "Per-target all-region F1 (percent) and differences from AEF (percentage " "points)."
+        ),
+        "jstars_mechanisms": (
+            "Fixed-calibration comparisons of complete recipes and matched "
+            "observation roles. Values are mean F1 across four targets (percent). "
+            "Role-specific regional fits and image-guidance conditions are recorded "
+            "separately."
+        ),
+        "jstars_guidance": (
+            "Terminal-guidance interventions with the original complete-input readers "
+            "and thresholds. The upstream regional base remains fixed; values are "
+            "all-region mean F1 across four targets (percent)."
+        ),
+        "jstars_source_coverage": (
+            "Complete local-input interventions with fixed regional and downstream "
+            "parameters. Coverage denotes retention relative to originally observed "
+            "pixels; values are all-region mean F1 (percent)."
+        ),
+    }
+    replacements = {
+        "完整逐期融合": "Viewwise fusion",
+        "同方法公共条件": "Matched public role",
+        "区域三源模型": "Three-source regional network",
+        "原生地方观测": "Native local observations",
+        "同方法公共观测": "Matched public observations",
+        "同景降质地方观测": "Matched degraded-local role",
+        "直接拼接与PCA": "Direct concatenation + PCA",
+        "视觉上下文对照": "Visual-context features",
+        "去除额外几何补充": "Without structural addition",
+        "二值覆盖": "Binary coverage",
+        "AEF与相同地方引导": "AEF + local image guidance",
+        "AEF与公共RGB引导": "AEF + public RGB guidance",
+        "AEF与降质地方引导": "AEF + degraded-local guidance",
+        "关闭末端引导": "No terminal guidance",
+        "先汇总再引导": "Image-first aggregation",
+        "保留50\\%引导覆盖": "50\\% terminal coverage",
+        "保留25\\%引导覆盖": "25\\% terminal coverage",
+        "三份分散观测引导": "Three dispersed views",
+        "三份连续观测引导": "Three consecutive views",
+        "一份观测引导": "One view",
+        "地方覆盖保留": "Retained local coverage",
+        "查询范围MLP": "Query MLP",
+        "查询范围CNN": "Query CNN",
+        "全区MLP": "All-region MLP",
+        "全区CNN": "All-region CNN",
+        "融合MLP": "Fusion MLP",
+        "融合CNN": "Fusion CNN",
+        "引导条件": "Guidance condition",
+        "表示": "Representation",
+        "条件": "Condition",
+        "类别": "Target",
+        "差值": "Difference",
+        "耕地": "Cropland",
+        "林地": "Forest",
+        "水体": "Water",
+        "不透水面": "Impervious surfaces",
+    }
+    written = []
+    for name, caption in captions.items():
+        path = paper / "tables" / (name + ".tex")
+        if not path.exists():
+            continue
+        original = path.read_text()
+        lines = original.splitlines()
+        for i, line in enumerate(lines):
+            if line.startswith("\\caption{"):
+                label = line.split("\\label", 1)[1]
+                lines[i] = "\\caption{" + caption + "}\\label" + label
+        text = "\n".join(lines) + "\n"
+        for old, new in sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True):
+            text = text.replace(old, new)
+        if re.search(r"[\u4e00-\u9fff]", text):
+            raise ValueError("Untranslated generated table label: " + name)
+
+        def numbers(x):
+            return re.findall(r"[+-]?\d+(?:\.\d+)?", x.split("\\midrule", 1)[1])
+
+        if numbers(original) != numbers(text):
+            raise ValueError("English table changed numeric results")
+        (output / (name + ".tex")).write_text(text)
+        written.append(name)
+    return written

@@ -159,9 +159,17 @@ def architecture(output):
     ax.axis("off")
     nodes = {
         "public": (0.2, 2.1, "Public observations\nS1 / S2 / Landsat + terrain"),
-        "anchor": (3.0, 2.1, "Frozen public encoding\n64D anchor + 95D statistics"),
-        "local": (0.2, -0.1, "Actual local optical views\nRGB + coverage + dates"),
-        "vision": (3.0, -0.1, "Frozen DINOv3 + PCA\n1024D features / 64D detail"),
+        "anchor": (
+            3.0,
+            2.1,
+            "Public feature blocks\nTemporal16 + RGB16 + stats32\n64D anchor + 95D statistics",
+        ),
+        "local": (0.2, -0.1, "PlanetScope observations\n3 m product pixels\nDates + source masks"),
+        "vision": (
+            3.0,
+            -0.1,
+            "Frozen local DINOv3\nFine tokens: 8 m / PCA64\nContext tokens: 32 m / 1024D",
+        ),
         "fusion": (6.1, 1.0, "Regional fusion\nSemantic + structural branches"),
         "base": (8.8, 1.0, "Shared-coordinate base\nB = 0.85 Es + 0.15 Eg"),
         "guide": (11.6, 1.0, "Per-view frozen AnyUp\nCoverage-weighted increments"),
