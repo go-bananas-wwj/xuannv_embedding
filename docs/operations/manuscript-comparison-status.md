@@ -4,10 +4,4 @@
 
 | 实验 | 状态 |
 | --- | --- |
-| no_guide | complete |
-| mean_first | complete |
-| coverage50 | complete |
-| coverage25 | complete |
-| three_spread | complete |
-| three_consecutive | complete |
-| one_observation | complete |
+| whole_local_absence | complete |
