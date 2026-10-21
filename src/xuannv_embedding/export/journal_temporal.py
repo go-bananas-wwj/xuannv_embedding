@@ -166,8 +166,11 @@ def prepare_guidance_continuation(path):
     guide = read_json(verified(case["original_guide"]))
     raw = read_json(verified(guide["rgb_sources"]))
     views = []
+    recorded = read_json(fusion_spec)["sources"]["views"]
+    if len(recorded) != len(raw["views"]):
+        raise ValueError("Temporal source inventory differs from frozen fusion")
     for k in range(len(raw["views"])):
-        source = original_root / f"view-{k}.json"
+        source = verified(recorded[k])
         value = read_json(source)
         if value["slot"] != k or value["actual_observation_retained"] != (k in case["slots"]):
             raise ValueError("Temporal continuation slots differ from original intervention")
