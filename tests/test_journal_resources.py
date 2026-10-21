@@ -52,3 +52,29 @@ def test_native_cost_profile_does_not_time_a_partially_encoded_cache_as_fresh(tm
     )
     with pytest.raises(ValueError, match="unencoded"):
         native_profile(profile, "cpu")
+
+
+def test_public_vision_cost_rejects_a_preexisting_feature_cache(tmp_path):
+    from xuannv_embedding.export.journal_resources import public_vision_profile
+
+    encoded = tmp_path / "encoded"
+    encoded.mkdir()
+    (encoded / "native-status.json").write_text("{}")
+    feature = tmp_path / "feature.json"
+    feature.write_text(json.dumps({"output": str(encoded)}))
+    sources = tmp_path / "sources.json"
+    sources.write_text(
+        json.dumps([{"name": "public", "spec": {"path": str(feature), "sha256": sha(feature)}}])
+    )
+    profile = tmp_path / "profile.json"
+    profile.write_text(
+        json.dumps(
+            {
+                "schema": "journal-public-vision-cost-v1",
+                "sources": {"path": str(sources), "sha256": sha(sources)},
+                "output": str(tmp_path / "cost"),
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="unencoded"):
+        public_vision_profile(profile, "cpu")

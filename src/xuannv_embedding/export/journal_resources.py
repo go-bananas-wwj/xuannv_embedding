@@ -81,3 +81,49 @@ def native_profile(path, device):
     )
     dump(root / "result.json", receipt)
     return receipt
+
+
+def public_vision_profile(path, device):
+    from xuannv_embedding.export.journal_observations import reencode
+
+    spec, root, sources_path = _prepare(path, "journal-public-vision-cost-v1", "sources")
+    sources = json.loads(sources_path.read_text())
+    if not isinstance(sources, list) or not sources:
+        raise ValueError("Public visual cost requires registered source encoders")
+    jobs = []
+    for row in sources:
+        if set(row) != {"name", "spec"}:
+            raise ValueError("Invalid public visual profile source")
+        source = verified(row["spec"])
+        settings = json.loads(source.read_text())
+        target = Path(settings["output"])
+        if target.exists() and any(target.iterdir()):
+            raise ValueError("Fresh visual cost profile requires unencoded source outputs")
+        jobs.append((row, source, target))
+    started, records = time.monotonic(), []
+    for row, source, target in jobs:
+        begin = time.monotonic()
+        receipt = reencode(source, device)
+        elapsed = time.monotonic() - begin
+        if receipt["state"] != "complete":
+            raise ValueError("Public visual profile lacks a complete encoder")
+        status = target / "status.json"
+        records.append(
+            dict(
+                name=row["name"],
+                seconds=elapsed,
+                spec=row["spec"],
+                status={"path": str(status), "sha256": sha(status)},
+            )
+        )
+    result = dict(
+        state="complete",
+        total_seconds=time.monotonic() - started,
+        stages=records,
+        sources=spec["sources"],
+        code_sha256=sha(__file__),
+        scope="Fresh public RGB DINO extraction and original frozen PCA at both working scales",
+        pretrained_or_projection_weights_refitted=False,
+    )
+    dump(root / "result.json", result)
+    return result

@@ -341,6 +341,7 @@ def main(argv=None):
             "temporal-guide",
             "cost-public",
             "cost-native",
+            "cost-vision",
             "figures",
         ],
     )
@@ -354,6 +355,10 @@ def main(argv=None):
             public_profile(args.spec)
         else:
             native_profile(args.spec, args.device)
+    elif args.phase == "cost-vision":
+        from xuannv_embedding.export.journal_resources import public_vision_profile
+
+        public_vision_profile(args.spec, args.device)
     elif args.phase == "temporal-guide":
         from xuannv_embedding.export.journal_temporal import continue_guidance
 
