@@ -12,3 +12,6 @@ SHA-256 登记在 [report-evidence.json](report-evidence.json)。修改数量、
 使用服务器外部归档及 v6 数据目录中的日志、摘要和数据库。
 
 评审中发现的实现缺陷在修复后直接并入本报告或 [architecture.md](architecture.md)，不再维护并行的临时方案文档。
+
+v3.0 起，第14节只保留独立目标监督研究的结论和 v3/v4 模型记录。逐轮研究正文、证据条目 E14、E16--E64
+及其制品只存在于 Git 标签 `archive/annual-research-20261019`，服务器上的对应目录已清理。
