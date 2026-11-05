@@ -1,88 +1,77 @@
-# 玄女 XuanNv Embedding
+# XuanNv Embedding
 
-玄女把多源月度遥感观测编码为可复用的密集地理特征。每个 1,280 m × 1,280 m
-patch 输出 `64 × 128 × 128` embedding；建筑、道路、水体等任务在冻结 embedding 上训练
-标准下游头，不需要为每个任务重新训练上游模型。
+[中文](README.zh-CN.md) · [Model card](docs/production/haidian-model-card.md) · [Evaluation evidence](docs/production/haidian-evidence.md)
 
-本仓是从旧仓经审计白名单重建的生产仓。代码不按城市分支执行：区域差异只通过配置、
-manifest、统计量和 `source_map` 表达。权重、影像、embedding、日志和大型报告不进入 Git。
+XuanNv encodes monthly, multi-source Earth observations into reusable dense geospatial features. A 1,280 m × 1,280 m patch produces a `64 × 128 × 128` embedding for each month; lightweight task heads read the frozen representation for buildings, roads and water.
 
-## 生产基线
+This is the maintained implementation of my XuanNv embedding work, rebuilt from an audited allowlist of the legacy repository. It includes configuration-driven data preparation, training, checkpoint-compatible export, and downstream evaluation. Large imagery, weights and embeddings live outside Git.
 
-- 模型：P10C，月度多源 stem → STP → 高分融合 → vMF → 重建 decoder。
-- 输入：Sentinel-2（12）、Sentinel-1（2）、Landsat（7）、高分光学（3）和可选高分 SAR（1）。
-- 输出：6 个月、64 维、128 × 128；vMF 输出逐像素单位范数。
-- 已登记制品：海淀 P10C epoch 800，SHA-256
-  `69dfd81c898544413a747f5c7304cc9210ad1cf420ce724864b8bd7deb6ed790`。
-- 边界：海淀是已验证生产基线；哈尔滨是冻结跨区评测，不代表全国泛化；China 配置是数据
-  pilot，不是全国训练完成声明。
+## What is validated
 
-## 安装
+- **Haidian P10C:** the registered production baseline. Inputs include Sentinel-2, Sentinel-1, Landsat, high-resolution optical imagery and optional high-resolution SAR.
+- **Harbin:** a frozen transfer evaluation with separate evidence and substantial variability; this is not a claim of successful nationwide generalisation.
+- **China configuration:** a data pilot, not a completed national training run.
 
-需要 Python 3.11。
+![Reported Haidian five-shot F1 for frozen embeddings and raw multi-source imagery](haidian-five-shot.png)
+
+Reported fixed-split results from [the evidence summary](docs/production/haidian-evidence.md): five positive and five negative support patches per task, with unchanged validation/test splits. Thresholds are selected on validation and reported on test. This chart is not a new run. Full supervision and cross-region transfer have different outcomes; see the full evidence and [Harbin limitations](docs/production/harbin-transfer.md).
+
+## Install and inspect the CLI
+
+Python 3.11 is required. From a clone of this repository:
 
 ```bash
 pip install .
-pip install ".[data-process]"   # 网格、STAC、栅格和 manifest
-pip install ".[downstream]"    # 标准下游头与指标
-pip install ".[npu,data-process]" # Ascend 真实栅格训练/导出（已配置 CANN）
+xuannv --help
 ```
 
-唯一入口是 `xuannv`：
+Optional workflows:
 
 ```bash
-xuannv --help
+pip install ".[data-process]"
+pip install ".[downstream]"
+pip install ".[npu,data-process]"  # Ascend environment with CANN configured
+```
+
+The CLI can be inspected without training. Actual training/export requires the registered model and data assets and an appropriate compute environment.
+
+## Model workflow
+
+```bash
 xuannv data --help
 xuannv train --help
 xuannv export --help
 xuannv downstream --help
-```
 
-## 常用流程
-
-```bash
-# 严格解析自包含配置并训练；默认使用配置中的真实区域 manifest
-xuannv train \
-  --config configs/production/haidian_p10c_v1.yaml \
+xuannv train --config configs/production/haidian_p10c_v1.yaml \
   --output /path/out/checkpoint.pt
 
-# 原海淀 checkpoint 不改写，按登记 SHA 和 431 键兼容合同加载
-xuannv export \
-  --config configs/production/haidian_p10c_v1.yaml \
+xuannv export --config configs/production/haidian_p10c_v1.yaml \
   --checkpoint /path/to/haidian_embedding_v1_p10c_epoch800.pt \
-  --compatibility-profile haidian_p10c_v1 \
-  --region haidian \
-  --output-root /path/out/embeddings \
-  --device npu:0
-
-# 下游阈值只在 validation 上选择，test 只做一次固定评测
-xuannv downstream train --dataset task.npz --folds folds.json --fold 0 \
-  --head conv3x3 --shot 5 --output head.pt
-xuannv downstream evaluate --dataset task.npz --folds folds.json --fold 0 \
-  --checkpoint head.pt --output metrics.json
+  --compatibility-profile haidian_p10c_v1 --region haidian \
+  --output-root /path/out/embeddings --device npu:0
 ```
 
-数据命令统一为 `xuannv data grid|registry|partition|materialize|preprocess|manifest|validate`。
-每个命令的必填输入可用 `--help` 查看；生产写入拒绝覆盖完成目录，并保留可恢复的 partial
-状态或原子发布结果。
+The registered Haidian checkpoint is loaded with its compatibility profile; do not substitute an older experimental checkpoint. See the [model card](docs/production/haidian-model-card.md) and [artifact manifest](docs/production/artifacts.json) for hashes and asset paths.
 
-## 文档
+## Read the implementation
 
-- [架构与模块边界](docs/architecture.md)
-- [配置和 manifest 合同](docs/configuration-and-manifest.md)
-- [全国数据处理](docs/data-processing.md)
-- [训练、导出与下游评测](docs/training-export-downstream.md)
-- [海淀模型卡](docs/production/haidian-model-card.md)
-- [海淀评测证据](docs/production/haidian-evidence.md)
-- [哈尔滨迁移证据与限制](docs/production/harbin-transfer.md)
-- [迁移与来源](MIGRATION.md)
-- [NPU 发布清单](docs/release/npu-checklist.md)
+- [Architecture and module boundaries](docs/architecture.md)
+- [Configuration and manifest contract](docs/configuration-and-manifest.md)
+- [Data preparation](docs/data-processing.md)
+- [Training, export and downstream evaluation](docs/training-export-downstream.md)
+- [Haidian model card](docs/production/haidian-model-card.md) and [evidence](docs/production/haidian-evidence.md)
+- [Harbin transfer evidence and limits](docs/production/harbin-transfer.md)
+- [Migration and provenance](MIGRATION.md)
+- [NPU release checklist](docs/release/npu-checklist.md)
 
-大制品发布在
-[ModelScope `WeijieWu/xuannv_haidian_embdding`](https://modelscope.cn/datasets/WeijieWu/xuannv_haidian_embdding)，
-登记路径与摘要见 [artifact manifest](docs/production/artifacts.json)。
+Artifacts are hosted at [ModelScope](https://modelscope.cn/datasets/WeijieWu/xuannv_haidian_embdding), subject to the dataset's existing access conditions.
 
-## 许可证与安全
+## Tests and licence
 
-代码采用 [Apache-2.0](LICENSE)。贡献前请阅读 [CONTRIBUTING](CONTRIBUTING.md)；安全问题按
-[SECURITY](SECURITY.md) 私密报告，不要在公开 issue 中粘贴令牌或敏感数据。
+```bash
+pip install ".[dev]"
+python -m pytest tests/
+```
+
+Tests and release checks are described in the repository; data-dependent or NPU-dependent workflows need their stated assets and environment. Code is [Apache-2.0](LICENSE). See [CONTRIBUTING](CONTRIBUTING.md) and [SECURITY](SECURITY.md).
