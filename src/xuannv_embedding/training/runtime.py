@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterable
 from contextlib import nullcontext
 from typing import Any, Callable
@@ -10,7 +11,7 @@ import torch
 from torch import nn
 from torch.optim import Optimizer
 
-from xuannv_embedding.training.losses import TotalLoss
+from xuannv_embedding.training.losses import TotalLoss, V2TotalLoss
 
 
 def _move(value: Any, device: torch.device) -> Any:
@@ -73,6 +74,27 @@ class TrainingSystem(nn.Module):
             batch["target_masks"],
             batch.get("supervised_labels"),
             batch.get("supervised_label_masks"),
+        )
+
+
+class V2TrainingSystem(nn.Module):
+    """Keep the V2 model and training-only semantic probes in one optimizer boundary."""
+
+    def __init__(self, model: nn.Module, criterion: V2TotalLoss) -> None:
+        super().__init__()
+        self.model = model
+        self.criterion = criterion
+
+    def forward(self, batch: dict[str, Any]) -> dict[str, torch.Tensor]:
+        output = self.model(**batch["model_inputs"])
+        return self.criterion(
+            output,
+            batch["targets"],
+            batch["target_masks"],
+            detail_targets=batch.get("detail_targets"),
+            detail_masks=batch.get("detail_masks"),
+            supervised_labels=batch.get("supervised_labels"),
+            supervised_label_masks=batch.get("supervised_label_masks"),
         )
 
 
@@ -158,4 +180,158 @@ def train_steps(
         "batches": batch_count,
         "optimizer_steps": optimizer_steps,
         "loss": loss_sum / batch_count,
+    }
+
+
+def train_v2_steps(
+    system: V2TrainingSystem,
+    batches: Iterable[dict[str, Any]],
+    optimizer: Optimizer,
+    *,
+    device: torch.device,
+    max_steps: int,
+    amp: bool,
+    scheduler: Any | None = None,
+) -> dict[str, Any]:
+    if max_steps <= 0:
+        raise ValueError("max_steps 必须是正整数")
+    system.to(device)
+    system.train()
+    # V2 stored-DN inputs are standardized, then run in BF16 on Ascend 910B.
+    # BF16 has FP32-like exponent range and needs no dynamic scaler state.
+    if amp and device.type == "npu":
+        import torch_npu
+
+        def autocast():
+            return torch_npu.npu.amp.autocast(dtype=torch.bfloat16)
+
+        scaler = None
+    else:
+
+        def autocast():
+            return _autocast(device, amp)
+
+        scaler = _grad_scaler(device, amp)
+    iterator = iter(batches)
+    losses: list[float] = []
+    optimizer.zero_grad(set_to_none=True)
+    for _ in range(max_steps):
+        try:
+            raw_batch = next(iterator)
+        except StopIteration:
+            iterator = iter(batches)
+            try:
+                raw_batch = next(iterator)
+            except StopIteration as exc:
+                raise ValueError("V2 训练 batches 为空") from exc
+        batch = _move(raw_batch, device)
+        with autocast():
+            result = system(batch)
+            loss = result["total"]
+        if not bool(torch.isfinite(loss).item()):
+            raise FloatingPointError(f"V2 训练 loss 非有限值: {float(loss.detach().cpu())}")
+        if scaler is None:
+            loss.backward()
+            optimizer.step()
+        else:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        optimizer.zero_grad(set_to_none=True)
+        if scheduler is not None:
+            scheduler.step()
+        losses.append(float(loss.detach().float().cpu()))
+    return {
+        "steps": max_steps,
+        "loss": sum(losses) / len(losses),
+        "losses": losses,
+        "first_loss": losses[0],
+        "last_loss": losses[-1],
+    }
+
+
+def train_v2_accumulation_steps(
+    system: nn.Module,
+    batches: Iterable[dict[str, Any]],
+    optimizer: Optimizer,
+    *,
+    device: torch.device,
+    optimizer_steps: int,
+    gradient_accumulation_steps: int,
+    amp: bool,
+    scheduler: Any | None = None,
+) -> dict[str, Any]:
+    """Train V2 for exact optimizer steps while measuring input wait and compute."""
+    if optimizer_steps <= 0 or gradient_accumulation_steps <= 0:
+        raise ValueError("optimizer_steps 与 gradient_accumulation_steps 必须为正整数")
+    system.to(device).train()
+    if amp and device.type == "npu":
+        import torch_npu
+
+        def autocast():
+            return torch_npu.npu.amp.autocast(dtype=torch.bfloat16)
+
+        scaler = None
+    else:
+
+        def autocast():
+            return _autocast(device, amp)
+
+        scaler = _grad_scaler(device, amp)
+    iterator = iter(batches)
+    losses: list[float] = []
+    data_seconds = 0.0
+    compute_seconds = 0.0
+    samples = 0
+    optimizer.zero_grad(set_to_none=True)
+    for _ in range(optimizer_steps):
+        step_loss = 0.0
+        for micro_step in range(gradient_accumulation_steps):
+            wait_start = time.perf_counter()
+            try:
+                raw_batch = next(iterator)
+            except StopIteration as exc:
+                raise ValueError("累积训练 batches 不得在目标 step 前耗尽") from exc
+            data_seconds += time.perf_counter() - wait_start
+            compute_start = time.perf_counter()
+            batch = _move(raw_batch, device)
+            synchronize = micro_step == gradient_accumulation_steps - 1
+            context = (
+                nullcontext() if synchronize or not hasattr(system, "no_sync") else system.no_sync()
+            )
+            with context:
+                with autocast():
+                    result = system(batch)
+                    total = result["total"]
+                    loss = total / gradient_accumulation_steps
+                if not bool(torch.isfinite(total).item()):
+                    raise FloatingPointError(
+                        f"V2 累积训练 loss 非有限值: {float(total.detach().cpu())}"
+                    )
+                if scaler is None:
+                    loss.backward()
+                else:
+                    scaler.scale(loss).backward()
+            step_loss += float(total.detach().float().cpu())
+            samples += len(raw_batch.get("patch_ids", [None]))
+            compute_seconds += time.perf_counter() - compute_start
+        if scaler is None:
+            optimizer.step()
+        else:
+            scaler.step(optimizer)
+            scaler.update()
+        optimizer.zero_grad(set_to_none=True)
+        if scheduler is not None:
+            scheduler.step()
+        losses.append(step_loss / gradient_accumulation_steps)
+    return {
+        "optimizer_steps": optimizer_steps,
+        "micro_batches": optimizer_steps * gradient_accumulation_steps,
+        "samples": samples,
+        "loss": sum(losses) / len(losses),
+        "losses": losses,
+        "first_loss": losses[0],
+        "last_loss": losses[-1],
+        "data_seconds": data_seconds,
+        "compute_seconds": compute_seconds,
     }

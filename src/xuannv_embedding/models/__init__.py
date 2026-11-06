@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from xuannv_embedding.config import ModelConfig
+from xuannv_embedding.config import ModelConfig, V2Config
 from xuannv_embedding.models.model import AEFModel
+from xuannv_embedding.models.v2_model import XuannvV2Model
 
 
 def build_model(
@@ -28,4 +29,9 @@ def build_model(
     )
 
 
-__all__ = ["AEFModel", "build_model"]
+def build_v2_model(config: V2Config) -> XuannvV2Model:
+    """Build the explicitly incompatible V2 interval model."""
+    return XuannvV2Model.from_config(config)
+
+
+__all__ = ["AEFModel", "XuannvV2Model", "build_model", "build_v2_model"]

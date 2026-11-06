@@ -208,6 +208,140 @@ def validate_main(argv: Sequence[str] | None = None) -> int:
     return 0 if report.get("passed") is True else 1
 
 
+def local_index_main(argv: Sequence[str] | None = None) -> int:
+    """Index immutable local V2 archives and write deterministic registries."""
+    parser = argparse.ArgumentParser(prog="xuannv data local-index")
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--skip-sha256",
+        action="store_true",
+        help="仅用于快速诊断；正式锁定不得跳过 archive SHA256",
+    )
+    args = parser.parse_args(argv)
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.local_inventory import build_local_archive_inventory
+    from xuannv_embedding.data_process.preflight import index_local_highres_and_auxiliary
+
+    config = V2Config.from_yaml(args.config)
+    report = build_local_archive_inventory(config, calculate_sha256=not args.skip_sha256)
+    report.update(index_local_highres_and_auxiliary(config))
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def preflight_main(argv: Sequence[str] | None = None) -> int:
+    """Audit V2 local pixels, processing state, and declared spatial contracts."""
+    parser = argparse.ArgumentParser(prog="xuannv data preflight")
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--max-pixel-audits", type=int, default=96)
+    args = parser.parse_args(argv)
+    if args.max_pixel_audits <= 0:
+        parser.error("--max-pixel-audits 必须大于 0")
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.preflight import run_preflight
+
+    report = run_preflight(V2Config.from_yaml(args.config), max_pixel_audits=args.max_pixel_audits)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report["passed"] else 1
+
+
+def v2_statistics_main(argv: Sequence[str] | None = None) -> int:
+    """Compute deterministic train-split band statistics in stored units."""
+    parser = argparse.ArgumentParser(prog="xuannv data statistics")
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--max-observations",
+        type=int,
+        help="仅用于 mini/smoke 的显式抽样上限；生产默认扫描完整 train split",
+    )
+    parser.add_argument(
+        "--product",
+        action="append",
+        dest="products",
+        help="仅计算指定 product；可重复。默认计算配置内全部可索引产品",
+    )
+    args = parser.parse_args(argv)
+    if args.max_observations is not None and args.max_observations <= 0:
+        parser.error("--max-observations 必须大于 0")
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.statistics import (
+        compute_v2_archive_statistics,
+        compute_v2_highres_statistics,
+    )
+
+    config = V2Config.from_yaml(args.config)
+    requested = set(args.products or config.products)
+    unknown = sorted(requested - set(config.products))
+    if unknown:
+        parser.error(f"--product 未在配置中声明: {', '.join(unknown)}")
+    root = config.paths.data_root
+    results = {}
+    for product_id, product_config in config.products.items():
+        if product_id not in requested:
+            continue
+        if product_config.role == "dense":
+            result = compute_v2_archive_statistics(
+                product_config.to_product_spec(product_id),
+                root / "registry" / "split_80_10_10.parquet",
+                root / "observations" / "index" / "local_zip_members.parquet",
+                max_observations=args.max_observations,
+            )
+        elif (
+            product_config.role == "highres"
+            and (
+                root / "observations" / "highres" / product_id / "patch_observations.parquet"
+            ).is_file()
+        ):
+            result = compute_v2_highres_statistics(
+                product_config.to_product_spec(product_id),
+                root / "registry" / "split_80_10_10.parquet",
+                root / "observations" / "highres" / product_id / "patch_observations.parquet",
+                max_observations=args.max_observations,
+            )
+        else:
+            continue
+        _atomic_json(root / "statistics" / f"{product_id}.json", result)
+        results[product_id] = result
+    print(json.dumps(results, ensure_ascii=False, indent=2))
+    return 0
+
+
+def local_zarr_cache_main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="xuannv data local-zarr-cache")
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--registry", type=Path)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args(argv)
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.v2_zarr_cache import build_smoke_zarr_cache
+
+    config = V2Config.from_yaml(args.config)
+    registry = args.registry or (config.paths.data_root / "registry" / "smoke_620_plus_32.parquet")
+    output = args.output or (
+        config.paths.data_root / "observations" / "dense_2020_2021" / "smoke_652.zarr"
+    )
+    result = build_smoke_zarr_cache(config, registry, output)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def highres_mini_main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="xuannv data highres-mini")
+    parser.add_argument("--config", type=Path, required=True)
+    args = parser.parse_args(argv)
+
+    from xuannv_embedding.config import V2Config
+    from xuannv_embedding.data_process.preflight import run_highres_mini
+
+    report = run_highres_mini(V2Config.from_yaml(args.config))
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report["passed"] else 1
+
+
 def dispatch(command: str, argv: Sequence[str]) -> int:
     """延迟导入可选地理依赖并转发统一命令。"""
     if command == "grid":
@@ -235,4 +369,14 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
         return manifest_main(argv)
     if command == "validate":
         return validate_main(argv)
+    if command == "local-index":
+        return local_index_main(argv)
+    if command == "preflight":
+        return preflight_main(argv)
+    if command == "statistics":
+        return v2_statistics_main(argv)
+    if command == "local-zarr-cache":
+        return local_zarr_cache_main(argv)
+    if command == "highres-mini":
+        return highres_mini_main(argv)
     raise ValueError(f"未知 data command: {command}")
